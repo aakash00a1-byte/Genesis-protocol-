@@ -116,13 +116,59 @@ class VoiceProcessor:
     
     async def _transcribe_basic(self, audio_stream: io.BytesIO) -> Optional[str]:
         """
-        Basic transcription fallback.
+        Basic transcription using SpeechRecognition library.
         
+        Args:
+            audio_stream: Audio file stream
+            
         Returns:
-            Placeholder message
+            Transcribed text or None
         """
-        logger.info("Using basic transcription fallback")
-        return "[Voice message received - full transcription not available]"
+        try:
+            import speech_recognition as sr
+            import tempfile
+            import wave
+            
+            logger.info("Using SpeechRecognition for transcription")
+            
+            # Save audio to temp file
+            audio_stream.seek(0)
+            audio_data = audio_stream.read()
+            
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+                f.write(audio_data)
+                temp_path = f.name
+            
+            # Transcribe
+            recognizer = sr.Recognizer()
+            with sr.AudioFile(temp_path) as source:
+                audio = recognizer.record(source)
+            
+            # Try Google speech recognition (free tier)
+            try:
+                text = recognizer.recognize_google(audio)
+                logger.info(f"Transcription successful: {len(text)} chars")
+                return text
+            except sr.UnknownValueError:
+                logger.warning("Speech recognition could not understand audio")
+                return None
+            except sr.RequestError as e:
+                logger.error(f"Speech recognition error: {e}")
+                return None
+            finally:
+                # Cleanup temp file
+                import os
+                try:
+                    os.remove(temp_path)
+                except:
+                    pass
+                
+        except ImportError:
+            logger.warning("SpeechRecognition library not available")
+            return None
+        except Exception as e:
+            logger.error(f"Basic transcription failed: {e}")
+            return None
     
     async def synthesize(self, text: str, voice_id: str = None) -> Optional[str]:
         """
