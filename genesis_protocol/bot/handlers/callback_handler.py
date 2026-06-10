@@ -3,10 +3,15 @@
 Handles inline button callbacks from Telegram.
 """
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from genesis_protocol.bot.telegram_bot import TelegramBot
+if TYPE_CHECKING:
+    from genesis_protocol.bot.telegram_bot import TelegramBot
+
 from genesis_protocol.utils.logger import get_logger
 
 logger = get_logger("bot.handlers.callback")
@@ -17,7 +22,7 @@ class CallbackHandler:
     Handles callback queries from inline keyboards.
     """
     
-    def __init__(self, bot: TelegramBot):
+    def __init__(self, bot: 'TelegramBot'):
         """Initialize callback handler."""
         self.bot = bot
     

@@ -3,10 +3,15 @@
 Handles text message processing and routing.
 """
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from genesis_protocol.bot.telegram_bot import TelegramBot
+if TYPE_CHECKING:
+    from genesis_protocol.bot.telegram_bot import TelegramBot
+
 from genesis_protocol.models.message import Message, MessageType, MessageDirection
 from genesis_protocol.memory.conversation_memory import ConversationMemory
 from genesis_protocol.ai.provider_chain import get_provider_chain
@@ -23,7 +28,7 @@ class MessageHandler:
     Handles text messages and callback queries.
     """
     
-    def __init__(self, bot: TelegramBot):
+    def __init__(self, bot: 'TelegramBot'):
         """Initialize message handler."""
         self.bot = bot
         self.memory = ConversationMemory()

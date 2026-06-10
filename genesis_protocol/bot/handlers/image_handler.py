@@ -3,11 +3,16 @@
 Handles image processing and analysis.
 """
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
 import io
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from genesis_protocol.bot.telegram_bot import TelegramBot
+if TYPE_CHECKING:
+    from genesis_protocol.bot.telegram_bot import TelegramBot
+
 from genesis_protocol.models.message import Message, MessageType, MessageDirection
 from genesis_protocol.memory.conversation_memory import ConversationMemory
 from genesis_protocol.processors.image_processor import ImageProcessor
@@ -21,7 +26,7 @@ class ImageHandler:
     Handles image message processing.
     """
     
-    def __init__(self, bot: TelegramBot):
+    def __init__(self, bot: 'TelegramBot'):
         """Initialize image handler."""
         self.bot = bot
         self.memory = ConversationMemory()
