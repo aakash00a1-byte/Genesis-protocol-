@@ -95,6 +95,16 @@ class HuggingFaceConfig(AIProviderConfig):
 
 
 @dataclass
+class ClaudeConfig(AIProviderConfig):
+    """Anthropic Claude AI provider configuration."""
+    endpoint: str = "https://api.anthropic.com/v1/messages"
+    default_model: str = "claude-3-5-sonnet-20241022"
+    quality_model: str = "claude-sonnet-4-20250514"
+    fast_model: str = "claude-3-haiku-20240307"
+    rate_limit_rpm: int = 50
+
+
+@dataclass
 class MemoryConfig:
     """Memory system configuration."""
     vector_db_type: VectorDBType = VectorDBType.CHROMA
@@ -224,6 +234,7 @@ class Config:
     openai: OpenAIConfig = field(default_factory=OpenAIConfig)
     gemini: GeminiConfig = field(default_factory=GeminiConfig)
     huggingface: HuggingFaceConfig = field(default_factory=HuggingFaceConfig)
+    claude: ClaudeConfig = field(default_factory=ClaudeConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     tavily: TavilyConfig = field(default_factory=TavilyConfig)
     make_com: MakeComConfig = field(default_factory=MakeComConfig)
@@ -276,6 +287,10 @@ class Config:
         # HuggingFace
         config.huggingface.api_key = os.getenv("HUGGINGFACE_API_KEY", "")
         config.huggingface.default_model = os.getenv("HF_MODEL", "meta-llama/Llama-3.1-70B-Instruct")
+        
+        # Claude (Anthropic)
+        config.claude.api_key = os.getenv("ANTHROPIC_API_KEY", "") or os.getenv("CLAUDE_API_KEY", "")
+        config.claude.default_model = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
         
         # Memory
         config.memory.vector_db_type = VectorDBType(os.getenv("VECTOR_DB_TYPE", "chroma"))

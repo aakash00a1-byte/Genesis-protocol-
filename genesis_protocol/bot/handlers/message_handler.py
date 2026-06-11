@@ -101,8 +101,11 @@ class MessageHandler:
         # Add current message
         messages.append({"role": "user", "content": text})
         
-        # Call AI
-        result = await self.ai_chain.call(messages=messages)
+        # Call AI with routing (pass user_input for smart model selection)
+        result = await self.ai_chain.call(
+            messages=messages,
+            user_input=text  # For LLM router to select best model
+        )
         
         if result.success and result.response:
             response_text = result.response.content

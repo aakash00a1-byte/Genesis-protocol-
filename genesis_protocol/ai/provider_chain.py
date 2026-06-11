@@ -1,6 +1,6 @@
 """Genesis Protocol - AI Provider Chain
 
-Intelligent fallback chain between multiple AI providers.
+Intelligent fallback chain between multiple AI providers with LLM routing.
 """
 
 import asyncio
@@ -12,6 +12,7 @@ from genesis_protocol.ai.providers import (
     BaseProvider, GroqProvider, OpenAIProvider, 
     GeminiProvider, HuggingFaceProvider, AIRequest, AIResponse
 )
+from genesis_protocol.ai.llm_router import choose_model, get_router, log_model_usage
 from genesis_protocol.config import get_config
 from genesis_protocol.utils.logger import get_logger
 
@@ -24,6 +25,7 @@ class AICallResult:
     success: bool
     response: Optional[AIResponse] = None
     provider_used: Optional[str] = None
+    model_used: Optional[str] = None
     error: Optional[str] = None
     attempts: int = 0
     total_latency_ms: int = 0
@@ -32,43 +34,62 @@ class AICallResult:
 
 class ProviderChain:
     """
-    AI Provider Chain with intelligent fallback.
+    AI Provider Chain with intelligent fallback and LLM routing.
     
-    Manages multiple AI providers and automatically falls back
-    when a provider fails or is rate-limited.
+    Manages multiple AI providers, uses smart model selection,
+    and automatically falls back when a provider fails.
     """
     
     def __init__(self):
         """Initialize provider chain."""
         self._config = get_config()
+        self._router = get_router()
         
-        # Initialize providers
+        # Initialize providers (NO HARDCODE - all equal)
         self._providers: Dict[str, BaseProvider] = {
-            "groq": GroqProvider(),
             "openai": OpenAIProvider(),
             "gemini": GeminiProvider(),
+            "claude": None,  # Will be initialized if available
+            "groq": GroqProvider(),
             "huggingface": HuggingFaceProvider(),
         }
         
-        # Get provider order from config
-        self._provider_order = self._config.get_ai_provider_order()
+        # Try to initialize Claude if API key available
+        self._init_claude()
+        
+        # Provider order: OpenAI -> Gemini -> Claude -> Groq -> HuggingFace
+        self._provider_order = ["openai", "gemini", "claude", "groq", "huggingface"]
+        
+        # Remove None providers
+        self._provider_order = [p for p in self._provider_order if self._providers.get(p)]
         
         logger.info(f"Provider chain initialized with: {self._provider_order}")
+    
+    def _init_claude(self):
+        """Initialize Claude provider if API key available."""
+        try:
+            from genesis_protocol.ai.providers.claude_provider import ClaudeProvider
+            self._providers["claude"] = ClaudeProvider()
+            logger.info("Claude provider initialized")
+        except Exception as e:
+            logger.warning(f"Claude provider not available: {e}")
     
     async def call(self, messages: List[Dict[str, str]], 
                    preferred_provider: str = None,
                    model: str = None,
                    temperature: float = 0.7,
-                   max_tokens: int = 1000) -> AICallResult:
+                   max_tokens: int = 1000,
+                   user_input: str = None) -> AICallResult:
         """
-        Make an AI call with automatic fallback.
+        Make an AI call with intelligent routing and fallback.
         
         Args:
             messages: Chat messages
             preferred_provider: Preferred provider (optional)
-            model: Model to use (optional)
+            model: Specific model to use (optional - uses router if not set)
             temperature: Temperature setting
             max_tokens: Maximum tokens
+            user_input: User's original query (for model selection)
             
         Returns:
             AICallResult: Result of the call
@@ -77,7 +98,12 @@ class ProviderChain:
         attempts = 0
         errors = []
         
-        # Build provider order
+        # Smart model selection using LLM router
+        if not model and user_input:
+            model = choose_model(user_input)
+            logger.info(f"Router selected model: {model}")
+        
+        # Build provider order (NEW FALLBACK: OpenAI → Gemini → Claude → Groq)
         if preferred_provider and preferred_provider in self._providers:
             providers_to_try = [preferred_provider] + [
                 p for p in self._provider_order if p != preferred_provider
@@ -103,11 +129,30 @@ class ProviderChain:
             attempts += 1
             
             try:
-                logger.info(f"Attempting AI call with {provider_name}")
+                # Smart model selection:
+                # 1. If router selected a model AND provider matches, use it
+                # 2. Otherwise, use provider's default model
+                model_to_use = model if model else provider.get_default_model()
+                
+                # Map router models to provider defaults if not compatible
+                # OpenAI only supports its own models
+                if provider_name == "openai" and model_to_use not in ["gpt-4o", "gpt-4-turbo", "gpt-4o-mini", "gpt-3.5-turbo"]:
+                    model_to_use = provider.get_default_model()
+                # Gemini only supports gemini models
+                elif provider_name == "gemini" and "gemini" not in model_to_use and "gpt" not in model_to_use:
+                    model_to_use = provider.get_default_model()
+                # Claude only supports claude models
+                elif provider_name == "claude" and "claude" not in model_to_use and "gemini" not in model_to_use:
+                    model_to_use = provider.get_default_model()
+                # Groq only supports llama/mixtral models
+                elif provider_name == "groq" and "gemini" in model_to_use:
+                    model_to_use = provider.get_default_model()
+                
+                logger.info(f"Attempting AI call with {provider_name} (model: {model_to_use})")
                 
                 request = AIRequest(
                     messages=messages,
-                    model=model or provider.get_default_model(),
+                    model=model_to_use,
                     temperature=temperature,
                     max_tokens=max_tokens,
                 )
@@ -116,9 +161,13 @@ class ProviderChain:
                 
                 total_latency = int((datetime.utcnow() - start_time).total_seconds() * 1000)
                 
+                # Log model usage
+                log_model_usage(model_to_use, user_input or "", True)
+                
                 logger.info(
                     f"AI call successful",
                     provider=provider_name,
+                    model=model_to_use,
                     attempts=attempts,
                     latency_ms=total_latency
                 )
@@ -127,6 +176,7 @@ class ProviderChain:
                     success=True,
                     response=response,
                     provider_used=provider_name,
+                    model_used=model_to_use,
                     attempts=attempts,
                     total_latency_ms=total_latency,
                     total_cost=response.cost_estimate,
@@ -135,6 +185,7 @@ class ProviderChain:
             except Exception as e:
                 error_str = str(e)
                 errors.append(f"{provider_name}: {error_str}")
+                log_model_usage(model or "unknown", user_input or "", False)
                 logger.warning(f"{provider_name} failed: {error_str}")
                 continue
         
