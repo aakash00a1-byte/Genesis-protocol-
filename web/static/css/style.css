@@ -1,6 +1,7 @@
 /* Genesis Protocol - Web Application Styles */
 
 :root {
+    /* Dark Theme (default) */
     --bg: #0a0a0f;
     --bg-secondary: #12121a;
     --card-bg: #1a1a24;
@@ -12,6 +13,18 @@
     --success: #22c55e;
     --error: #ef4444;
     --warning: #f59e0b;
+}
+
+/* Light Theme */
+[data-theme="light"] {
+    --bg: #f5f5f7;
+    --bg-secondary: #ffffff;
+    --card-bg: #ffffff;
+    --text: #1a1a1a;
+    --text-secondary: #666666;
+    --accent: #6366f1;
+    --accent-hover: #4f46e5;
+    --border: #e5e5e5;
 }
 
 * {
