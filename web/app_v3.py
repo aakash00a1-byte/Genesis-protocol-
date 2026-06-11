@@ -28,6 +28,7 @@ load_dotenv(env_path)
 
 from flask import Flask, request, jsonify, session, render_template, redirect, url_for, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_session import Session
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -38,7 +39,14 @@ app = Flask(__name__, template_folder='templates', static_folder='static')
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_urlsafe(32))
 app.permanent_session_lifetime = timedelta(days=7)
 
-DATABASE = 'genesis.db'
+# Flask-Session configuration for persistent sessions
+app.config['SESSION_TYPE'] = os.environ.get('SESSION_TYPE', 'filesystem')
+app.config['SESSION_FILE_DIR'] = os.environ.get('SESSION_FILE_DIR', '/tmp/flask_session')
+app.config['SESSION_PERMANENT'] = True
+app.config['SESSION_USE_SIGNER'] = True
+Session(app)
+
+DATABASE = os.environ.get('DATABASE_URL', 'genesis.db')
 
 
 def get_db():
@@ -697,6 +705,125 @@ def api_history():
     conn.close()
     
     return jsonify({'history': history})
+
+
+# ============ Image Upload API ============
+@app.route('/api/upload', methods=['POST'])
+@login_required
+def api_upload():
+    """Handle image upload and analysis."""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # Validate file type
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+        ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+        if ext not in allowed_extensions:
+            return jsonify({'error': f'File type not allowed. Allowed: {allowed_extensions}'}), 400
+        
+        # Read file
+        image_data = file.read()
+        file_size = len(image_data) / (1024 * 1024)  # MB
+        
+        # Size limit (5MB)
+        if file_size > 5:
+            return jsonify({'error': 'File too large. Max 5MB allowed'}), 400
+        
+        # Process image using AI
+        try:
+            import io
+            from genesis_protocol.processors.image_processor import ImageProcessor
+            
+            processor = ImageProcessor()
+            image_stream = io.BytesIO(image_data)
+            image_stream.filename = file.filename
+            
+            # Run async processor synchronously
+            import asyncio
+            result = asyncio.run(processor.analyze(image_stream))
+            
+            if result:
+                return jsonify({
+                    'success': True,
+                    'analysis': result.get('description', 'Image analyzed'),
+                    'full_result': result
+                })
+            else:
+                return jsonify({
+                    'success': True,
+                    'analysis': 'Image received but analysis unavailable',
+                    'file_size': f'{file_size:.2f}MB'
+                })
+        except Exception as e:
+            logger.error(f"Image processing error: {e}")
+            return jsonify({
+                'success': True,
+                'message': 'Image uploaded successfully',
+                'file_size': f'{file_size:.2f}MB'
+            })
+            
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ============ Voice Processing API ============
+@app.route('/api/voice', methods=['POST'])
+@login_required
+def api_voice():
+    """Handle voice/audio processing (STT)."""
+    try:
+        if 'audio' not in request.files and (request.get_json(silent=True) or {}).get('audio_data') is None:
+            return jsonify({'error': 'No audio provided'}), 400
+        
+        # Handle file upload
+        if 'audio' in request.files:
+            audio_file = request.files['audio']
+            audio_data = audio_file.read()
+        else:
+            # Handle base64 audio data
+            import base64
+            data = request.get_json()
+            audio_b64 = data.get('audio_data', '')
+            audio_data = base64.b64decode(audio_b64)
+        
+        # Process audio using voice processor
+        try:
+            import io
+            from genesis_protocol.processors.voice_processor import VoiceProcessor
+            
+            processor = VoiceProcessor()
+            audio_stream = io.BytesIO(audio_data)
+            
+            # Run async processor synchronously
+            import asyncio
+            transcript = asyncio.run(processor.transcribe(audio_stream))
+            
+            if transcript:
+                return jsonify({
+                    'success': True,
+                    'transcript': transcript
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'Transcription failed'
+                }), 500
+        except Exception as e:
+            logger.error(f"Voice processing error: {e}")
+            return jsonify({
+                'success': False,
+                'error': f'Voice processing unavailable: {str(e)}'
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Voice API error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 # Admin APIs
