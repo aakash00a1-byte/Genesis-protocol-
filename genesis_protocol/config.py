@@ -244,6 +244,11 @@ class Config:
     security: SecurityConfig = field(default_factory=SecurityConfig)
     streamlit: StreamlitConfig = field(default_factory=StreamlitConfig)
     
+    # Channel Isolation Configuration
+    telegram_enabled: bool = field(default_factory=lambda: os.getenv("TELEGRAM_ENABLED", "true").lower() == "true")
+    telegram_admin_only: bool = field(default_factory=lambda: os.getenv("TELEGRAM_ADMIN_ONLY", "true").lower() == "true")
+    telegram_admin_chat_id: Optional[int] = field(default_factory=lambda: int(os.getenv("TELEGRAM_ADMIN_CHAT_ID", "0")) or None)
+    
     # Paths
     project_root: Path = field(default_factory=lambda: Path(__file__).parent.parent)
     data_dir: Path = field(default_factory=lambda: Path("./data"))

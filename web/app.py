@@ -2,6 +2,7 @@
 Genesis Protocol - Web Application Backend
 
 Flask-based web server with authentication and AI chat API.
+Channel isolation: Web users ONLY receive web responses.
 """
 
 import os
@@ -18,6 +19,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from flask import Flask, request, jsonify, session, render_template, redirect, url_for
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
+
+# Import channel isolation
+from genesis_protocol.core.channel import Channel, get_channel_isolation
 
 # Initialize Flask app
 app = Flask(__name__, 
@@ -266,7 +270,7 @@ def admin():
 @app.route('/api/chat', methods=['POST'])
 @login_required
 def api_chat():
-    """Chat API endpoint."""
+    """Chat API endpoint - WEB CHANNEL ONLY."""
     data = request.get_json()
     message = data.get('message', '')
     
@@ -274,6 +278,11 @@ def api_chat():
         return jsonify({'error': 'Message required'}), 400
     
     user_id = session['user_id']
+    
+    # Set channel isolation - WEB ONLY
+    channel_isolation = get_channel_isolation()
+    channel_isolation.set_channel(Channel.WEB)
+    channel_isolation.log_channel_activity(Channel.WEB, "chat_request", f"User {user_id}")
     
     # Check rate limit (100 messages per day for non-admin)
     if session.get('role') != 'admin':
@@ -337,14 +346,18 @@ def api_chat():
 @app.route('/api/history', methods=['GET'])
 @login_required
 def api_history():
-    """Get chat history."""
+    """Get chat history - WEB CHANNEL ONLY."""
     user_id = session['user_id']
     limit = request.args.get('limit', 50, type=int)
+    
+    # Set channel isolation - WEB ONLY
+    channel_isolation = get_channel_isolation()
+    channel_isolation.set_channel(Channel.WEB)
     
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT message, response, model_used, created_at 
+        SELECT message, response, model_used, created_at, 'web' as channel
         FROM chat_history 
         WHERE user_id = ? 
         ORDER BY created_at DESC 
@@ -354,7 +367,7 @@ def api_history():
     history = [dict(row) for row in cursor.fetchall()]
     conn.close()
     
-    return jsonify({'history': history})
+    return jsonify({'history': history, 'channel': 'web'})
 
 
 @app.route('/api/admin/stats', methods=['GET'])
