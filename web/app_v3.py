@@ -200,7 +200,7 @@ def index():
     """Homepage."""
     if 'user_id' in session:
         return redirect(url_for('chat'))
-    return render_template('index.html')
+    return render_template('index_v4.html')
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -259,7 +259,7 @@ def login():
         
         return jsonify({'success': True, 'redirect': '/chat'})
     
-    return render_template('login.html')
+    return render_template('login_v4.html')
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -320,7 +320,7 @@ def register():
         except sqlite3.IntegrityError:
             return jsonify({'error': 'Username or email already exists'}), 400
     
-    return render_template('register.html')
+    return render_template('register_v4.html')
 
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
@@ -448,7 +448,52 @@ def logout():
 @login_required
 def chat():
     """Chat interface."""
-    return render_template('chat.html',
+    user_id = session.get('user_id')
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Get recent messages for this user
+    cursor.execute('''
+        SELECT id, message, response, is_user, model_used, created_at
+        FROM chat_history
+        WHERE user_id = ? AND channel = 'web'
+        ORDER BY created_at DESC
+        LIMIT 50
+    ''', (user_id,))
+    
+    messages = []
+    for row in cursor.fetchall():
+        messages.append({
+            'id': row[0],
+            'content': row[1],
+            'response': row[2],
+            'is_user': row[3],
+            'model': row[4],
+            'created_at': datetime.fromisoformat(row[5]) if row[5] else None
+        })
+    
+    conn.close()
+    
+    # Format messages for display (interleaving user/bot)
+    display_messages = []
+    for msg in messages:
+        display_messages.append({
+            'id': msg['id'],
+            'content': msg['content'],
+            'is_user': True,
+            'created_at': msg['created_at']
+        })
+        if msg['response']:
+            display_messages.append({
+                'id': msg['id'] + 1,
+                'content': msg['response'],
+                'is_user': False,
+                'created_at': msg['created_at']
+            })
+    
+    return render_template('chat_v4.html', 
+                          messages=display_messages[::-1],
                           username=session.get('username'),
                           role=session.get('role'))
 
@@ -472,14 +517,14 @@ def settings():
         session['theme'] = theme
         return jsonify({'success': True})
     
-    return render_template('settings.html')
+    return render_template('settings_v4.html')
 
 
 @app.route('/admin')
 @admin_required
 def admin():
     """Admin dashboard."""
-    return render_template('admin.html', username=session.get('username'))
+    return render_template('admin_v4.html', username=session.get('username'))
 
 
 # ============ API Endpoints ============

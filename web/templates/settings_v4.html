@@ -1,0 +1,312 @@
+{% extends "base_v4.html" %}
+
+{% block title %}Settings - Genesis Protocol v4{% endblock %}
+
+{% block header_title %}Settings{% endblock %}
+
+{% block content %}
+<div class="settings-container">
+    <div class="settings-header">
+        <h1 class="settings-title">⚙️ Settings</h1>
+        <p style="color: var(--text-secondary);">Configure your Genesis AI experience</p>
+    </div>
+    
+    <!-- Appearance -->
+    <div class="settings-section">
+        <h2 class="settings-section-title">🎨 Appearance</h2>
+        <div class="settings-card">
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Dark Mode</div>
+                    <div class="settings-item-desc">Enable dark cyberpunk theme</div>
+                </div>
+                <div class="toggle active" onclick="this.classList.toggle('active')" data-setting="dark_mode"></div>
+            </div>
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Neon Glow Effects</div>
+                    <div class="settings-item-desc">Show animated neon glows</div>
+                </div>
+                <div class="toggle active" onclick="this.classList.toggle('active')" data-setting="glow_effects"></div>
+            </div>
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Particle Background</div>
+                    <div class="settings-item-desc">Animated particle effects</div>
+                </div>
+                <div class="toggle active" onclick="this.classList.toggle('active')" data-setting="particles"></div>
+            </div>
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Grid Overlay</div>
+                    <div class="settings-item-desc">Show cyberpunk grid background</div>
+                </div>
+                <div class="toggle active" onclick="this.classList.toggle('active')" data-setting="grid"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Voice -->
+    <div class="settings-section">
+        <h2 class="settings-section-title">🎤 Voice Settings</h2>
+        <div class="settings-card">
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Auto Voice Input</div>
+                    <div class="settings-item-desc">Enable voice by default</div>
+                </div>
+                <div class="toggle" onclick="this.classList.toggle('active')" data-setting="auto_voice"></div>
+            </div>
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Auto Voice Output</div>
+                    <div class="settings-item-desc">Speak AI responses automatically</div>
+                </div>
+                <div class="toggle" onclick="this.classList.toggle('active')" data-setting="auto_speak"></div>
+            </div>
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Speech Rate</div>
+                    <div class="settings-item-desc">Voice output speed</div>
+                </div>
+                <select class="select-input" data-setting="speech_rate">
+                    <option value="0.75">Slow</option>
+                    <option value="1" selected>Normal</option>
+                    <option value="1.25">Fast</option>
+                    <option value="1.5">Very Fast</option>
+                </select>
+            </div>
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Voice Language</div>
+                    <div class="settings-item-desc">Primary language for speech</div>
+                </div>
+                <select class="select-input" data-setting="voice_lang">
+                    <option value="en-US" selected>English (US)</option>
+                    <option value="en-GB">English (UK)</option>
+                    <option value="hi-IN">Hindi</option>
+                    <option value="es-ES">Spanish</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    
+    <!-- AI Models -->
+    <div class="settings-section">
+        <h2 class="settings-section-title">🧠 AI Models</h2>
+        <div class="settings-card">
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Primary Model</div>
+                    <div class="settings-item-desc">Main AI model for responses</div>
+                </div>
+                <select class="select-input" data-setting="primary_model">
+                    <option value="auto" selected>Auto (Best for task)</option>
+                    <option value="gpt-4">GPT-4</option>
+                    <option value="claude">Claude</option>
+                    <option value="gemini">Gemini</option>
+                </select>
+            </div>
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Reasoning Model</div>
+                    <div class="settings-item-desc">For complex reasoning tasks</div>
+                </div>
+                <select class="select-input" data-setting="reasoning_model">
+                    <option value="auto" selected>Auto</option>
+                    <option value="gpt-4">GPT-4</option>
+                    <option value="claude">Claude</option>
+                    <option value="gemini">Gemini</option>
+                </select>
+            </div>
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Temperature</div>
+                    <div class="settings-item-desc">Response creativity level</div>
+                </div>
+                <select class="select-input" data-setting="temperature">
+                    <option value="0.3">Precise</option>
+                    <option value="0.5" selected>Balanced</option>
+                    <option value="0.7">Creative</option>
+                    <option value="0.9">Very Creative</option>
+                </select>
+            </div>
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Multi-Model Routing</div>
+                    <div class="settings-item-desc">Route queries to optimal model</div>
+                </div>
+                <div class="toggle active" onclick="this.classList.toggle('active')" data-setting="multi_model"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Memory -->
+    <div class="settings-section">
+        <h2 class="settings-section-title">💾 Memory Settings</h2>
+        <div class="settings-card">
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Long-term Memory</div>
+                    <div class="settings-item-desc">Remember conversations across sessions</div>
+                </div>
+                <div class="toggle active" onclick="this.classList.toggle('active')" data-setting="long_memory"></div>
+            </div>
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Memory Retention</div>
+                    <div class="settings-item-desc">How long to remember</div>
+                </div>
+                <select class="select-input" data-setting="memory_retention">
+                    <option value="7">7 Days</option>
+                    <option value="30" selected>30 Days</option>
+                    <option value="90">90 Days</option>
+                    <option value="365">1 Year</option>
+                    <option value="0">Forever</option>
+                </select>
+            </div>
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Clear Memory</div>
+                    <div class="settings-item-desc">Delete all stored memories</div>
+                </div>
+                <button class="btn btn-secondary" onclick="clearMemory()" style="padding: 8px 16px;">Clear All</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Privacy -->
+    <div class="settings-section">
+        <h2 class="settings-section-title">🔒 Privacy</h2>
+        <div class="settings-card">
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Share Analytics</div>
+                    <div class="settings-item-desc">Help improve Genesis by sharing usage data</div>
+                </div>
+                <div class="toggle" onclick="this.classList.toggle('active')" data-setting="analytics"></div>
+            </div>
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Auto-delete History</div>
+                    <div class="settings-item-desc">Automatically delete old conversations</div>
+                </div>
+                <select class="select-input" data-setting="auto_delete">
+                    <option value="0">Never</option>
+                    <option value="7">After 7 Days</option>
+                    <option value="30" selected>After 30 Days</option>
+                    <option value="90">After 90 Days</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Security -->
+    <div class="settings-section">
+        <h2 class="settings-section-title">🛡️ Security</h2>
+        <div class="settings-card">
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Two-Factor Authentication</div>
+                    <div class="settings-item-desc">Add extra security to your account</div>
+                </div>
+                <button class="btn btn-secondary" style="padding: 8px 16px;">Enable</button>
+            </div>
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Change Password</div>
+                    <div class="settings-item-desc">Update your account password</div>
+                </div>
+                <button class="btn btn-secondary" onclick="showPasswordModal()" style="padding: 8px 16px;">Change</button>
+            </div>
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Active Sessions</div>
+                    <div class="settings-item-desc">Manage logged-in devices</div>
+                </div>
+                <button class="btn btn-secondary" onclick="showSessionsModal()" style="padding: 8px 16px;">View</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Account -->
+    <div class="settings-section">
+        <h2 class="settings-section-title">👤 Account</h2>
+        <div class="settings-card">
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Email</div>
+                    <div class="settings-item-desc">{{ session.get('email', 'Not set') }}</div>
+                </div>
+                <button class="btn btn-secondary" style="padding: 8px 16px;">Update</button>
+            </div>
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label">Export Data</div>
+                    <div class="settings-item-desc">Download all your data</div>
+                </div>
+                <button class="btn btn-secondary" style="padding: 8px 16px;">Export</button>
+            </div>
+            <div class="settings-item">
+                <div>
+                    <div class="settings-item-label" style="color: var(--neon-red);">Delete Account</div>
+                    <div class="settings-item-desc">Permanently delete your account and data</div>
+                </div>
+                <button class="btn" style="background: var(--neon-red); color: white; padding: 8px 16px;">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Save settings
+document.querySelectorAll('[data-setting]').forEach(el => {
+    el.addEventListener('change', () => {
+        const setting = el.dataset.setting;
+        const value = el.classList.contains('toggle') 
+            ? el.classList.contains('active')
+            : el.value;
+        
+        // Save to localStorage
+        localStorage.setItem('genesis_' + setting, JSON.stringify(value));
+        console.log('Saved:', setting, value);
+    });
+});
+
+// Load settings
+document.querySelectorAll('[data-setting]').forEach(el => {
+    const setting = el.dataset.setting;
+    const saved = localStorage.getItem('genesis_' + setting);
+    
+    if (saved !== null) {
+        const value = JSON.parse(saved);
+        if (el.classList.contains('toggle')) {
+            if (value) el.classList.add('active');
+            else el.classList.remove('active');
+        } else {
+            el.value = value;
+        }
+    }
+});
+
+function clearMemory() {
+    if (confirm('Are you sure you want to delete all memories? This cannot be undone.')) {
+        fetch('/api/memory/clear', {method: 'POST'})
+            .then(r => r.json())
+            .then(result => {
+                if (result.success) {
+                    alert('Memory cleared successfully!');
+                }
+            });
+    }
+}
+
+function showPasswordModal() {
+    alert('Password change modal would open here');
+}
+
+function showSessionsModal() {
+    alert('Sessions modal would open here');
+}
+</script>
+{% endblock %}
