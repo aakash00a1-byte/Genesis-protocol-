@@ -6,7 +6,13 @@ Image analysis, OCR, and vision processing.
 import io
 from typing import Optional, Dict, Any
 from PIL import Image
-import pytesseract
+
+try:
+    import pytesseract
+    PYTESSERACT_AVAILABLE = True
+except ImportError:
+    pytesseract = None
+    PYTESSERACT_AVAILABLE = False
 
 from genesis_protocol.config import get_config
 from genesis_protocol.utils.logger import get_logger

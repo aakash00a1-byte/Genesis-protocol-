@@ -46,7 +46,6 @@ class AIResponse:
     raw_response: Optional[Dict] = None
 
 
-@dataclass
 class CircuitState(Enum):
     """Circuit breaker states."""
     CLOSED = "closed"
