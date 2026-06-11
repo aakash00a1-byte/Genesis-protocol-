@@ -453,47 +453,39 @@ def chat():
     conn = get_db()
     cursor = conn.cursor()
     
-    # Get recent messages for this user
+    # Get recent messages for this user - match actual schema
     cursor.execute('''
-        SELECT id, message, response, is_user, model_used, created_at
+        SELECT id, message, response, model_used, mode, quality_score, created_at
         FROM chat_history
-        WHERE user_id = ? AND channel = 'web'
+        WHERE user_id = ?
         ORDER BY created_at DESC
         LIMIT 50
     ''', (user_id,))
     
     messages = []
     for row in cursor.fetchall():
-        messages.append({
-            'id': row[0],
-            'content': row[1],
-            'response': row[2],
-            'is_user': row[3],
-            'model': row[4],
-            'created_at': datetime.fromisoformat(row[5]) if row[5] else None
-        })
+        # Format: each row has both user message and AI response
+        if row[1]:  # User message exists
+            messages.append({
+                'id': row[0],
+                'content': row[1],
+                'is_user': True,
+                'created_at': datetime.fromisoformat(row[6]) if row[6] else None
+            })
+        if row[2]:  # AI response exists
+            messages.append({
+                'id': row[0] + 1,
+                'content': row[2],
+                'is_user': False,
+                'model': row[3],
+                'mode': row[4],
+                'created_at': datetime.fromisoformat(row[6]) if row[6] else None
+            })
     
     conn.close()
     
-    # Format messages for display (interleaving user/bot)
-    display_messages = []
-    for msg in messages:
-        display_messages.append({
-            'id': msg['id'],
-            'content': msg['content'],
-            'is_user': True,
-            'created_at': msg['created_at']
-        })
-        if msg['response']:
-            display_messages.append({
-                'id': msg['id'] + 1,
-                'content': msg['response'],
-                'is_user': False,
-                'created_at': msg['created_at']
-            })
-    
     return render_template('chat_v4.html', 
-                          messages=display_messages[::-1],
+                          messages=messages[::-1],
                           username=session.get('username'),
                           role=session.get('role'))
 
