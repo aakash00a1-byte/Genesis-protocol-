@@ -3,21 +3,23 @@
 
 services:
   - type: web
-    name: genesis-bot
-    env: python
+    name: genesis-protocol
+    runtime: python
     buildCommand: cd web && pip install -r requirements.txt
-    startCommand: cd web && python3 server_simple.py
-    healthCheckPath: /
+    startCommand: cd web && gunicorn app_v3:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    healthCheckPath: /health
+    autoDeploy: true
+    region: singapore
     envVars:
       - key: SECRET_KEY
         generateValue: true
       - key: ADMIN_PASSWORD
         value: genesis-admin-2024
-      - key: TELEGRAM_BOT_TOKEN
-        sync: false
       - key: GROQ_API_KEY
         sync: false
       - key: OPENAI_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: GEMINI_API_KEY
         sync: false

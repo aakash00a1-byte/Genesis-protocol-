@@ -40,6 +40,46 @@ app.permanent_session_lifetime = timedelta(days=7)
 
 DATABASE = 'genesis.db'
 
+# ============ Health & Status Endpoints ============
+
+@app.route('/health')
+def health():
+    """Health check endpoint for monitoring."""
+    return jsonify({
+        'status': 'healthy',
+        'service': 'Genesis Protocol',
+        'version': 'v4',
+        'timestamp': datetime.utcnow().isoformat()
+    })
+
+@app.route('/status')
+def status():
+    """Detailed status endpoint."""
+    try:
+        db = get_db()
+        cursor = db.execute('SELECT COUNT(*) as count FROM users')
+        user_count = cursor.fetchone()['count']
+        cursor = db.execute('SELECT COUNT(*) as count FROM messages')
+        message_count = cursor.fetchone()['count']
+        db.close()
+        
+        return jsonify({
+            'status': 'operational',
+            'service': 'Genesis Protocol',
+            'version': 'v4',
+            'database': 'connected',
+            'users': user_count,
+            'messages': message_count,
+            'timestamp': datetime.utcnow().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'service': 'Genesis Protocol',
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
+
 
 def get_db():
     """Get database connection."""
