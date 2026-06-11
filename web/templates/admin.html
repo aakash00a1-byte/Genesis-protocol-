@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Genesis AI{% endblock %}
+
+{% block extra_head %}
+<style>
+.admin-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.admin-header {
+    margin-bottom: 30px;
+}
+
+.admin-header h1 {
+    font-size: 28px;
+    margin-bottom: 10px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.stat-card {
+    background: var(--card-bg);
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.stat-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-top: 5px;
+}
+
+.admin-section {
+    background: var(--card-bg);
+    padding: 24px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+}
+
+.admin-section h2 {
+    font-size: 20px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+
+.data-table th {
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-transform: uppercase;
+}
+
+.data-table tr:hover {
+    background: var(--bg-secondary);
+}
+
+.user-status {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.user-status.active {
+    background: #22c55e20;
+    color: #22c55e;
+}
+
+.user-status.inactive {
+    background: #ef444420;
+    color: #ef4444;
+}
+
+.user-role {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.user-role.admin {
+    background: var(--accent);
+    color: white;
+}
+
+.user-role.user {
+    background: var(--bg-secondary);
+    color: var(--text);
+}
+
+.toggle-btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.toggle-btn:hover {
+    opacity: 0.8;
+}
+
+.refresh-btn {
+    background: var(--bg-secondary);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+.log-entry {
+    font-family: monospace;
+    font-size: 12px;
+    padding: 8px 12px;
+    background: var(--bg-dark);
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+.log-time {
+    color: var(--text-secondary);
+}
+
+.log-model {
+    color: var(--accent);
+}
+
+.log-status {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+}
+
+.log-status.success {
+    background: #22c55e20;
+    color: #22c55e;
+}
+
+.log-status.failed {
+    background: #ef444420;
+    color: #ef4444;
+}
+
+.model-usage-bar {
+    height: 8px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    margin-top: 8px;
+    overflow: hidden;
+}
+
+.model-usage-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+    transition: width 0.3s;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-container">
+    <div class="admin-header">
+        <h1>📊 Admin Dashboard</h1>
+        <p>Monitor system performance and manage users</p>
+    </div>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value" id="statUsers">-</div>
+            <div class="stat-label">Total Users</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="statUsage">-</div>
+            <div class="stat-label">Total Requests</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="statProviders">-</div>
+            <div class="stat-label">Active Providers</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="statAvgLatency">-</div>
+            <div class="stat-label">Avg Latency (ms)</div>
+        </div>
+    </div>
+    
+    <div class="admin-section">
+        <h2>📈 Model Usage (Last 24h)</h2>
+        <div id="modelUsageList">
+            <p style="color: var(--text-secondary);">Loading...</p>
+        </div>
+    </div>
+    
+    <div class="admin-section">
+        <h2>
+            👥 User Management
+            <button class="btn btn-small refresh-btn" onclick="loadUsers()">🔄 Refresh</button>
+        </h2>
+        <div style="overflow-x: auto;">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Usage</th>
+                        <th>Status</th>
+                        <th>Last Login</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTableBody">
+                    <tr><td colspan="7" style="text-align: center; color: var(--text-secondary);">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="admin-section">
+        <h2>
+            📋 Recent Request Logs
+            <button class="btn btn-small refresh-btn" onclick="loadLogs()">🔄 Refresh</button>
+        </h2>
+        <div id="logsContainer">
+            <p style="color: var(--text-secondary);">Loading...</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadStats() {
+    try {
+        const response = await fetch('/api/admin/stats');
+        const data = await response.json();
+        
+        document.getElementById('statUsers').textContent = data.users.total || 0;
+        document.getElementById('statUsage').textContent = data.users.usage || 0;
+        document.getElementById('statAvgLatency').textContent = 
+            data.model_usage.length > 0 
+                ? Math.round(data.model_usage.reduce((a, b) => a + b.avg_latency, 0) / data.model_usage.length)
+                : 0;
+        
+        // Model usage
+        const modelList = document.getElementById('modelUsageList');
+        if (data.model_usage.length > 0) {
+            const maxCount = Math.max(...data.model_usage.map(m => m.count));
+            modelList.innerHTML = data.model_usage.map(m => `
+                <div style="margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span><strong>${m.provider}</strong> / ${m.model}</span>
+                        <span>${m.count} requests • ${Math.round(m.avg_latency || 0)}ms avg</span>
+                    </div>
+                    <div class="model-usage-bar">
+                        <div class="model-usage-fill" style="width: ${(m.count / maxCount) * 100}%"></div>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            modelList.innerHTML = '<p style="color: var(--text-secondary);">No usage data yet</p>';
+        }
+        
+        // Recent errors
+        if (data.recent_errors.length > 0) {
+            console.log('Recent errors:', data.recent_errors);
+        }
+    } catch (err) {
+        console.error('Failed to load stats:', err);
+    }
+}
+
+async function loadUsers() {
+    try {
+        const response = await fetch('/api/admin/users');
+        const data = await response.json();
+        
+        const tbody = document.getElementById('usersTableBody');
+        tbody.innerHTML = data.users.map(user => `
+            <tr>
+                <td><strong>${user.username}</strong></td>
+                <td>${user.email}</td>
+                <td><span class="user-role ${user.role}">${user.role}</span></td>
+                <td>${user.usage_count}</td>
+                <td><span class="user-status ${user.is_active ? 'active' : 'inactive'}">${user.is_active ? 'Active' : 'Disabled'}</span></td>
+                <td>${user.last_login ? new Date(user.last_login).toLocaleString() : 'Never'}</td>
+                <td>
+                    ${user.role !== 'admin' ? `
+                        <button class="toggle-btn" onclick="toggleUser(${user.id})">
+                            ${user.is_active ? 'Disable' : 'Enable'}
+                        </button>
+                    ` : '-'}
+                </td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        console.error('Failed to load users:', err);
+    }
+}
+
+async function toggleUser(userId) {
+    try {
+        await fetch(`/api/admin/users/${userId}/toggle`, {method: 'POST'});
+        loadUsers();
+        loadStats();
+    } catch (err) {
+        console.error('Failed to toggle user:', err);
+    }
+}
+
+async function loadLogs() {
+    try {
+        const response = await fetch('/api/admin/logs?limit=50');
+        const data = await response.json();
+        
+        const container = document.getElementById('logsContainer');
+        if (data.logs.length > 0) {
+            container.innerHTML = data.logs.slice(0, 20).map(log => `
+                <div class="log-entry">
+                    <span class="log-time">${new Date(log.created_at).toLocaleString()}</span>
+                    |
+                    <span class="log-model">${log.provider}/${log.model}</span>
+                    |
+                    ${log.username || 'Anonymous'}
+                    |
+                    <span class="log-status ${log.status}">${log.status}</span>
+                    ${log.latency_ms ? `| ${log.latency_ms}ms` : ''}
+                    ${log.error ? `<br><span style="color: #ef4444;">Error: ${log.error}</span>` : ''}
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = '<p style="color: var(--text-secondary);">No logs yet</p>';
+        }
+    } catch (err) {
+        console.error('Failed to load logs:', err);
+    }
+}
+
+// Load all data on page load
+loadStats();
+loadUsers();
+loadLogs();
+
+// Auto-refresh every 30 seconds
+setInterval(() => {
+    loadStats();
+    loadLogs();
+}, 30000);
+</script>
+{% endblock %}

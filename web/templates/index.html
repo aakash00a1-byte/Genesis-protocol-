@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Genesis AI - Intelligent AI Assistant{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <div class="hero-content">
+        <div class="hero-badge">🚀 Autonomous AI Agent</div>
+        <h1 class="hero-title">
+            <span class="gradient-text">Genesis AI</span>
+        </h1>
+        <p class="hero-subtitle">
+            Self-operating AI agent with multi-LLM intelligence, autonomous planning, 
+            and tool-using capabilities. Chat like never before.
+        </p>
+        
+        <div class="hero-features">
+            <div class="feature">
+                <span class="feature-icon">🧠</span>
+                <span class="feature-text">Multi-LLM Routing</span>
+            </div>
+            <div class="feature">
+                <span class="feature-icon">📋</span>
+                <span class="feature-text">Task Planning</span>
+            </div>
+            <div class="feature">
+                <span class="feature-icon">🔧</span>
+                <span class="feature-text">Tool Usage</span>
+            </div>
+            <div class="feature">
+                <span class="feature-icon">💾</span>
+                <span class="feature-text">Memory System</span>
+            </div>
+        </div>
+        
+        <div class="hero-buttons">
+            <a href="/register" class="btn btn-primary">Get Started Free</a>
+            <a href="/login" class="btn btn-secondary">Login</a>
+        </div>
+    </div>
+    
+    <div class="hero-visual">
+        <div class="chat-preview">
+            <div class="chat-preview-header">
+                <span class="status-dot"></span>
+                Genesis AI Online
+            </div>
+            <div class="chat-preview-messages">
+                <div class="preview-message user">
+                    <span>Build a python web app</span>
+                </div>
+                <div class="preview-message bot">
+                    <span>I'll create a complete Python web application for you...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<section class="features-section">
+    <h2 class="section-title">Capabilities</h2>
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <h3>Intelligent Routing</h3>
+            <p>Automatically selects the best AI model based on your query type - GPT-4 for coding, Claude for creativity, Gemini for reasoning.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📋</div>
+            <h3>Task Planning</h3>
+            <p>Complex requests are automatically broken into steps and executed with verification at each stage.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🔍</div>
+            <h3>Web Search</h3>
+            <p>Real-time web search powered by Tavily for current information, news, and research.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">💾</div>
+            <h3>Memory</h3>
+            <p>Remembers your conversation context and learns from past interactions for better responses.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">✅</div>
+            <h3>Quality Check</h3>
+            <p>Responses are evaluated for quality and regenerated with alternative models if needed.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🌐</div>
+            <h3>Hinglish Support</h3>
+            <p>Natural Hindi-English mix responses for seamless communication in Desi style.</p>
+        </div>
+    </div>
+</section>
+
+<section class="cta-section">
+    <h2>Ready to Experience Genesis?</h2>
+    <p>Join now and chat with the most advanced autonomous AI agent.</p>
+    <a href="/register" class="btn btn-primary btn-large">Start Chatting Free</a>
+</section>
+{% endblock %}
