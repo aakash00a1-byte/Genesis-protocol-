@@ -1,4 +1,4 @@
-name: Deploy to Railway
+name: Deploy to Render
 
 on:
   push:
@@ -12,22 +12,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Railway Login
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway login --token $RAILWAY_TOKEN
-
-      - name: Deploy to Railway
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      - name: Trigger Render Deploy
         run: |
-          railway link ${{ secrets.RAILWAY_PROJECT_ID }}
-          railway up --service web
-          railway variables set GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
-          railway variables set OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          railway variables set TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-          railway variables set SECRET_KEY=${{ secrets.SECRET_KEY }}
-          railway variables set ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+          curl -X POST "https://api.render.com/deploy/${{ secrets.RENDER_OWNER_ID }}/latest" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_DEPLOY_HOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "repo": "https://github.com/aakash00a1-byte/Genesis-protocol-.git",
+              "branch": "main"
+            }'
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+          RENDER_OWNER_ID: ${{ secrets.RENDER_OWNER_ID }}
