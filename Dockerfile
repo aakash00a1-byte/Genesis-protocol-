@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     curl \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for caching
@@ -18,23 +19,15 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY src/ ./src/
-COPY streamlit/ ./streamlit/
-COPY pyproject.toml .
+COPY genesis_protocol/ ./genesis_protocol/
+COPY .env.example .env 2>/dev/null || true
 
 # Create data directory
-RUN mkdir -p /data/chroma_db
-
-# Expose ports
-EXPOSE 8000 8501
+RUN mkdir -p ./data/chroma_db
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV APP_ENV=production
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
 # Default command - run the bot
-CMD ["python", "-m", "genesis_protocol.main"]
+CMD ["python3", "-m", "genesis_protocol.main"]
