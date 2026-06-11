@@ -161,7 +161,8 @@ function addMessage(content, isUser = false, meta = {}) {
     `;
     
     chatMessages.appendChild(msgDiv);
-    scrollToBottom();
+    // Use instant scroll for mobile UX
+    scrollToBottomInstant();
     
     // Speak if voice output is enabled
     if (!isUser && voiceOutputEnabled) {
@@ -205,8 +206,18 @@ function stripHtml(html) {
     return div.textContent || div.innerText || '';
 }
 
-// Scroll to bottom
+// Scroll to bottom with smooth behavior
 function scrollToBottom() {
+    requestAnimationFrame(() => {
+        chatMessages.scrollTo({
+            top: chatMessages.scrollHeight,
+            behavior: 'smooth'
+        });
+    });
+}
+
+// Instant scroll to bottom (for auto-scroll on new message)
+function scrollToBottomInstant() {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
