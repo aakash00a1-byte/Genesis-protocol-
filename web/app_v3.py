@@ -20,6 +20,12 @@ from datetime import datetime, timedelta
 from functools import wraps
 from typing import Optional, Dict, Any
 
+# Load environment variables from .env file
+from pathlib import Path
+from dotenv import load_dotenv
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(env_path)
+
 from flask import Flask, request, jsonify, session, render_template, redirect, url_for, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -624,18 +630,25 @@ def api_chat():
         from genesis_protocol.ai.agent import get_genesis_agent
         
         import asyncio
+        
+        # Use a persistent event loop to avoid "bound to different event loop" errors
+        if not hasattr(app, '_ai_event_loop') or app._ai_event_loop.is_closed():
+            app._ai_event_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(app._ai_event_loop)
+        
         async def get_response():
             agent = get_genesis_agent()
             result = await agent.process(message, chat_id=user_id, user_id=user_id)
             return result
         
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(get_response())
-        loop.close()
+        result = app._ai_event_loop.run_until_complete(get_response())
         
         if result.success:
-            response_text = result.response
+            # Extract content from AIResponse object
+            if hasattr(result.response, 'content'):
+                response_text = result.response.content
+            else:
+                response_text = str(result.response)
             model = result.model_used
             provider = result.provider_used
             quality = result.quality_score

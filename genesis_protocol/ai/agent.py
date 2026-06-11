@@ -159,8 +159,10 @@ class GenesisAgent:
             
             # Store interaction in memory
             if chat_id:
+                # Extract content from response object if needed
+                bot_response = response.response.content if hasattr(response.response, 'content') else str(response.response)
                 self.memory.store_interaction(
-                    chat_id, user_id, query, response.response,
+                    chat_id, user_id, query, bot_response,
                     response.model_used or "unknown",
                     self.scoring.analyze_intent(query).primary_intent
                 )
