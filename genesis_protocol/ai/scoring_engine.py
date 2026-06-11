@@ -218,6 +218,16 @@ class ScoringEngine:
         """Initialize scoring engine."""
         self.logger = logging.getLogger("ai.scoring")
         self._routing_log: List[Dict] = []
+        self._claude_available = True  # Will be updated on first check
+    
+    def set_claude_availability(self, available: bool):
+        """Update Claude availability status."""
+        self._claude_available = available
+        self.logger.info(f"Claude availability: {available}")
+    
+    def is_provider_available(self, provider: str, available_providers: List[str]) -> bool:
+        """Check if provider is available."""
+        return provider in available_providers
     
     def analyze_intent(self, query: str) -> IntentAnalysis:
         """
@@ -339,11 +349,23 @@ class ScoringEngine:
             if model_info["provider"] not in available_providers:
                 continue
             
+            # Handle Claude unavailability - redistribute weight
+            if model_info["provider"] == "claude" and not self._claude_available:
+                continue  # Skip Claude models entirely
+            
             score = 0.0
             reasons = []
             
             # Base score from intent weights
             base_score = self.INTENT_WEIGHTS.get(intent.primary_intent, {}).get(model_name, 0.5)
+            
+            # If Claude not available, boost alternative models for creative tasks
+            if not self._claude_available and intent.primary_intent == "creative":
+                if model_info["provider"] == "openai":
+                    base_score += 0.15  # Boost OpenAI for creative when Claude unavailable
+                elif model_info["provider"] == "gemini":
+                    base_score += 0.10
+            
             score += base_score * 0.6  # 60% weight on intent match
             
             # Capability match bonus
