@@ -1,9 +1,10 @@
 """Genesis Protocol - AI Provider Chain
 
-Intelligent fallback chain between multiple AI providers with LLM routing.
+Multi-LLM routing with scoring-based model selection.
+Fallback: Best scored → 2nd best → 3rd → Groq (final)
 """
 
-import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, List, Dict, Any
@@ -12,7 +13,7 @@ from genesis_protocol.ai.providers import (
     BaseProvider, GroqProvider, OpenAIProvider, 
     GeminiProvider, HuggingFaceProvider, AIRequest, AIResponse
 )
-from genesis_protocol.ai.llm_router import choose_model, get_router, log_model_usage
+from genesis_protocol.ai.scoring_engine import get_scoring_engine
 from genesis_protocol.config import get_config
 from genesis_protocol.utils.logger import get_logger
 
@@ -26,6 +27,7 @@ class AICallResult:
     response: Optional[AIResponse] = None
     provider_used: Optional[str] = None
     model_used: Optional[str] = None
+    intent_category: Optional[str] = None
     error: Optional[str] = None
     attempts: int = 0
     total_latency_ms: int = 0
@@ -34,36 +36,38 @@ class AICallResult:
 
 class ProviderChain:
     """
-    AI Provider Chain with intelligent fallback and LLM routing.
+    Multi-LLM Provider Chain with scoring-based selection.
     
-    Manages multiple AI providers, uses smart model selection,
-    and automatically falls back when a provider fails.
+    - Uses ScoringEngine for dynamic model selection
+    - Fallback chain: Best → 2nd → 3rd → Groq
+    - No hardcoded primary model
+    - Logs all requests for analysis
     """
     
     def __init__(self):
         """Initialize provider chain."""
         self._config = get_config()
-        self._router = get_router()
+        self._scoring = get_scoring_engine()
         
-        # Initialize providers (NO HARDCODE - all equal)
+        # Initialize all providers equally
         self._providers: Dict[str, BaseProvider] = {
             "openai": OpenAIProvider(),
             "gemini": GeminiProvider(),
-            "claude": None,  # Will be initialized if available
+            "claude": None,
             "groq": GroqProvider(),
             "huggingface": HuggingFaceProvider(),
         }
         
-        # Try to initialize Claude if API key available
+        # Initialize Claude if key available
         self._init_claude()
         
-        # Provider order: OpenAI -> Gemini -> Claude -> Groq -> HuggingFace
-        self._provider_order = ["openai", "gemini", "claude", "groq", "huggingface"]
+        # Base provider order
+        self._base_order = ["openai", "gemini", "claude", "groq", "huggingface"]
         
-        # Remove None providers
-        self._provider_order = [p for p in self._provider_order if self._providers.get(p)]
+        # Request logging
+        self._request_log: List[Dict] = []
         
-        logger.info(f"Provider chain initialized with: {self._provider_order}")
+        logger.info("Provider chain initialized (scoring-based)")
     
     def _init_claude(self):
         """Initialize Claude provider if API key available."""
@@ -72,83 +76,58 @@ class ProviderChain:
             self._providers["claude"] = ClaudeProvider()
             logger.info("Claude provider initialized")
         except Exception as e:
-            logger.warning(f"Claude provider not available: {e}")
+            logger.debug(f"Claude not available: {e}")
     
     async def call(self, messages: List[Dict[str, str]], 
                    preferred_provider: str = None,
                    model: str = None,
                    temperature: float = 0.7,
                    max_tokens: int = 1000,
-                   user_input: str = None) -> AICallResult:
+                   user_input: str = None,
+                   bypass_scoring: bool = False) -> AICallResult:
         """
-        Make an AI call with intelligent routing and fallback.
-        
-        Args:
-            messages: Chat messages
-            preferred_provider: Preferred provider (optional)
-            model: Specific model to use (optional - uses router if not set)
-            temperature: Temperature setting
-            max_tokens: Maximum tokens
-            user_input: User's original query (for model selection)
-            
-        Returns:
-            AICallResult: Result of the call
+        Make an AI call with scoring-based routing.
         """
         start_time = datetime.utcnow()
         attempts = 0
         errors = []
         
-        # Smart model selection using LLM router
-        if not model and user_input:
-            model = choose_model(user_input)
-            logger.info(f"Router selected model: {model}")
+        # Get available providers
+        available = self.get_available_providers()
         
-        # Build provider order (NEW FALLBACK: OpenAI → Gemini → Claude → Groq)
-        if preferred_provider and preferred_provider in self._providers:
-            providers_to_try = [preferred_provider] + [
-                p for p in self._provider_order if p != preferred_provider
-            ]
+        # Determine model and provider using scoring
+        if model and preferred_provider:
+            target_provider = preferred_provider
+            target_model = model
+        elif not bypass_scoring and user_input:
+            target_provider, target_model, score, intent = self._scoring.select_model(
+                user_input, available
+            )
+            logger.info(f"Scoring selected: {target_model} (score: {score:.2f}) for {intent.primary_intent}")
         else:
-            providers_to_try = self._provider_order
+            target_provider = available[0] if available else "groq"
+            target_model = model or self._providers[target_provider].get_default_model()
+        
+        # Build provider order: target → fallbacks
+        providers_to_try = self._get_fallback_chain(target_provider, available)
         
         # Try each provider
         for provider_name in providers_to_try:
             provider = self._providers.get(provider_name)
-            if not provider:
-                continue
-            
-            if not provider.is_configured():
-                logger.debug(f"Skipping {provider_name} - not configured")
+            if not provider or not provider.is_configured():
                 continue
             
             if not provider.should_use():
-                logger.debug(f"Skipping {provider_name} - circuit open")
-                errors.append(f"{provider_name}: circuit open")
+                errors.append(f"{provider_name}: circuit_open")
                 continue
             
             attempts += 1
             
+            # Map model to provider's available model
+            model_to_use = self._map_model_to_provider(target_model, provider_name, provider)
+            
             try:
-                # Smart model selection:
-                # 1. If router selected a model AND provider matches, use it
-                # 2. Otherwise, use provider's default model
-                model_to_use = model if model else provider.get_default_model()
-                
-                # Map router models to provider defaults if not compatible
-                # OpenAI only supports its own models
-                if provider_name == "openai" and model_to_use not in ["gpt-4o", "gpt-4-turbo", "gpt-4o-mini", "gpt-3.5-turbo"]:
-                    model_to_use = provider.get_default_model()
-                # Gemini only supports gemini models
-                elif provider_name == "gemini" and "gemini" not in model_to_use and "gpt" not in model_to_use:
-                    model_to_use = provider.get_default_model()
-                # Claude only supports claude models
-                elif provider_name == "claude" and "claude" not in model_to_use and "gemini" not in model_to_use:
-                    model_to_use = provider.get_default_model()
-                # Groq only supports llama/mixtral models
-                elif provider_name == "groq" and "gemini" in model_to_use:
-                    model_to_use = provider.get_default_model()
-                
-                logger.info(f"Attempting AI call with {provider_name} (model: {model_to_use})")
+                logger.info(f"Attempting: {provider_name}/{model_to_use}")
                 
                 request = AIRequest(
                     messages=messages,
@@ -158,25 +137,17 @@ class ProviderChain:
                 )
                 
                 response = await provider.generate(request)
-                
                 total_latency = int((datetime.utcnow() - start_time).total_seconds() * 1000)
                 
-                # Log model usage
-                log_model_usage(model_to_use, user_input or "", True)
-                
-                logger.info(
-                    f"AI call successful",
-                    provider=provider_name,
-                    model=model_to_use,
-                    attempts=attempts,
-                    latency_ms=total_latency
-                )
+                # Log successful request
+                self._log_request(user_input or "", provider_name, model_to_use, "success", total_latency)
                 
                 return AICallResult(
                     success=True,
                     response=response,
                     provider_used=provider_name,
                     model_used=model_to_use,
+                    intent_category=target_provider,
                     attempts=attempts,
                     total_latency_ms=total_latency,
                     total_cost=response.cost_estimate,
@@ -185,18 +156,13 @@ class ProviderChain:
             except Exception as e:
                 error_str = str(e)
                 errors.append(f"{provider_name}: {error_str}")
-                log_model_usage(model or "unknown", user_input or "", False)
                 logger.warning(f"{provider_name} failed: {error_str}")
                 continue
         
-        # All providers failed
+        # All failed
         total_latency = int((datetime.utcnow() - start_time).total_seconds() * 1000)
         
-        logger.error(
-            f"All AI providers failed",
-            attempts=attempts,
-            errors=errors
-        )
+        self._log_request(user_input or "", target_provider, target_model, "failed", total_latency, errors=errors)
         
         return AICallResult(
             success=False,
@@ -205,105 +171,85 @@ class ProviderChain:
             total_latency_ms=total_latency,
         )
     
-    async def call_with_vision(self, text: str, image_url: str = None,
-                                image_base64: str = None) -> AICallResult:
-        """
-        Make a vision-capable AI call.
+    def _map_model_to_provider(self, model: str, provider: str, provider_obj) -> str:
+        """Map router model to provider's actual model."""
+        model_lower = model.lower()
         
-        Args:
-            text: Text prompt
-            image_url: URL of image
-            image_base64: Base64 encoded image
-            
-        Returns:
-            AICallResult: Result of the call
-        """
-        # Vision-capable providers
-        vision_providers = ["openai", "gemini"]
+        if provider == "openai" and ("gpt" in model_lower or "o" in model_lower):
+            return model if model in ["gpt-4o", "gpt-4-turbo", "gpt-4o-mini", "gpt-3.5-turbo"] else provider_obj.get_default_model()
         
-        messages = [{"role": "user", "content": []}]
+        if provider == "gemini" and "gemini" in model_lower:
+            return model
         
-        if image_base64:
-            messages[0]["content"].append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}
-            })
-        elif image_url:
-            messages[0]["content"].append({
-                "type": "image_url", 
-                "image_url": {"url": image_url}
-            })
+        if provider == "claude" and "claude" in model_lower:
+            return model
         
-        messages[0]["content"].append({
-            "type": "text",
-            "text": text
-        })
+        if provider == "groq" and ("llama" in model_lower or "mixtral" in model_lower):
+            return model
         
-        # Try vision providers in order
-        for provider_name in vision_providers:
-            provider = self._providers.get(provider_name)
-            if not provider or not provider.is_configured():
-                continue
-            
-            try:
-                from genesis_protocol.ai.providers.base_provider import ProviderCapability
-                if ProviderCapability.VISION not in provider.get_capabilities():
-                    continue
-                
-                request = AIRequest(
-                    messages=messages,
-                    model=provider.get_default_model(),
-                    temperature=0.7,
-                    max_tokens=1000,
-                )
-                
-                response = await provider.generate(request)
-                
-                return AICallResult(
-                    success=True,
-                    response=response,
-                    provider_used=provider_name,
-                    attempts=1,
-                    total_latency_ms=response.latency_ms,
-                    total_cost=response.cost_estimate,
-                )
-                
-            except Exception as e:
-                logger.warning(f"Vision call failed with {provider_name}: {e}")
-                continue
-        
-        return AICallResult(
-            success=False,
-            error="No vision-capable provider available",
-        )
+        return provider_obj.get_default_model()
     
-    def get_status(self) -> Dict[str, Any]:
-        """
-        Get status of all providers.
+    def _get_fallback_chain(self, primary: str, available: List[str]) -> List[str]:
+        """Build fallback chain: primary → 2nd best → 3rd → Groq."""
+        chain = [primary]
         
-        Returns:
-            Dictionary of provider statuses
-        """
-        return {
-            name: provider.get_status() 
-            for name, provider in self._providers.items()
+        for prov in self._base_order:
+            if prov in available and prov != primary and prov not in chain:
+                chain.append(prov)
+        
+        if "groq" not in chain:
+            chain.append("groq")
+        elif chain[-1] != "groq":
+            chain.remove("groq")
+            chain.append("groq")
+        
+        return chain
+    
+    def _log_request(self, query: str, provider: str, model: str, status: str, latency: int, errors: List[str] = None):
+        """Log request for analysis and improvement."""
+        log_entry = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "query_preview": query[:100] if query else "",
+            "provider": provider,
+            "model": model,
+            "status": status,
+            "latency_ms": latency,
+            "errors": errors or []
         }
+        self._request_log.append(log_entry)
+        
+        if len(self._request_log) > 1000:
+            self._request_log = self._request_log[-1000:]
+    
+    def get_request_log(self) -> List[Dict]:
+        """Get request log for analysis."""
+        return self._request_log
     
     def get_available_providers(self) -> List[str]:
         """Get list of configured and available providers."""
         return [
-            name for name in self._provider_order
-            if name in self._providers and self._providers[name].is_configured()
+            name for name in self._base_order
+            if name in self._providers 
+            and self._providers[name] 
+            and self._providers[name].is_configured()
         ]
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get status of all providers."""
+        return {
+            name: provider.get_status() if provider else {"name": name, "configured": False}
+            for name, provider in self._providers.items()
+        }
     
     def reset_all_circuits(self):
         """Reset circuit breakers for all providers."""
         for provider in self._providers.values():
-            provider.reset_circuit()
+            if provider:
+                provider.reset_circuit()
         logger.info("All provider circuits reset")
 
 
-# Global provider chain instance
+# Singleton
 _provider_chain: Optional[ProviderChain] = None
 
 
