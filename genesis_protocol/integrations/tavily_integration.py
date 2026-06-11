@@ -73,6 +73,7 @@ class TavilyClient:
                 "search_depth": self.search_depth,
                 "max_results": self.max_results,
                 "api_key": self.api_key,
+                "include_answer": True,  # Request AI answer
             }
             
             response = await self._client.post(self.BASE_URL, json=payload)
@@ -82,6 +83,10 @@ class TavilyClient:
                 return {"error": f"API error: {response.status_code}", "results": []}
             
             data = response.json()
+            
+            # Extract answer if not provided by API
+            if not data.get("answer") and data.get("results"):
+                data["answer"] = self._extract_answer(query, data["results"])
             
             # Cache results
             self._set_cached(query, data)
@@ -93,6 +98,25 @@ class TavilyClient:
         except Exception as e:
             logger.error(f"Tavily search failed: {e}")
             return {"error": str(e), "results": []}
+    
+    def _extract_answer(self, query: str, results: List[Dict]) -> str:
+        """Extract answer from search results when API doesn't provide one."""
+        if not results:
+            return ""
+        
+        # Use top result content to form answer
+        top_result = results[0]
+        title = top_result.get("title", "")
+        content = top_result.get("content", "")
+        
+        if content:
+            # Create a concise answer from the top result
+            answer = content[:500]
+            if len(content) > 500:
+                answer += "..."
+            return f"Based on search results: {answer}"
+        
+        return ""
     
     async def get_context(self, query: str, max_chars: int = 5000) -> str:
         """

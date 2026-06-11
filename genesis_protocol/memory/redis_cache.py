@@ -20,10 +20,13 @@ class RedisCache:
     Redis-based caching for Genesis Protocol.
     
     Provides fast key-value storage with TTL support.
+    Uses in-memory fallback when Redis is unavailable.
     """
     
     _instance: Optional["RedisCache"] = None
     _client: Optional[redis.Redis] = None
+    _fallback_cache: dict = {}
+    _fallback_ttl: dict = {}
     
     def __new__(cls):
         """Singleton pattern for Redis connection."""
@@ -52,7 +55,7 @@ class RedisCache:
                 port=config.memory.redis_port
             )
         except Exception as e:
-            logger.error(f"Failed to initialize Redis: {e}")
+            logger.warning(f"Redis unavailable, using in-memory fallback: {e}")
             self._client = None
     
     async def get(self, key: str) -> Optional[str]:
@@ -65,19 +68,31 @@ class RedisCache:
         Returns:
             Cached value or None
         """
-        if not self._client:
-            return None
+        if self._client:
+            try:
+                value = await self._client.get(key)
+                if value:
+                    logger.debug(f"Cache hit: {key}")
+                else:
+                    logger.debug(f"Cache miss: {key}")
+                return value
+            except Exception as e:
+                logger.warning(f"Redis get failed, using fallback: {e}")
         
-        try:
-            value = await self._client.get(key)
-            if value:
-                logger.debug(f"Cache hit: {key}")
-            else:
-                logger.debug(f"Cache miss: {key}")
-            return value
-        except Exception as e:
-            logger.error(f"Redis get error: {e}")
-            return None
+        # Fallback to in-memory cache
+        return self._fallback_get(key)
+    
+    def _fallback_get(self, key: str) -> Optional[str]:
+        """In-memory fallback for get."""
+        if key in self._fallback_cache:
+            import time
+            expiry = self._fallback_ttl.get(key)
+            if expiry and time.time() > expiry:
+                del self._fallback_cache[key]
+                del self._fallback_ttl[key]
+                return None
+            return self._fallback_cache.get(key)
+        return None
     
     async def set(self, key: str, value: str, ttl: int = 86400):
         """
@@ -88,14 +103,24 @@ class RedisCache:
             value: Value to cache
             ttl: Time to live in seconds (default: 24 hours)
         """
-        if not self._client:
-            return
+        if self._client:
+            try:
+                await self._client.setex(key, ttl, value)
+                logger.debug(f"Cache set: {key} (ttl={ttl}s)")
+                return
+            except Exception as e:
+                logger.warning(f"Redis set failed, using fallback: {e}")
         
-        try:
-            await self._client.setex(key, ttl, value)
-            logger.debug(f"Cache set: {key} (ttl={ttl}s)")
-        except Exception as e:
-            logger.error(f"Redis set error: {e}")
+        # Fallback to in-memory cache
+        import time
+        self._fallback_cache[key] = value
+        self._fallback_ttl[key] = time.time() + ttl
+        logger.debug(f"Fallback cache set: {key} (ttl={ttl}s)")
+    
+    def _fallback_delete(self, key: str):
+        """In-memory fallback for delete."""
+        self._fallback_cache.pop(key, None)
+        self._fallback_ttl.pop(key, None)
     
     async def delete(self, key: str):
         """
@@ -104,14 +129,16 @@ class RedisCache:
         Args:
             key: Cache key
         """
-        if not self._client:
-            return
+        if self._client:
+            try:
+                await self._client.delete(key)
+                logger.debug(f"Cache delete: {key}")
+                return
+            except Exception as e:
+                logger.warning(f"Redis delete failed, using fallback: {e}")
         
-        try:
-            await self._client.delete(key)
-            logger.debug(f"Cache delete: {key}")
-        except Exception as e:
-            logger.error(f"Redis delete error: {e}")
+        self._fallback_delete(key)
+        logger.debug(f"Fallback cache delete: {key}")
     
     async def exists(self, key: str) -> bool:
         """
