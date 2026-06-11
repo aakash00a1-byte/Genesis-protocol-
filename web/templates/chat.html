@@ -263,13 +263,24 @@
         <div class="chat-model-info">
             <span>🤖</span>
             <span>Genesis AI Agent</span>
-            <span class="model-badge">v2.0</span>
+            <span class="model-badge">v3.0</span>
         </div>
         <div>
             <span style="font-size: 12px; color: var(--text-secondary);">
                 Mode: <span id="current-mode">normal</span>
             </span>
         </div>
+    </div>
+    
+    <!-- Voice Controls -->
+    <div class="voice-controls" style="display: flex; gap: 10px; margin-bottom: 15px; padding: 10px; background: var(--card-bg); border-radius: 8px;">
+        <button id="voiceInputBtn" class="suggestion-btn" onclick="toggleVoiceInput()" title="Voice Input (STT)">
+            🎤 <span id="voiceInputText">Start Voice</span>
+        </button>
+        <button id="voiceOutputBtn" class="suggestion-btn" onclick="toggleVoiceOutput()" title="Voice Output (TTS)">
+            🔊 <span id="voiceOutputText">Speak Responses</span>
+        </button>
+        <div id="voiceStatus" style="flex: 1; text-align: center; color: var(--text-secondary); font-size: 12px;"></div>
     </div>
     
     <div class="chat-messages" id="chatMessages">
@@ -431,5 +442,123 @@ async function loadHistory() {
 // Initialize
 loadHistory();
 messageInput.focus();
+
+// ============ Voice Features (Web Speech API) ============
+
+let recognition = null;
+let synthesis = window.speechSynthesis;
+let voiceInputEnabled = false;
+let voiceOutputEnabled = false;
+
+function toggleVoiceInput() {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        document.getElementById('voiceStatus').textContent = 'Speech recognition not supported in this browser';
+        return;
+    }
+    
+    if (voiceInputEnabled) {
+        stopVoiceInput();
+    } else {
+        startVoiceInput();
+    }
+}
+
+function startVoiceInput() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    
+    recognition.onstart = () => {
+        voiceInputEnabled = true;
+        document.getElementById('voiceInputText').textContent = 'Listening...';
+        document.getElementById('voiceStatus').textContent = 'Listening for speech...';
+    };
+    
+    recognition.onresult = (event) => {
+        const transcript = Array.from(event.results)
+            .map(result => result[0].transcript)
+            .join('');
+        messageInput.value = transcript;
+        
+        if (event.results[0].isFinal) {
+            document.getElementById('voiceStatus').textContent = 'Voice captured: ' + transcript.substring(0, 30) + '...';
+            // Auto-send after voice capture
+            setTimeout(() => sendMessage(), 500);
+        }
+    };
+    
+    recognition.onerror = (event) => {
+        document.getElementById('voiceStatus').textContent = 'Error: ' + event.error;
+        stopVoiceInput();
+    };
+    
+    recognition.onend = () => {
+        stopVoiceInput();
+    };
+    
+    recognition.start();
+}
+
+function stopVoiceInput() {
+    if (recognition) {
+        recognition.stop();
+        recognition = null;
+    }
+    voiceInputEnabled = false;
+    document.getElementById('voiceInputText').textContent = 'Start Voice';
+}
+
+function toggleVoiceOutput() {
+    if (!('speechSynthesis' in window)) {
+        document.getElementById('voiceStatus').textContent = 'Speech synthesis not supported';
+        return;
+    }
+    
+    voiceOutputEnabled = !voiceOutputEnabled;
+    document.getElementById('voiceOutputText').textContent = voiceOutputEnabled ? 'Stop Speaking' : 'Speak Responses';
+    document.getElementById('voiceStatus').textContent = voiceOutputEnabled ? 'Voice output enabled' : 'Voice output disabled';
+}
+
+function speakText(text) {
+    if (!voiceOutputEnabled || !('speechSynthesis' in window)) return;
+    
+    // Cancel any ongoing speech
+    synthesis.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+    
+    // Try to get a good voice
+    const voices = synthesis.getVoices();
+    const englishVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google')) ||
+                         voices.find(v => v.lang.startsWith('en'));
+    if (englishVoice) utterance.voice = englishVoice;
+    
+    synthesis.speak(utterance);
+}
+
+// Load voices (needed for some browsers)
+if ('speechSynthesis' in window) {
+    speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+}
+
+// Override addMessage to speak bot responses
+const originalAddMessage = addMessage;
+addMessage = function(content, isUser = false, meta = {}) {
+    originalAddMessage(content, isUser, meta);
+    if (!isUser && voiceOutputEnabled) {
+        // Strip markdown/html for cleaner speech
+        const plainText = content.replace(/```[\s\S]*?```/g, '')
+            .replace(/`[^`]+`/g, '')
+            .replace(/[*_#]/g, '')
+            .replace(/<[^>]+>/g, '')
+            .substring(0, 500);
+        speakText(plainText);
+    }
+};
 </script>
 {% endblock %}

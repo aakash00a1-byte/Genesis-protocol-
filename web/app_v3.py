@@ -289,14 +289,33 @@ def register():
             conn = get_db()
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO users (username, email, password_hash)
-                VALUES (?, ?, ?)
-            ''', (username, email, generate_password_hash(password)))
+                INSERT INTO users (username, email, password_hash, is_verified)
+                VALUES (?, ?, ?, ?)
+            ''', (username, email, generate_password_hash(password), 0))
+            user_id = cursor.lastrowid
             conn.commit()
+            
+            # Create verification token
+            token = secrets.token_urlsafe(32)
+            expires_at = datetime.utcnow() + timedelta(days=1)
+            cursor.execute('INSERT INTO email_verifications (user_id, token, expires_at) VALUES (?, ?, ?)',
+                          (user_id, token, expires_at))
+            conn.commit()
+            
+            # Send verification email
+            try:
+                from web.email_service import get_email_service
+                email_service = get_email_service()
+                verify_url = f"{request.host_url}verify/{token}"
+                email_service.send_verification_email(email, username, verify_url)
+                logger.info(f"Verification email sent to {email}")
+            except Exception as e:
+                logger.warning(f"Email service unavailable: {e}")
+            
             conn.close()
             
             logger.info(f"User {username} registered")
-            return jsonify({'success': True, 'redirect': '/login'})
+            return jsonify({'success': True, 'redirect': '/login', 'message': 'Please check your email to verify your account'})
             
         except sqlite3.IntegrityError:
             return jsonify({'error': 'Username or email already exists'}), 400
@@ -312,7 +331,7 @@ def forgot_password():
         
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT id FROM users WHERE email = ?', (email,))
+        cursor.execute('SELECT id, username FROM users WHERE email = ?', (email,))
         user = cursor.fetchone()
         
         if user:
@@ -322,8 +341,16 @@ def forgot_password():
             cursor.execute('INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)',
                           (user['id'], token, expires_at))
             conn.commit()
-            # In production, send email with reset link
-            logger.info(f"Password reset requested for {email}")
+            
+            # Send email
+            try:
+                from web.email_service import get_email_service
+                email_service = get_email_service()
+                reset_url = f"{request.host_url}reset-password/{token}"
+                email_service.send_password_reset_email(email, user['username'], reset_url)
+                logger.info(f"Password reset email sent to {email}")
+            except Exception as e:
+                logger.warning(f"Email service unavailable: {e}")
         
         conn.close()
         
@@ -364,6 +391,43 @@ def reset_password(token):
     
     conn.close()
     return render_template('reset_password.html', token=token)
+
+
+@app.route('/verify/<token>')
+def verify_email(token):
+    """Verify email with token."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT user_id FROM email_verifications 
+        WHERE token = ? AND verified = 0 AND expires_at > CURRENT_TIMESTAMP
+    ''', (token,))
+    verification = cursor.fetchone()
+    
+    if not verification:
+        conn.close()
+        return render_template('error.html', error='Invalid or expired verification link'), 400
+    
+    cursor.execute('UPDATE users SET is_verified = 1 WHERE id = ?', (verification['user_id'],))
+    cursor.execute('UPDATE email_verifications SET verified = 1 WHERE token = ?', (token,))
+    conn.commit()
+    conn.close()
+    
+    # Send welcome email
+    try:
+        from web.email_service import get_email_service
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT username, email FROM users WHERE id = ?', (verification['user_id'],))
+        user = cursor.fetchone()
+        if user:
+            email_service = get_email_service()
+            email_service.send_welcome_email(user['email'], user['username'])
+        conn.close()
+    except Exception as e:
+        logger.warning(f"Welcome email failed: {e}")
+    
+    return render_template('verification_success.html')
 
 
 @app.route('/logout')
@@ -663,6 +727,46 @@ def api_admin_logs():
 
 # Initialize database
 init_db()
+
+
+# ============ Health Check ============
+
+@app.route('/health')
+def health():
+    """Health check endpoint for monitoring."""
+    import sqlite3
+    from datetime import datetime
+    
+    health_status = {
+        'status': 'healthy',
+        'version': '3.0.0',
+        'timestamp': datetime.utcnow().isoformat(),
+        'checks': {}
+    }
+    
+    # Check database
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM users')
+        cursor.fetchone()
+        conn.close()
+        health_status['checks']['database'] = 'ok'
+    except Exception as e:
+        health_status['checks']['database'] = f'error: {str(e)}'
+        health_status['status'] = 'degraded'
+    
+    # Check AI backend
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from genesis_protocol.ai.agent import get_genesis_agent
+        health_status['checks']['ai_backend'] = 'available'
+    except Exception as e:
+        health_status['checks']['ai_backend'] = 'unavailable'
+        health_status['status'] = 'degraded'
+    
+    status_code = 200 if health_status['status'] == 'healthy' else 503
+    return jsonify(health_status), status_code
 
 
 if __name__ == '__main__':
