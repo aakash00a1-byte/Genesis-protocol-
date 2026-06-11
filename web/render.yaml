@@ -1,9 +1,9 @@
-# Render Blueprint for Genesis Protocol
+# Render Blueprint for Genesis Web Platform
 # Deploy to Render: https://render.com/docs/blueprint-spec
 
 services:
   - type: web
-    name: genesis-bot
+    name: genesis-ai-web
     env: python
     buildCommand: cd web && pip install -r requirements.txt
     startCommand: cd web && python3 server_simple.py
