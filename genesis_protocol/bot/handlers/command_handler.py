@@ -1,10 +1,11 @@
 """Genesis Protocol - Command Handler
 
-Handles bot commands (/start, /help, /settings, etc.).
+Handles bot commands (/start, /help, /settings, etc.) and power commands.
 """
 
 from __future__ import annotations
 from typing import TYPE_CHECKING
+import asyncio
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
 
 from genesis_protocol.memory.conversation_memory import ConversationMemory
 from genesis_protocol.utils.logger import get_logger
+from genesis_protocol.powers import CodeGenerator, BugHunter, ErrorFixer, APKBuilder, Deployer
 
 logger = get_logger("bot.handlers.command")
 
@@ -27,6 +29,13 @@ class CommandHandler:
         """Initialize command handler."""
         self.bot = bot
         self.memory = ConversationMemory()
+        
+        # Initialize power modules
+        self.code_generator = CodeGenerator()
+        self.bug_hunter = BugHunter()
+        self.error_fixer = ErrorFixer()
+        self.apk_builder = APKBuilder()
+        self.deployer = Deployer()
     
     async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
@@ -273,3 +282,245 @@ Your active AI provider: *{current_model}*
         )
         
         await self.bot.send_message(update.effective_chat.id, debug_info, parse_mode="Markdown")
+
+    # ==================== GENESIS POWER COMMANDS ====================
+
+    async def handle_generate(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /generate command - Generate code."""
+        chat_id = update.effective_chat.id
+        args = context.args
+        
+        if not args:
+            await self.bot.send_message(
+                chat_id,
+                "📝 *Code Generator*\n\nUsage: /generate <description>\n\nExample:\n/generate a flask api endpoint for user login",
+                parse_mode="Markdown"
+            )
+            return
+        
+        description = " ".join(args)
+        await self.bot.send_message(chat_id, "⚡ Generating code...")
+        
+        try:
+            result = await self.code_generator.generate_from_natural_language(description)
+            
+            if result.success:
+                response = f"✅ *Code Generated*\n\n"
+                response += f"Language: `{result.language}`\n"
+                response += f"Files: {', '.join(result.files_created)}\n\n"
+                response += f"📄 *Code:*\n```\n{result.code[:4000]}\n```\n\n"
+                
+                if result.explanation:
+                    response += f"💡 *Explanation:*\n{result.explanation}"
+                
+                if result.warnings:
+                    response += f"\n⚠️ *Warnings:*\n" + "\n".join(result.warnings)
+                
+                await self.bot.send_message(chat_id, response, parse_mode="Markdown")
+            else:
+                await self.bot.send_message(chat_id, f"❌ Generation failed: {result.error}", parse_mode="Markdown")
+                
+        except Exception as e:
+            await self.bot.send_message(chat_id, f"❌ Error: {str(e)}", parse_mode="Markdown")
+
+    async def handle_bughunt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /bughunt command - Analyze code for bugs."""
+        chat_id = update.effective_chat.id
+        
+        # Check if code is provided as argument or as reply
+        if context.args:
+            code = " ".join(context.args)
+        elif update.message.reply_to_message and update.message.reply_to_message.text:
+            code = update.message.reply_to_message.text
+        else:
+            await self.bot.send_message(
+                chat_id,
+                "🐛 *Bug Hunter*\n\nUsage:\n/bughunt <code or error>\n\nOr reply to a message with /bughunt",
+                parse_mode="Markdown"
+            )
+            return
+        
+        await self.bot.send_message(chat_id, "🔍 Analyzing code for bugs...")
+        
+        try:
+            result = await self.bug_hunter.analyze(code)
+            
+            response = f"📊 *Analysis Complete*\n\n"
+            response += f"Score: *{result.score}/100*\n"
+            response += f"Issues Found: {len(result.bugs)}\n"
+            response += f"🔴 Security: {result.security_issues}\n"
+            response += f"🐌 Performance: {result.performance_issues}\n\n"
+            
+            if result.bugs:
+                response += "*🔴 Critical Issues:*\n"
+                for bug in result.bugs[:5]:
+                    if bug.severity.value == "critical":
+                        response += f"• Line {bug.line}: {bug.title}\n"
+                        response += f"  → {bug.suggestion}\n"
+                
+                response += "\n*🟠 High Priority:*\n"
+                for bug in result.bugs[:5]:
+                    if bug.severity.value == "high":
+                        response += f"• {bug.title}\n"
+            else:
+                response += "✅ No bugs found!"
+            
+            await self.bot.send_message(chat_id, response, parse_mode="Markdown")
+            
+        except Exception as e:
+            await self.bot.send_message(chat_id, f"❌ Analysis error: {str(e)}", parse_mode="Markdown")
+
+    async def handle_fix(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /fix command - Fix errors."""
+        chat_id = update.effective_chat.id
+        
+        # Get error message
+        if context.args:
+            error_msg = " ".join(context.args)
+        elif update.message.reply_to_message and update.message.reply_to_message.text:
+            error_msg = update.message.reply_to_message.text
+        else:
+            await self.bot.send_message(
+                chat_id,
+                "🔧 *Error Fixer*\n\nUsage:\n/fix <error message>\n\nOr reply to error with /fix",
+                parse_mode="Markdown"
+            )
+            return
+        
+        await self.bot.send_message(chat_id, "🔧 Fixing error...")
+        
+        try:
+            result = await self.error_fixer.fix_error(error_msg)
+            
+            if result.success and result.fixes:
+                fix = result.fixes[0]
+                response = f"✅ *Error Fixed*\n\n"
+                response += f"💡 *What was wrong:*\n{fix.explanation}\n\n"
+                response += f"🔧 *Fix applied:*\n"
+                response += f"```\n{fix.fixed_code[:3000]}\n```\n\n"
+                response += f"Confidence: {int(fix.confidence * 100)}%"
+                
+                await self.bot.send_message(chat_id, response, parse_mode="Markdown")
+            else:
+                await self.bot.send_message(
+                    chat_id,
+                    f"🤷 Could not auto-fix this error.\n\nError: {result.original_error[:500]}",
+                    parse_mode="Markdown"
+                )
+                
+        except Exception as e:
+            await self.bot.send_message(chat_id, f"❌ Fix error: {str(e)}", parse_mode="Markdown")
+
+    async def handle_apk(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /apk command - APK builder status."""
+        chat_id = update.effective_chat.id
+        
+        status = self.apk_builder.get_status()
+        
+        response = "📱 *APK Builder Status*\n\n"
+        response += f"Android SDK: {'✅ Available' if status['sdk_available'] else '❌ Not found'}\n"
+        response += f"Gradle: {'✅ Available' if status['gradle_available'] else '❌ Not found'}\n"
+        response += f"Build Tools: {'✅ Installed' if status['build_tools_installed'] else '❌ Missing'}\n"
+        response += f"Platforms: {'✅ Installed' if status['platforms_installed'] else '❌ Missing'}\n\n"
+        
+        devices = self.apk_builder.list_devices()
+        if devices:
+            response += "*📱 Connected Devices:*\n"
+            for d in devices:
+                response += f"• {d['id']} ({d['status']})\n"
+        else:
+            response += "*📱 Devices:* None connected\n"
+        
+        response += "\n*Commands:*\n"
+        response += "/apk create <name> - Create Android project\n"
+        response += "/apk build - Build APK (needs project)\n"
+        
+        await self.bot.send_message(chat_id, response, parse_mode="Markdown")
+
+    async def handle_deploy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /deploy command - Deploy application."""
+        chat_id = update.effective_chat.id
+        args = context.args
+        
+        if not args:
+            platforms = self.deployer.get_platforms()
+            response = "🚀 *Deployer*\n\n"
+            response += "*Available Platforms:*\n"
+            for p in platforms:
+                available = self.deployer.check_platform_cli(p)
+                response += f"• {p}: {'✅' if available else '⚠️ CLI needed'}\n"
+            
+            response += "\n*Usage:*\n"
+            response += "/deploy railway - Deploy to Railway\n"
+            response += "/deploy render - Deploy to Render\n"
+            response += "/deploy docker - Build Docker container\n"
+            response += "/deploy vercel - Deploy to Vercel\n"
+            
+            await self.bot.send_message(chat_id, response, parse_mode="Markdown")
+            return
+        
+        platform = args[0].lower()
+        if platform not in self.deployer.get_platforms():
+            await self.bot.send_message(chat_id, f"❌ Unknown platform: {platform}", parse_mode="Markdown")
+            return
+        
+        await self.bot.send_message(chat_id, f"🚀 Deploying to {platform}...")
+        
+        try:
+            result = await self.deployer.deploy(
+                "/workspace/project/Genesis-protocol-",
+                platform,
+                {}
+            )
+            
+            if result.success:
+                response = f"✅ *Deployment Successful*\n\n"
+                response += f"Platform: {result.platform}\n"
+                if result.url:
+                    response += f"URL: {result.url}\n"
+                response += f"\n{result.logs[:500]}"
+                
+                await self.bot.send_message(chat_id, response, parse_mode="Markdown")
+            else:
+                await self.bot.send_message(
+                    chat_id,
+                    f"❌ Deployment failed: {result.error}",
+                    parse_mode="Markdown"
+                )
+                
+        except Exception as e:
+            await self.bot.send_message(chat_id, f"❌ Deploy error: {str(e)}", parse_mode="Markdown")
+
+    async def handle_powers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /powers command - Show all Genesis powers."""
+        chat_id = update.effective_chat.id
+        
+        response = """
+⚡ *GENESIS PROTOCOL - SUPER POWERS* ⚡
+
+*🛠️ Code Generator*
+Generate code in any language from description
+→ /generate <what to build>
+
+*🐛 Bug Hunter*
+Find bugs, security issues, code smells
+→ /bughunt <code or error>
+
+*🔧 Error Fixer*
+Auto-fix common programming errors
+→ /fix <error message>
+
+*📱 APK Builder*
+Build Android apps and APKs
+→ /apk - Check status
+→ /apk create <name> - Create project
+
+*🚀 Deployer*
+Deploy to Railway, Render, Vercel, Docker
+→ /deploy - Show platforms
+→ /deploy <platform> - Deploy
+
+*💡 All powers work together!*
+"""
+        
+        await self.bot.send_message(chat_id, response, parse_mode="Markdown")

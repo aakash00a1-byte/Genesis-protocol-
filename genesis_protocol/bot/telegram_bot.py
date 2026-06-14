@@ -72,6 +72,14 @@ class TelegramBot:
         self._app.add_handler(CommandHandler("model", self.command_handler.handle_model))
         self._app.add_handler(CommandHandler("debug", self.command_handler.handle_debug))
         
+        # Genesis Power Commands
+        self._app.add_handler(CommandHandler("generate", self.command_handler.handle_generate))
+        self._app.add_handler(CommandHandler("bughunt", self.command_handler.handle_bughunt))
+        self._app.add_handler(CommandHandler("fix", self.command_handler.handle_fix))
+        self._app.add_handler(CommandHandler("apk", self.command_handler.handle_apk))
+        self._app.add_handler(CommandHandler("deploy", self.command_handler.handle_deploy))
+        self._app.add_handler(CommandHandler("powers", self.command_handler.handle_powers))
+        
         # Message handlers
         self._app.add_handler(MessageHandler(
             filters.TEXT & ~filters.COMMAND, 
