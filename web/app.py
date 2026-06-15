@@ -271,8 +271,21 @@ def admin():
 @login_required
 def api_chat():
     """Chat API endpoint - WEB CHANNEL ONLY."""
+<<<<<<< Updated upstream
     data = request.get_json()
     message = data.get('message', '')
+=======
+    # Support both JSON and FormData
+    if request.is_json:
+        data = request.get_json()
+        message = data.get('message', '')
+        provider = data.get('provider', 'groq')
+        model = data.get('model', 'llama-3.3-70b-versatile')
+    else:
+        message = request.form.get('message', '')
+        provider = request.form.get('provider', 'groq')
+        model = request.form.get('model', 'llama-3.3-70b-versatile')
+>>>>>>> Stashed changes
     
     if not message:
         return jsonify({'error': 'Message required'}), 400
@@ -282,7 +295,7 @@ def api_chat():
     # Set channel isolation - WEB ONLY
     channel_isolation = get_channel_isolation()
     channel_isolation.set_channel(Channel.WEB)
-    channel_isolation.log_channel_activity(Channel.WEB, "chat_request", f"User {user_id}")
+    channel_isolation.log_channel_activity(Channel.WEB, "chat_request", f"User {user_id} using {provider}/{model}")
     
     # Check rate limit (100 messages per day for non-admin)
     if session.get('role') != 'admin':
@@ -305,7 +318,13 @@ def api_chat():
         
         async def get_response():
             agent = get_genesis_agent()
-            result = await agent.process(message, chat_id=user_id, user_id=user_id)
+            result = await agent.process(
+                message, 
+                chat_id=user_id, 
+                user_id=user_id,
+                provider=provider,
+                model=model
+            )
             return result
         
         loop = asyncio.new_event_loop()

@@ -105,6 +105,84 @@ class ClaudeConfig(AIProviderConfig):
 
 
 @dataclass
+class DeepSeekConfig(AIProviderConfig):
+    """DeepSeek AI provider configuration."""
+    endpoint: str = "https://api.deepseek.com/v1/chat/completions"
+    default_model: str = "deepseek-chat"
+    quality_model: str = "deepseek-reasoner"
+    rate_limit_rpm: int = 60
+
+
+@dataclass
+class MistralConfig(AIProviderConfig):
+    """Mistral AI provider configuration."""
+    endpoint: str = "https://api.mistral.ai/v1/chat/completions"
+    default_model: str = "mistral-small-latest"
+    quality_model: str = "mistral-large-latest"
+    rate_limit_rpm: int = 30
+
+
+@dataclass
+class CohereConfig(AIProviderConfig):
+    """Cohere AI provider configuration."""
+    endpoint: str = "https://api.cohere.ai/v1/chat"
+    default_model: str = "command-r-plus"
+    fast_model: str = "command-r"
+    rate_limit_rpm: int = 100
+
+
+@dataclass
+class PerplexityConfig(AIProviderConfig):
+    """Perplexity AI provider configuration."""
+    endpoint: str = "https://api.perplexity.ai/chat/completions"
+    default_model: str = "sonar"
+    quality_model: str = "sonar-pro"
+    rate_limit_rpm: int = 60
+
+
+@dataclass
+class AzureOpenAIConfig(AIProviderConfig):
+    """Azure OpenAI provider configuration."""
+    endpoint: str = ""
+    default_model: str = "gpt-4o-mini"
+    api_version: str = "2024-02-01"
+    azure_deployment: str = ""
+
+
+@dataclass
+class OllamaConfig(AIProviderConfig):
+    """Ollama local AI provider configuration."""
+    endpoint: str = "http://localhost:11434/api/chat"
+    default_model: str = "llama3.2"
+    timeout: int = 120
+
+
+@dataclass
+class FireworksConfig(AIProviderConfig):
+    """Fireworks AI provider configuration."""
+    endpoint: str = "https://api.fireworks.ai/inference/v1/chat/completions"
+    default_model: str = "accounts/fireworks/models/llama-v3p3-70b-instruct"
+    rate_limit_rpm: int = 60
+
+
+@dataclass
+class TogetherConfig(AIProviderConfig):
+    """Together AI provider configuration."""
+    endpoint: str = "https://api.together.xyz/v1/chat/completions"
+    default_model: str = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+    rate_limit_rpm: int = 30
+
+
+@dataclass
+class AI21Config(AIProviderConfig):
+    """AI21 Jurassic AI provider configuration."""
+    endpoint: str = "https://api.ai21.com/v1/chat"
+    default_model: str = "jamba-1-5-large"
+    fast_model: str = "jamba-1-5-mini"
+    rate_limit_rpm: int = 50
+
+
+@dataclass
 class MemoryConfig:
     """Memory system configuration."""
     vector_db_type: VectorDBType = VectorDBType.CHROMA
@@ -235,6 +313,15 @@ class Config:
     gemini: GeminiConfig = field(default_factory=GeminiConfig)
     huggingface: HuggingFaceConfig = field(default_factory=HuggingFaceConfig)
     claude: ClaudeConfig = field(default_factory=ClaudeConfig)
+    deepseek: DeepSeekConfig = field(default_factory=DeepSeekConfig)
+    mistral: MistralConfig = field(default_factory=MistralConfig)
+    cohere: CohereConfig = field(default_factory=CohereConfig)
+    perplexity: PerplexityConfig = field(default_factory=PerplexityConfig)
+    azure_openai: AzureOpenAIConfig = field(default_factory=AzureOpenAIConfig)
+    ollama: OllamaConfig = field(default_factory=OllamaConfig)
+    fireworks: FireworksConfig = field(default_factory=FireworksConfig)
+    together: TogetherConfig = field(default_factory=TogetherConfig)
+    ai21: AI21Config = field(default_factory=AI21Config)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     tavily: TavilyConfig = field(default_factory=TavilyConfig)
     make_com: MakeComConfig = field(default_factory=MakeComConfig)
@@ -296,7 +383,44 @@ class Config:
         # Claude (Anthropic)
         config.claude.api_key = os.getenv("ANTHROPIC_API_KEY", "") or os.getenv("CLAUDE_API_KEY", "")
         config.claude.default_model = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
-        
+
+        # DeepSeek
+        config.deepseek.api_key = os.getenv("DEEPSEEK_API_KEY", "")
+        config.deepseek.default_model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+
+        # Mistral
+        config.mistral.api_key = os.getenv("MISTRAL_API_KEY", "")
+        config.mistral.default_model = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
+
+        # Cohere
+        config.cohere.api_key = os.getenv("COHERE_API_KEY", "")
+        config.cohere.default_model = os.getenv("COHERE_MODEL", "command-r-plus")
+
+        # Perplexity
+        config.perplexity.api_key = os.getenv("PERPLEXITY_API_KEY", "")
+        config.perplexity.default_model = os.getenv("PERPLEXITY_MODEL", "sonar")
+
+        # Azure OpenAI
+        config.azure_openai.api_key = os.getenv("AZURE_OPENAI_KEY", "")
+        config.azure_openai.endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "")
+        config.azure_openai.azure_deployment = os.getenv("AZURE_DEPLOYMENT", "")
+
+        # Ollama (Local)
+        config.ollama.endpoint = os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434/api/chat")
+        config.ollama.default_model = os.getenv("OLLAMA_MODEL", "llama3.2")
+
+        # Fireworks AI
+        config.fireworks.api_key = os.getenv("FIREWORKS_API_KEY", "")
+        config.fireworks.default_model = os.getenv("FIREWORKS_MODEL", "llama-v3p3-70b-instruct")
+
+        # Together AI
+        config.together.api_key = os.getenv("TOGETHER_API_KEY", "")
+        config.together.default_model = os.getenv("TOGETHER_MODEL", "Llama-3.3-70B-Instruct-Turbo")
+
+        # AI21 Jurassic
+        config.ai21.api_key = os.getenv("AI21_API_KEY", "")
+        config.ai21.default_model = os.getenv("AI21_MODEL", "jamba-1-5-large")
+
         # Memory
         config.memory.vector_db_type = VectorDBType(os.getenv("VECTOR_DB_TYPE", "chroma"))
         config.memory.chroma_db_path = os.getenv("CHROMA_DB_PATH", "./data/chroma_db")
@@ -371,6 +495,20 @@ class Config:
             order.append("openai")
         if self.gemini.is_configured():
             order.append("gemini")
+        if self.claude.is_configured():
+            order.append("claude")
+        if self.deepseek.is_configured():
+            order.append("deepseek")
+        if self.mistral.is_configured():
+            order.append("mistral")
+        if self.cohere.is_configured():
+            order.append("cohere")
+        if self.perplexity.is_configured():
+            order.append("perplexity")
+        if self.fireworks.is_configured():
+            order.append("fireworks")
+        if self.together.is_configured():
+            order.append("together")
         if self.huggingface.is_configured():
             order.append("huggingface")
         return order
