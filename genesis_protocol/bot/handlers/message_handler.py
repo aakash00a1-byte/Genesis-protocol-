@@ -44,9 +44,13 @@ class MessageHandler:
             update: Telegram update
             context: Handler context
         """
+        logger.info(f"*** HANDLE_TEXT CALLED ***", chat_id=update.effective_chat.id if update.effective_chat else None)
+        
         chat_id = update.effective_chat.id
         user_id = update.effective_user.id
         text = update.message.text
+        
+        logger.info(f"Processing text: {text[:50]}...", chat_id=chat_id, user_id=user_id)
         
         # Sanitize input
         text = self.sanitizer.sanitize_text(text)

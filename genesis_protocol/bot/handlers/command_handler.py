@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 from genesis_protocol.memory.conversation_memory import ConversationMemory
 from genesis_protocol.utils.logger import get_logger
-from genesis_protocol.powers import CodeGenerator, BugHunter, ErrorFixer, APKBuilder, Deployer
+from genesis_protocol.powers import CodeGenerator, BugHunter, ErrorFixer, APKBuilder, Deployer, get_github_manager
 
 logger = get_logger("bot.handlers.command")
 
@@ -36,6 +36,7 @@ class CommandHandler:
         self.error_fixer = ErrorFixer()
         self.apk_builder = APKBuilder()
         self.deployer = Deployer()
+        self.github = get_github_manager()
     
     async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """

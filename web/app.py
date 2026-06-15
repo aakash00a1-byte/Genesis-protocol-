@@ -253,9 +253,35 @@ def index():
 @login_required
 def chat():
     """Chat interface."""
-    return render_template('chat.html', 
+    # Get chat history for display
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT message, response, model_used, created_at, 'web' as channel
+        FROM chat_history 
+        WHERE user_id = ? 
+        ORDER BY created_at DESC 
+        LIMIT 50
+    ''', (user_id,))
+    
+    messages = []
+    for row in cursor.fetchall():
+        messages.append({
+            'message': row['message'],
+            'response': row['response'],
+            'model': row['model_used'],
+            'created_at': row['created_at'],
+            'is_user': True
+        })
+    messages.reverse()
+    
+    conn.close()
+    
+    return render_template('cyberchat.html', 
                           username=session.get('username'),
-                          role=session.get('role'))
+                          role=session.get('role'),
+                          messages=messages)
 
 
 @app.route('/admin')
@@ -271,8 +297,12 @@ def admin():
 @login_required
 def api_chat():
     """Chat API endpoint - WEB CHANNEL ONLY."""
-    data = request.get_json()
-    message = data.get('message', '')
+    # Support both JSON and FormData
+    if request.is_json:
+        data = request.get_json()
+        message = data.get('message', '')
+    else:
+        message = request.form.get('message', '')
     
     if not message:
         return jsonify({'error': 'Message required'}), 400

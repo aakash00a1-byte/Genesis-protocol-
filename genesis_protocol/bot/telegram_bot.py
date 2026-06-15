@@ -16,6 +16,7 @@ from genesis_protocol.config import get_config, Config
 from genesis_protocol.utils.logger import get_logger, setup_logging
 from genesis_protocol.bot.handlers.message_handler import MessageHandler as GenesisMessageHandler
 from genesis_protocol.bot.handlers.command_handler import CommandHandler as GenesisCommandHandler
+from genesis_protocol.bot.handlers.github_handler import handle_github as github_handler
 from genesis_protocol.bot.handlers.voice_handler import VoiceHandler
 from genesis_protocol.bot.handlers.image_handler import ImageHandler
 
@@ -63,6 +64,8 @@ class TelegramBot:
     
     def _register_handlers(self):
         """Register all bot handlers."""
+        logger.info("Registering handlers...")
+        
         # Command handlers
         self._app.add_handler(CommandHandler("start", self.command_handler.handle_start))
         self._app.add_handler(CommandHandler("help", self.command_handler.handle_help))
@@ -79,6 +82,7 @@ class TelegramBot:
         self._app.add_handler(CommandHandler("apk", self.command_handler.handle_apk))
         self._app.add_handler(CommandHandler("deploy", self.command_handler.handle_deploy))
         self._app.add_handler(CommandHandler("powers", self.command_handler.handle_powers))
+        self._app.add_handler(CommandHandler("github", github_handler))
         
         # Message handlers
         self._app.add_handler(MessageHandler(
@@ -105,6 +109,8 @@ class TelegramBot:
         
         # Error handler
         self._app.add_error_handler(self.handle_error)
+        
+        logger.info(f"Handlers registered. Total handlers: {len(self._app.handlers[0])}")
     
     async def start(self, webhook_url: str = None):
         """

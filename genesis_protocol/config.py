@@ -13,8 +13,9 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-# Load .env file if it exists
-load_dotenv()
+# Load .env file if exists - override system env vars
+dotenv_path = Path(__file__).parent.parent / ".env"
+load_dotenv(dotenv_path=dotenv_path, override=True)
 
 
 class AppEnvironment(Enum):
