@@ -273,3 +273,78 @@ Your active AI provider: *{current_model}*
         )
         
         await self.bot.send_message(update.effective_chat.id, debug_info, parse_mode="Markdown")
+    
+    async def handle_deploy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Handle /deploy command - Genesis Autonomous Deployment.
+        """
+        user_id = update.effective_user.id
+        
+        if not self.bot.is_admin(user_id):
+            await self.bot.send_message(update.effective_chat.id, "⛔ Admin only can deploy.")
+            return
+        
+        deploy_text = """
+🚀 *Genesis Autonomous Deployment*
+
+Genesis can deploy itself anywhere!
+
+🛤️ *Railway* (Recommended):
+https://railway.app/new?template=https://github.com/aakash00a1-byte/Genesis-protocol-
+
+📦 *Render*:
+https://render.com/deploy
+
+✈️ *Fly.io*:
+https://fly.io/docs/flyctl/deploy/
+
+*One-Command Deploy:*
+```
+curl -s https://git.io/genesis | bash
+```
+
+*Local Setup:*
+```
+git clone https://github.com/aakash00a1-byte/Genesis-protocol-.git
+cd Genesis-protocol-/scripts
+python3 autonomous_deploy.py
+```
+
+*AI Models Available:*
+• Groq (fastest, free tier)
+• OpenAI GPT-4o
+• Google Gemini
+• Anthropic Claude
+• DeepSeek V3/R1
+• Mistral, Cohere, Perplexity
+        """
+        await self.bot.send_message(update.effective_chat.id, deploy_text, parse_mode="Markdown")
+    
+    async def handle_models(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Handle /models command - Show all available AI models.
+        """
+        models_text = """
+🤖 *Genesis AI Models (14 Providers)*
+
+⚡ *Free/Fast:*
+• groq - LLaMA 3.3 70B (Fastest!)
+
+💎 *Premium:*
+• openai - GPT-4o / GPT-4o Mini
+• gemini - Gemini 1.5 Flash/Pro
+• claude - Claude 3.5 Sonnet
+• deepseek - DeepSeek V3 / R1
+• mistral - Mistral Large
+• cohere - Command R+
+• perplexity - Perplexity Sonar
+• fireworks - Fireworks Llama
+• together - Together AI
+• ai21 - Jurassic Jamba
+• huggingface - HuggingFace
+• ollama - Local Llama
+
+*Usage:* /model <name>
+Example: /model groq
+        """
+        await self.bot.send_message(update.effective_chat.id, models_text, parse_mode="Markdown")

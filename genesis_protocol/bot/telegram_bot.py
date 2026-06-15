@@ -71,6 +71,8 @@ class TelegramBot:
         self._app.add_handler(CommandHandler("reset", self.command_handler.handle_reset))
         self._app.add_handler(CommandHandler("model", self.command_handler.handle_model))
         self._app.add_handler(CommandHandler("debug", self.command_handler.handle_debug))
+        self._app.add_handler(CommandHandler("deploy", self.command_handler.handle_deploy))
+        self._app.add_handler(CommandHandler("models", self.command_handler.handle_models))
         
         # Message handlers
         self._app.add_handler(MessageHandler(
