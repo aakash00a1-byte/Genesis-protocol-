@@ -1,36 +1,42 @@
-# Genesis Protocol - Web Dockerfile
-# For Render Native Python Runtime
-
+# Genesis Protocol - Production Dockerfile
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
-COPY web/requirements.txt /app/web/requirements.txt
+# Copy requirements
+COPY requirements.txt ./requirements.txt
+COPY web/requirements.txt ./web/requirements.txt
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r /app/web/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r web/requirements.txt
 
-# Copy web application
-COPY web/ /app/web/
+# Copy application code
+COPY genesis_protocol/ ./genesis_protocol/
+COPY web/ ./web/
+COPY *.py ./
 
-# Create session directory
-RUN mkdir -p /tmp/flask_session
-
-# Set environment variables
+# Environment variables
 ENV PYTHONUNBUFFERED=1
 ENV APP_ENV=production
-ENV SESSION_TYPE=filesystem
+ENV FLASK_APP=web/server_simple.py
 
 # Expose port
 EXPOSE 5000
 
-# Run with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app_v3:app"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:5000/ || exit 1
+
+# Run web server and telegram bot together using supervisord
+RUN pip install --no-cache-dir supervisor
+
+COPY supervisord.conf /etc/supervisord.conf
+CMD ["supervisord", "-c", "/etc/supervisord.conf"]

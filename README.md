@@ -135,6 +135,49 @@ genesis_protocol/
 └── scripts/             # Helper scripts
 ```
 
+## Deployment
+
+### Docker (Recommended)
+
+```bash
+# Build and run
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop
+docker-compose down
+```
+
+### Railway/Render/VPS
+
+1. Push to GitHub
+2. Connect repo to Railway/Render
+3. Set environment variables from `.env.example`
+4. Deploy!
+
+### Local Development
+
+```bash
+# Web server
+python web/server_simple.py
+
+# Telegram bot (separate terminal)
+python start_telegram.py
+```
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/chat/history` | GET | Get chat history |
+| `/api/chat/<id>` | GET | Get specific chat |
+| `/api/stats` | GET | Get user statistics |
+| `/api/export/chats?format=csv` | GET | Export chats |
+| `/api/export/stats` | GET | Export analytics |
+| `/api/analytics` | GET | Real-time analytics |
+
 ## License
 
 MIT License - See [LICENSE](LICENSE) for details.
