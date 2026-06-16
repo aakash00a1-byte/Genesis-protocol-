@@ -460,6 +460,112 @@ def chat_stream():
     return Response(generate(), mimetype='text/event-stream')
 
 
+@app.route('/api/export/chats')
+@login_required
+def export_chats():
+    """Export chat history as JSON/CSV."""
+    format_type = request.args.get('format', 'json')
+    limit = int(request.args.get('limit', 100))
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT message, response, provider, model_used, quality_score, created_at
+        FROM chat_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
+    ''', (session['user_id'], limit))
+    chats = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    
+    if format_type == 'csv':
+        import csv
+        from io import StringIO
+        
+        output = StringIO()
+        if chats:
+            writer = csv.DictWriter(output, fieldnames=chats[0].keys())
+            writer.writeheader()
+            writer.writerows(chats)
+        
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=chat_history.csv'}
+        )
+    
+    return jsonify({'chats': chats, 'total': len(chats)})
+
+
+@app.route('/api/export/stats')
+@login_required
+def export_stats():
+    """Export analytics as JSON."""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Overall stats
+    cursor.execute('''
+        SELECT 
+            COUNT(*) as total_chats,
+            COUNT(DISTINCT provider) as providers_used,
+            AVG(quality_score) as avg_quality,
+            SUM(LENGTH(message) + LENGTH(response)) as total_chars,
+            MIN(created_at) as first_chat,
+            MAX(created_at) as last_chat
+        FROM chat_history WHERE user_id = ?
+    ''', (session['user_id'],))
+    overall = dict(cursor.fetchone())
+    
+    # Provider breakdown
+    cursor.execute('''
+        SELECT provider, COUNT(*) as count, AVG(quality_score) as avg_quality
+        FROM chat_history WHERE user_id = ? GROUP BY provider
+    ''', (session['user_id'],))
+    providers = [dict(row) for row in cursor.fetchall()]
+    
+    # Daily breakdown (last 30 days)
+    cursor.execute('''
+        SELECT DATE(created_at) as date, COUNT(*) as count
+        FROM chat_history 
+        WHERE user_id = ? AND created_at >= DATE('now', '-30 days')
+        GROUP BY DATE(created_at) ORDER BY date
+    ''', (session['user_id'],))
+    daily = [dict(row) for row in cursor.fetchall()]
+    
+    conn.close()
+    
+    return jsonify({
+        'overall': overall,
+        'providers': providers,
+        'daily': daily,
+        'exported_at': datetime.now().isoformat()
+    })
+
+
+@app.route('/api/analytics')
+@login_required
+def analytics():
+    """Analytics dashboard data."""
+    days = int(request.args.get('days', 7))
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    cursor.execute(f'''
+        SELECT DATE(created_at) as date, 
+               COUNT(*) as chats,
+               AVG(quality_score) as avg_quality,
+               provider
+        FROM chat_history 
+        WHERE user_id = ? AND created_at >= DATE('now', '-{days} days')
+        GROUP BY DATE(created_at), provider
+        ORDER BY date
+    ''', (session['user_id'],))
+    data = [dict(row) for row in cursor.fetchall()]
+    
+    conn.close()
+    return jsonify({'analytics': data, 'days': days})
+
+
 # Initialize database on startup
 init_db()
 
