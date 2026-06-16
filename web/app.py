@@ -477,6 +477,144 @@ def api_admin_logs():
     return jsonify({'logs': logs})
 
 
+# Dashboard Route
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    """User dashboard with chat history and stats."""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Get user info
+    cursor.execute('SELECT * FROM users WHERE id = ?', (session['user_id'],))
+    user = dict(cursor.fetchone())
+    
+    # Get chat stats
+    cursor.execute('''
+        SELECT COUNT(*) as total_chats,
+               COUNT(DISTINCT provider) as providers_used,
+               AVG(quality_score) as avg_quality,
+               MIN(created_at) as first_chat,
+               MAX(created_at) as last_chat
+        FROM chat_history WHERE user_id = ?
+    ''', (session['user_id'],))
+    stats = dict(cursor.fetchone())
+    
+    # Get recent chats
+    cursor.execute('''
+        SELECT * FROM chat_history 
+        WHERE user_id = ? 
+        ORDER BY created_at DESC 
+        LIMIT 20
+    ''', (session['user_id'],))
+    recent_chats = [dict(row) for row in cursor.fetchall()]
+    
+    # Get provider usage
+    cursor.execute('''
+        SELECT provider, COUNT(*) as count 
+        FROM chat_history 
+        WHERE user_id = ? 
+        GROUP BY provider
+        ORDER BY count DESC
+    ''', (session['user_id'],))
+    provider_usage = [dict(row) for row in cursor.fetchall()]
+    
+    conn.close()
+    
+    return render_template('dashboard.html', 
+                         user=user, 
+                         stats=stats, 
+                         recent_chats=recent_chats,
+                         provider_usage=provider_usage)
+
+
+@app.route('/api/chat/history')
+@login_required
+def get_chat_history():
+    """Get user's chat history (JSON API)."""
+    page = int(request.args.get('page', 1))
+    per_page = int(request.args.get('per_page', 20))
+    offset = (page - 1) * per_page
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT * FROM chat_history 
+        WHERE user_id = ? 
+        ORDER BY created_at DESC 
+        LIMIT ? OFFSET ?
+    ''', (session['user_id'], per_page, offset))
+    chats = [dict(row) for row in cursor.fetchall()]
+    
+    cursor.execute('SELECT COUNT(*) FROM chat_history WHERE user_id = ?', (session['user_id'],))
+    total = cursor.fetchone()[0]
+    
+    conn.close()
+    
+    return jsonify({
+        'chats': chats,
+        'page': page,
+        'per_page': per_page,
+        'total': total,
+        'pages': (total + per_page - 1) // per_page
+    })
+
+
+@app.route('/api/chat/<int:chat_id>')
+@login_required
+def get_chat(chat_id):
+    """Get a specific chat."""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT * FROM chat_history 
+        WHERE id = ? AND user_id = ?
+    ''', (chat_id, session['user_id']))
+    chat = cursor.fetchone()
+    
+    conn.close()
+    
+    if not chat:
+        return jsonify({'error': 'Chat not found'}), 404
+    
+    return jsonify(dict(chat))
+
+
+@app.route('/api/stats')
+@login_required
+def get_user_stats():
+    """Get user statistics (JSON API)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Get stats
+    cursor.execute('''
+        SELECT 
+            COUNT(*) as total_chats,
+            COUNT(DISTINCT provider) as providers_used,
+            AVG(quality_score) as avg_quality,
+            SUM(LENGTH(message) + LENGTH(response)) as total_chars
+        FROM chat_history WHERE user_id = ?
+    ''', (session['user_id'],))
+    stats = dict(cursor.fetchone())
+    
+    # Get daily stats (last 7 days)
+    cursor.execute('''
+        SELECT DATE(created_at) as date, COUNT(*) as count
+        FROM chat_history 
+        WHERE user_id = ? AND created_at >= DATE('now', '-7 days')
+        GROUP BY DATE(created_at)
+        ORDER BY date
+    ''', (session['user_id'],))
+    daily_stats = [dict(row) for row in cursor.fetchall()]
+    
+    conn.close()
+    
+    return jsonify({**stats, 'daily': daily_stats})
+
+
 # Error handlers
 @app.errorhandler(404)
 def not_found(e):

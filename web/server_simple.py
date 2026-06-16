@@ -13,7 +13,7 @@ import logging
 from datetime import timedelta
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask import Flask, request, jsonify, session, render_template, redirect, url_for
+from flask import Flask, request, jsonify, session, render_template, redirect, url_for, Response
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -358,6 +358,106 @@ def api_admin_users():
     users = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return jsonify({'users': users})
+
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    """User dashboard."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM users WHERE id = ?', (session['user_id'],))
+    user = dict(cursor.fetchone())
+    cursor.execute('''SELECT COUNT(*) as total, COUNT(DISTINCT provider) as providers,
+                      AVG(quality_score) as avg_quality FROM chat_history WHERE user_id = ?''', (session['user_id'],))
+    stats = dict(cursor.fetchone())
+    cursor.execute('SELECT * FROM chat_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 20', (session['user_id'],))
+    recent = [dict(row) for row in cursor.fetchall()]
+    cursor.execute('SELECT provider, COUNT(*) as count FROM chat_history WHERE user_id = ? GROUP BY provider', (session['user_id'],))
+    providers = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return render_template('dashboard.html', user=user, stats=stats, recent_chats=recent, provider_usage=providers)
+
+
+@app.route('/api/chat/history')
+@login_required
+def get_chat_history():
+    """Get chat history."""
+    page = int(request.args.get('page', 1))
+    per_page = int(request.args.get('per_page', 20))
+    offset = (page - 1) * per_page
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM chat_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?', (session['user_id'], per_page, offset))
+    chats = [dict(row) for row in cursor.fetchall()]
+    cursor.execute('SELECT COUNT(*) FROM chat_history WHERE user_id = ?', (session['user_id'],))
+    total = cursor.fetchone()[0]
+    conn.close()
+    return jsonify({'chats': chats, 'page': page, 'total': total})
+
+
+@app.route('/api/chat/<int:chat_id>')
+@login_required
+def get_chat(chat_id):
+    """Get specific chat."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM chat_history WHERE id = ? AND user_id = ?', (chat_id, session['user_id']))
+    chat = cursor.fetchone()
+    conn.close()
+    if not chat:
+        return jsonify({'error': 'Not found'}), 404
+    return jsonify(dict(chat))
+
+
+@app.route('/api/stats')
+@login_required
+def get_user_stats():
+    """Get user stats."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) as total, AVG(quality_score) as avg_quality FROM chat_history WHERE user_id = ?', (session['user_id'],))
+    stats = dict(cursor.fetchone())
+    cursor.execute("SELECT DATE(created_at) as date, COUNT(*) as count FROM chat_history WHERE user_id = ? AND created_at >= DATE('now', '-7 days') GROUP BY DATE(created_at)", (session['user_id'],))
+    daily = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return jsonify({**stats, 'daily': daily})
+
+
+@app.route('/api/chat/stream')
+@login_required
+def chat_stream():
+    """Streaming chat API endpoint."""
+    from genesis_protocol.ai.provider_chain import get_provider_chain
+    from genesis_protocol.core.channel import get_channel_isolation
+    
+    message = request.args.get('message', '')
+    mode = request.args.get('mode', 'NORMAL')
+    system = request.args.get('system', 'You are a helpful AI assistant.')
+    
+    if not message:
+        return jsonify({'error': 'Message required'}), 400
+    
+    def generate():
+        try:
+            ai = get_provider_chain()
+            channel = get_channel_isolation()
+            channel.set_channel('web')
+            
+            # Yield streaming response
+            for chunk in ai.call_stream(messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": message}
+            ], user_input=message):
+                if chunk:
+                    yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+            
+            yield "data: [DONE]\n\n"
+            
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+    
+    return Response(generate(), mimetype='text/event-stream')
 
 
 # Initialize database on startup

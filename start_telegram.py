@@ -1,86 +1,131 @@
 #!/usr/bin/env python3
 """
-Genesis Protocol - Telegram Bot with Threading
-Works around Python 3.13 asyncio issues
+Genesis Protocol - Telegram Bot
+Python 3.13 compatible - Uses httpx for polling
 """
 import sys
+import os
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
-import threading
 import time
+import json
+import httpx
+from genesis_protocol.config import get_config
 
-def run_bot():
-    import asyncio
-    from telegram.ext import Application, CommandHandler, MessageHandler, filters
-    from telegram import Update
-    from genesis_protocol.config import get_config
-    from genesis_protocol.ai.provider_chain import get_provider_chain
-    
+def main():
     config = get_config()
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    TOKEN = config.telegram.bot_token
+    API = f"https://api.telegram.org/bot{TOKEN}"
+    OFFSET = 0
     
-    print("=" * 60)
-    print("📱 GENESIS PROTOCOL BOT - STARTING")
-    print("=" * 60)
+    print("=" * 50)
+    print("📱 GENESIS PROTOCOL TELEGRAM BOT")
+    print("=" * 50)
+    print(f"Bot: @Genesis_autonomousbot")
+    print("Press Ctrl+C to stop")
     print()
     
-    app = Application.builder().token(config.telegram.bot_token).build()
+    # Get bot info
+    try:
+        resp = httpx.get(f"{API}/getMe").json()
+        if resp.get("ok"):
+            print(f"✅ Logged in as: {resp['result']['first_name']}")
+        else:
+            print(f"❌ Error: {resp}")
+            return
+    except Exception as e:
+        print(f"❌ Connection error: {e}")
+        return
     
-    async def start(update, context):
-        await update.message.reply_text(
-            "👋 *Genesis Protocol Bot*\n\n"
-            "✅ Bot is online!\n"
-            "Send me any message and I'll respond!\n\n"
-            "Commands:\n"
-            "/start - Start\n"
-            "/hi - Say hello",
-            parse_mode="Markdown"
-        )
+    from genesis_protocol.ai.provider_chain import get_provider_chain
+    ai = get_provider_chain()
     
-    async def hi(update, context):
-        name = update.effective_user.first_name
-        await update.message.reply_text(f"👋 Hi {name}! Kaise ho? 🎉")
+    print("📡 Listening for messages...")
+    print("=" * 50)
     
-    async def echo(update, context):
-        text = update.message.text
-        print(f"📨 Message: {text}")
-        
-        await update.message.reply_text(f"✅ Received: {text}\n\n🤖 Processing...")
-        
+    while True:
         try:
-            ai = get_provider_chain()
-            result = await ai.call(
-                messages=[
-                    {"role": "system", "content": "You are a helpful AI assistant. Keep responses short."},
-                    {"role": "user", "content": text}
-                ],
-                user_input=text
-            )
+            # Get updates
+            resp = httpx.get(f"{API}/getUpdates", params={"offset": OFFSET, "timeout": 30}, timeout=35).json()
             
-            if result.success:
-                response = result.response.content[:4000]  # Telegram limit
-                await update.message.reply_text(f"🤖 *Response:*\n\n{response}", parse_mode="Markdown")
-            else:
-                await update.message.reply_text(f"❌ AI Error: {result.error}")
+            if not resp.get("ok"):
+                print(f"API Error: {resp}")
+                time.sleep(5)
+                continue
+            
+            updates = resp.get("result", [])
+            if not updates:
+                continue
+            
+            for update in updates:
+                OFFSET = update["update_id"] + 1
+                
+                if "message" not in update:
+                    continue
+                
+                msg = update["message"]
+                chat_id = msg["chat"]["id"]
+                text = msg.get("text", "")
+                user = msg.get("from", {}).get("first_name", "User")
+                
+                print(f"📨 {user}: {text[:50]}")
+                
+                # Handle commands
+                if text == "/start":
+                    send(chat_id, f"👋 Hi {user}! I'm Genesis Protocol Bot. Send me any message!")
+                elif text == "/hi":
+                    send(chat_id, f"👋 Hi {user}! Kaise ho? 🎉")
+                elif text == "/help":
+                    send(chat_id, "Commands:\n/start - Start\n/hi - Hello\n/help - Help\n\nOr just send any message!")
+                else:
+                    send(chat_id, "🤖 Processing your message...")
+                    
+                    # Get AI response
+                    try:
+                        import asyncio
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        
+                        result = loop.run_until_complete(
+                            ai.call(
+                                messages=[
+                                    {"role": "system", "content": "You are a helpful AI assistant. Keep responses concise."},
+                                    {"role": "user", "content": text}
+                                ],
+                                user_input=text
+                            )
+                        )
+                        loop.close()
+                        
+                        if result.success:
+                            response = result.response.content[:4000]
+                            send(chat_id, f"🤖 Response:\n\n{response}")
+                        else:
+                            send(chat_id, f"❌ Error: {result.error[:500]}")
+                    except Exception as e:
+                        send(chat_id, f"❌ Error: {str(e)[:500]}")
+        
+        except KeyboardInterrupt:
+            print("\n🛑 Bot stopped")
+            break
         except Exception as e:
-            await update.message.reply_text(f"❌ Error: {str(e)[:500]}")
+            print(f"Error: {e}")
+            time.sleep(5)
+
+def send(chat_id, text):
+    """Send message to Telegram"""
+    TOKEN = get_config().telegram.bot_token
+    API = f"https://api.telegram.org/bot{TOKEN}"
     
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("hi", hi))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
-    
-    print("✅ Handlers registered")
-    print("📱 Bot ready! Go to @Genesis_autonomousbot")
-    print()
-    
-    app.run_polling(drop_pending_updates=True, close_loop=False)
+    try:
+        httpx.post(f"{API}/sendMessage", json={
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "Markdown"
+        }, timeout=10)
+    except Exception as e:
+        print(f"Send error: {e}")
 
 if __name__ == "__main__":
-    thread = threading.Thread(target=run_bot, daemon=True)
-    thread.start()
-    
-    print("Bot thread started. Press Ctrl+C to stop.")
-    while True:
-        time.sleep(1)
+    main()

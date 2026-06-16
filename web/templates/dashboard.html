@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Genesis Protocol{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <h1>📊 Dashboard</h1>
+    
+    <!-- Stats Cards -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon">💬</div>
+            <div class="stat-value">{{ stats.total_chats or 0 }}</div>
+            <div class="stat-label">Total Chats</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">🤖</div>
+            <div class="stat-value">{{ stats.providers_used or 0 }}</div>
+            <div class="stat-label">Providers Used</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">⭐</div>
+            <div class="stat-value">{{ "%.1f"|format(stats.avg_quality or 0) }}</div>
+            <div class="stat-label">Avg Quality</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">📅</div>
+            <div class="stat-value">{{ stats.first_chat[:10] if stats.first_chat else 'N/A' }}</div>
+            <div class="stat-label">First Chat</div>
+        </div>
+    </div>
+    
+    <div class="dashboard-grid">
+        <!-- Provider Usage -->
+        <div class="dashboard-section">
+            <h2>🤖 Provider Usage</h2>
+            {% if provider_usage %}
+            <div class="provider-list">
+                {% for p in provider_usage %}
+                <div class="provider-item">
+                    <span class="provider-name">{{ p.provider }}</span>
+                    <span class="provider-count">{{ p.count }}</span>
+                    <div class="provider-bar">
+                        <div class="provider-fill" style="width: {{ (p.count / stats.total_chats * 100)|round }}%"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="empty-state">No usage data yet</p>
+            {% endif %}
+        </div>
+        
+        <!-- Recent Chats -->
+        <div class="dashboard-section full-width">
+            <h2>💬 Recent Chats</h2>
+            {% if recent_chats %}
+            <div class="chat-list">
+                {% for chat in recent_chats %}
+                <div class="chat-item" onclick="showChat({{ chat.id }})">
+                    <div class="chat-message">{{ chat.message[:100] }}{% if chat.message|length > 100 %}...{% endif %}</div>
+                    <div class="chat-meta">
+                        <span class="chat-provider">{{ chat.provider or 'unknown' }}</span>
+                        <span class="chat-date">{{ chat.created_at }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="empty-state">No chats yet. Start chatting! 💬</p>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Chat Detail Modal -->
+    <div id="chatModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2>Chat Details</h2>
+            <div id="chatDetail"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showChat(id) {
+    fetch(`/api/chat/${id}`)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('chatDetail').innerHTML = `
+                <div class="chat-full">
+                    <div class="chat-q"><strong>Q:</strong> ${data.message}</div>
+                    <div class="chat-a"><strong>A:</strong> ${data.response}</div>
+                    <div class="chat-info">
+                        <span>Provider: ${data.provider}</span>
+                        <span>Model: ${data.model}</span>
+                        <span>Score: ${data.quality_score}</span>
+                        <span>${data.created_at}</span>
+                    </div>
+                </div>
+            `;
+            document.getElementById('chatModal').style.display = 'block';
+        });
+}
+
+function closeModal() {
+    document.getElementById('chatModal').style.display = 'none';
+}
+</script>
+
+<style>
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 1.5rem;
+    border-radius: 12px;
+    text-align: center;
+    color: white;
+}
+
+.stat-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+.stat-value { font-size: 2rem; font-weight: bold; }
+.stat-label { font-size: 0.9rem; opacity: 0.9; }
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 1.5rem;
+}
+
+.dashboard-section {
+    background: var(--card-bg);
+    padding: 1.5rem;
+    border-radius: 12px;
+}
+
+.full-width { grid-column: 1 / -1; }
+
+.provider-list { display: flex; flex-direction: column; gap: 0.75rem; }
+.provider-item { display: flex; align-items: center; gap: 0.5rem; }
+.provider-name { width: 80px; font-size: 0.9rem; }
+.provider-count { width: 30px; text-align: right; }
+.provider-bar { flex: 1; height: 8px; background: var(--border); border-radius: 4px; }
+.provider-fill { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 4px; }
+
+.chat-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.chat-item {
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.chat-item:hover { transform: translateX(5px); }
+.chat-message { margin-bottom: 0.5rem; }
+.chat-meta { display: flex; gap: 1rem; font-size: 0.8rem; opacity: 0.7; }
+.chat-q, .chat-a { padding: 1rem; margin: 0.5rem 0; border-radius: 8px; }
+.chat-q { background: var(--bg-secondary); }
+.chat-a { background: linear-gradient(135deg, #667eea22, #764ba222); }
+
+.modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; }
+.modal-content { background: var(--card-bg); margin: 5% auto; padding: 2rem; border-radius: 12px; width: 80%; max-width: 700px; }
+.close { float: right; font-size: 1.5rem; cursor: pointer; }
+.chat-info { display: flex; gap: 1rem; font-size: 0.8rem; opacity: 0.7; margin-top: 1rem; }
+
+@media (max-width: 768px) {
+    .dashboard-grid { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}
