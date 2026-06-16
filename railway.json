@@ -10,5 +10,6 @@
     "restartPolicyMaxRetries": 10,
     "startCommand": "python web/server_simple.py"
   },
-  "port": 5000
+  "port": 5000,
+  "healthcheckPath": "/"
 }
