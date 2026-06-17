@@ -150,7 +150,12 @@ class GenesisAgent:
             
             # Evaluate quality
             # Handle both string and AIResponse objects
-            response_content = response.response.content if hasattr(response.response, 'content') else str(response.response)
+            raw_response = response.response.content if hasattr(response.response, 'content') else str(response.response)
+            response_content = raw_response if raw_response else "Sorry, I couldn't generate a response. Please try again."
+            
+            # Log for debugging
+            self.logger.info(f"Agent response: provider={response.provider_used}, model={response.model_used}, content_len={len(response_content) if response_content else 0}")
+            
             quality_score = await self.quality_judge.judge(
                 response_content,
                 ["helpful", "relevant", "accurate"],
@@ -210,7 +215,7 @@ class GenesisAgent:
             bypass_scoring=False
         )
         
-        if result.success:
+        if result.success and result.response:
             result.response.content = self._format_response(result.response.content)
         
         return result
@@ -264,7 +269,7 @@ class GenesisAgent:
                 params = {"query": query} if tool_name in ["web_search", "memory_recall"] else {}
                 result = await self.tool_system.execute_tool(tool_name, params)
                 
-                if result.success:
+                if result.success and result.response:
                     results.append(f"[{tool_name}]: {result.data}")
                     self._record_tool_use(tool_name)
             except Exception as e:

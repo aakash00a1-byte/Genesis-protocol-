@@ -95,6 +95,22 @@ class ProviderChain:
         # Get available providers
         available = self.get_available_providers()
         
+
+        # Debug: log available providers
+        logger.info(f"Available providers: {available}")
+        for name, prov in self._providers.items():
+            if prov:
+                logger.info(f"Provider {name}: configured={prov.is_configured()}, should_use={prov.should_use()}")
+
+        # If no providers available, return error
+        if not available:
+            logger.error("NO AI PROVIDERS CONFIGURED! Set GROQ_API_KEY in Railway.")
+            return AICallResult(
+                success=False,
+                error="No AI providers configured. Please set GROQ_API_KEY environment variable.",
+                attempts=0,
+            )
+
         # Determine model and provider using scoring
         if model and preferred_provider:
             target_provider = preferred_provider
