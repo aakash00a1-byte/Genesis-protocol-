@@ -35,10 +35,10 @@ def main():
             print(f"✅ Logged in as: {resp['result']['first_name']}")
         else:
             print(f"❌ Error: {resp}")
-            return
+            print("⚠️ Bot token may be invalid, continuing anyway...")
     except Exception as e:
-        print(f"❌ Connection error: {e}")
-        return
+        print(f"⚠️ Connection error: {e} (will retry)")
+        time.sleep(5)
     
     from genesis_protocol.ai.provider_chain import get_provider_chain
     ai = get_provider_chain()
