@@ -642,7 +642,7 @@ def api_debug():
         return jsonify({
             'status': 'ok',
             'entrypoint': 'web/app.py',
-            'commit': '7862af8',
+            'commit': '417a557',
             'available_providers': available,
             'provider_status': status,
             'groq_configured': status.get('groq', {}).get('configured', False)
@@ -655,6 +655,18 @@ def api_debug():
             'error': str(e),
             'traceback': traceback.format_exc()
         })
+
+
+@app.route('/api/test-417a557', methods=['GET'])
+def api_test():
+    """UNIQUE test endpoint - only exists in app.py"""
+    return jsonify({
+        'status': 'ok',
+        'entrypoint': 'web/app.py',
+        'commit': '417a557',
+        'unique': True,
+        'timestamp': str(datetime.now())
+    })
 
 
 if __name__ == '__main__':
