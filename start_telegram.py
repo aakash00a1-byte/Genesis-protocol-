@@ -100,8 +100,8 @@ def main():
                         )
                         loop.close()
                         
-                        if result.success:
-                            response = result.response.content[:4000]
+                        if result.success and result.response:
+                            response = result.response.content[:4000] if result.response.content else "Sorry, I couldn't generate a response."
                             send(chat_id, f"🤖 Response:\n\n{response}")
                         else:
                             send(chat_id, f"❌ Error: {result.error[:500]}")

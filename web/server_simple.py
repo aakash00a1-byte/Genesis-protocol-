@@ -271,8 +271,8 @@ def api_chat():
         result = loop.run_until_complete(get_response())
         loop.close()
         
-        if result.success:
-            response_text = result.response
+        if result.success and result.response:
+            response_text = result.response if result.response else "Sorry, AI couldn't generate a response."
             model_used = result.model_used
             provider = result.provider_used
             quality = result.quality_score
@@ -284,11 +284,12 @@ def api_chat():
             mode = "normal"
             
     except Exception as e:
-        logger.warning(f"AI backend not available: {e}")
+        logger.warning(f"AI backend error: {e}")
         model_used = "standalone"
         provider = "none"
         quality = 0.0
         mode = "normal"
+        # Still return the response_text which has the fallback message
     
     # Store in database
     conn = get_db()
@@ -568,6 +569,27 @@ def analytics():
 
 # Initialize database on startup
 init_db()
+
+
+# DEBUG ENDPOINT
+@app.route('/api/debug', methods=['GET'])
+def api_debug():
+    """Debug endpoint to check AI providers."""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from genesis_protocol.ai.provider_chain import get_provider_chain
+        
+        chain = get_provider_chain()
+        available = chain.get_available_providers()
+        status = chain.get_status()
+        
+        return jsonify({
+            'available_providers': available,
+            'provider_status': status,
+            'groq_configured': status.get('groq', {}).get('configured', False)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)})
 
 
 if __name__ == '__main__':
