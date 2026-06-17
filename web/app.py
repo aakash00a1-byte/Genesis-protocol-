@@ -343,7 +343,7 @@ def api_chat():
         
         return jsonify({
             'success': True,
-            'response': result.response,
+            'response': result.response if result.response else "AI response unavailable",
             'model': result.model_used,
             'provider': result.provider_used,
             'quality': result.quality_score,
@@ -627,6 +627,34 @@ def server_error(e):
 
 # Initialize database on startup
 init_db()
+
+
+@app.route('/api/debug', methods=['GET'])
+def api_debug():
+    """Debug endpoint to check AI providers and deployment info."""
+    try:
+        from genesis_protocol.ai.provider_chain import get_provider_chain
+        
+        chain = get_provider_chain()
+        available = chain.get_available_providers()
+        status = chain.get_status()
+        
+        return jsonify({
+            'status': 'ok',
+            'entrypoint': 'web/app.py',
+            'commit': '7862af8',
+            'available_providers': available,
+            'provider_status': status,
+            'groq_configured': status.get('groq', {}).get('configured', False)
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'status': 'error',
+            'entrypoint': 'web/app.py',
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        })
 
 
 if __name__ == '__main__':
