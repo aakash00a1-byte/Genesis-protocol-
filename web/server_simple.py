@@ -272,7 +272,7 @@ def api_chat():
         loop.close()
         
         if result.success and result.response:
-            response_text = result.response if result.response else "Sorry, AI couldn't generate a response."
+            response_text = result.response
             model_used = result.model_used
             provider = result.provider_used
             quality = result.quality_score
