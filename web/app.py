@@ -271,10 +271,6 @@ def admin():
 @login_required
 def api_chat():
     """Chat API endpoint - WEB CHANNEL ONLY."""
-<<<<<<< Updated upstream
-    data = request.get_json()
-    message = data.get('message', '')
-=======
     # Support both JSON and FormData
     if request.is_json:
         data = request.get_json()
@@ -285,7 +281,6 @@ def api_chat():
         message = request.form.get('message', '')
         provider = request.form.get('provider', 'groq')
         model = request.form.get('model', 'llama-3.3-70b-versatile')
->>>>>>> Stashed changes
     
     if not message:
         return jsonify({'error': 'Message required'}), 400
