@@ -22,6 +22,7 @@ RUN pip install --no-cache-dir -r web/requirements.txt
 COPY genesis_protocol/ ./genesis_protocol/
 COPY web/ ./web/
 COPY *.py ./
+COPY supervisord.conf ./
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1
@@ -32,11 +33,13 @@ ENV FLASK_APP=web/server_simple.py
 EXPOSE 5000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:5000/ || exit 1
 
 # Run web server and telegram bot together using supervisord
 RUN pip install --no-cache-dir supervisor
 
-COPY supervisord.conf /etc/supervisord.conf
-CMD ["supervisord", "-c", "/etc/supervisord.conf"]
+# Create log directories
+RUN mkdir -p /var/log
+
+CMD ["supervisord", "-c", "/app/supervisord.conf"]

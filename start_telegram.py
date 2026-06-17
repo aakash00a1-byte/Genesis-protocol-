@@ -23,6 +23,8 @@ def main():
     print("📱 GENESIS PROTOCOL TELEGRAM BOT")
     print("=" * 50)
     print(f"Bot: @Genesis_autonomousbot")
+    print("✅ Telegram bot started!")
+    print("📡 Polling active")
     print("Press Ctrl+C to stop")
     print()
     
