@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # VERSION & METRICS
 # ============================================================================
-VERSION = "1.0.0"
+VERSION = "1.2.0"
 BUILD_DATE = "2026-06-18"
 START_TIME = time.time()
 
@@ -669,6 +669,34 @@ def api_status():
         'metrics': get_metrics(),
         'timestamp': datetime.now().isoformat()
     })
+
+
+@app.route('/api/modules', methods=['GET'])
+def api_modules():
+    """Get status of all v1.2 modules."""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from genesis_protocol.integration import get_integration
+        
+        integration = get_integration()
+        module_status = integration.get_module_status()
+        detailed = integration.get_detailed_status()
+        
+        return jsonify({
+            **module_status,
+            'detailed': detailed,
+            'version': VERSION
+        })
+    except Exception as e:
+        logger.error(f"Module status error: {e}")
+        return jsonify({
+            'personality': False,
+            'voice': False,
+            'vision': False,
+            'tasks': False,
+            'memory': False,
+            'error': str(e)
+        }), 500
 
 
 @app.route('/api/diagnostics', methods=['GET'])
