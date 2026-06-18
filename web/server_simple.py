@@ -10,7 +10,9 @@ import os
 import sys
 import sqlite3
 import logging
-from datetime import timedelta
+import time
+import threading
+from datetime import datetime, timedelta
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import Flask, request, jsonify, session, render_template, redirect, url_for, Response
@@ -18,6 +20,49 @@ from flask import Flask, request, jsonify, session, render_template, redirect, u
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# VERSION & METRICS
+# ============================================================================
+VERSION = "1.0.0"
+BUILD_DATE = "2026-06-18"
+START_TIME = time.time()
+
+# Metrics (thread-safe counters)
+_metrics_lock = threading.Lock()
+_metrics = {
+    'request_count': 0,
+    'error_count': 0,
+    'total_latency_ms': 0,
+    'provider_latency': {},
+}
+
+def increment_metric(name: str, value: int = 1):
+    """Thread-safe metric increment."""
+    with _metrics_lock:
+        _metrics[name] = _metrics.get(name, 0) + value
+
+def record_latency(provider: str, latency_ms: float):
+    """Record provider latency."""
+    with _metrics_lock:
+        _metrics['total_latency_ms'] += latency_ms
+        if provider not in _metrics['provider_latency']:
+            _metrics['provider_latency'][provider] = []
+        _metrics['provider_latency'][provider].append(latency_ms)
+        if len(_metrics['provider_latency'][provider]) > 100:
+            _metrics['provider_latency'][provider] = _metrics['provider_latency'][provider][-100:]
+
+def get_metrics() -> dict:
+    """Get current metrics snapshot."""
+    with _metrics_lock:
+        m = _metrics.copy()
+        m['uptime_seconds'] = time.time() - START_TIME
+        if m['provider_latency']:
+            m['avg_provider_latency'] = {p: sum(v)/len(v) if v else 0 for p, v in m['provider_latency'].items()}
+        else:
+            m['avg_provider_latency'] = {}
+        m['avg_latency_ms'] = m['total_latency_ms'] / m['request_count'] if m['request_count'] > 0 else 0
+        return m
 
 # Initialize Flask app
 app = Flask(__name__, 
@@ -590,6 +635,100 @@ def api_debug():
         })
     except Exception as e:
         return jsonify({'error': str(e)})
+
+
+# ============================================================================
+# MONITORING ENDPOINTS
+# ============================================================================
+
+@app.route('/api/version', methods=['GET'])
+def api_version():
+    """Get version info."""
+    return jsonify({
+        'version': VERSION,
+        'build_date': BUILD_DATE,
+        'entrypoint': 'web/server_simple.py'
+    })
+
+
+@app.route('/api/health', methods=['GET'])
+def api_health():
+    """Basic health check."""
+    return jsonify({
+        'status': 'healthy',
+        'entrypoint': 'web/server_simple.py'
+    })
+
+
+@app.route('/api/status', methods=['GET'])
+def api_status():
+    """Detailed status with metrics."""
+    return jsonify({
+        'status': 'ok',
+        'entrypoint': 'web/server_simple.py',
+        'metrics': get_metrics(),
+        'timestamp': datetime.now().isoformat()
+    })
+
+
+@app.route('/api/diagnostics', methods=['GET'])
+def api_diagnostics():
+    """Full diagnostics - provider status, memory, uptime, version."""
+    # Check providers
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from genesis_protocol.ai.provider_chain import get_provider_chain
+        chain = get_provider_chain()
+        provider_status = chain.get_status()
+        available_providers = chain.get_available_providers()
+    except Exception as e:
+        provider_status = {'error': str(e)}
+        available_providers = []
+
+    # Check SQLite
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM chat_history')
+        history_count = cursor.fetchone()[0]
+        cursor.execute('SELECT COUNT(*) FROM users')
+        user_count = cursor.fetchone()[0]
+        conn.close()
+        db_status = 'ok'
+    except Exception as e:
+        db_status = f'error: {str(e)}'
+        history_count = 0
+        user_count = 0
+
+    return jsonify({
+        'version': VERSION,
+        'build_date': BUILD_DATE,
+        'entrypoint': 'web/server_simple.py',
+        'uptime': {
+            'seconds': get_metrics().get('uptime_seconds', 0),
+            'started_at': datetime.fromtimestamp(START_TIME).isoformat()
+        },
+        'providers': {
+            'available': available_providers,
+            'status': provider_status
+        },
+        'database': {
+            'status': db_status,
+            'history_count': history_count,
+            'user_count': user_count
+        },
+        'memory': {
+            'vector_db': 'chroma',
+            'cache': 'redis'
+        },
+        'metrics': get_metrics(),
+        'environment': {
+            'groq_configured': os.environ.get('GROQ_API_KEY', '') != '',
+            'railway': os.environ.get('RAILWAY', '') != '',
+            'port': os.environ.get('PORT', '5000')
+        },
+        'timestamp': datetime.now().isoformat()
+    })
 
 
 if __name__ == '__main__':
