@@ -151,7 +151,11 @@ class GenesisAgent:
             # Evaluate quality
             # Handle both string and AIResponse objects
             raw_response = response.response.content if hasattr(response.response, 'content') else str(response.response)
-            response_content = raw_response if raw_response else "Sorry, I couldn't generate a response. Please try again."
+            # Fix: Check for None string and invalid responses
+            if raw_response and raw_response.lower() not in ('none', 'null', ''):
+                response_content = raw_response
+            else:
+                response_content = "Sorry, I couldn't generate a response. Please try again."
             
             # Log for debugging
             self.logger.info(f"Agent response: provider={response.provider_used}, model={response.model_used}, content_len={len(response_content) if response_content else 0}")
@@ -166,6 +170,9 @@ class GenesisAgent:
             if chat_id:
                 # Extract content from response object if needed
                 bot_response = response.response.content if hasattr(response.response, 'content') else str(response.response)
+                # Fix: Check for None string before storing
+                if bot_response and bot_response.lower() in ('none', 'null', ''):
+                    bot_response = response_content  # Use the already fixed response_content
                 self.memory.store_interaction(
                     chat_id, user_id, query, bot_response,
                     response.model_used or "unknown",
