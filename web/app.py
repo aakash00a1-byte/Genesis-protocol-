@@ -9,6 +9,8 @@ import os
 import sys
 import json
 import logging
+import time
+import threading
 from datetime import datetime, timedelta
 from functools import wraps
 from typing import Optional, Dict, Any
@@ -22,6 +24,61 @@ import sqlite3
 
 # Import channel isolation
 from genesis_protocol.core.channel import Channel, get_channel_isolation
+
+# ============================================================================
+# VERSION & METRICS
+# ============================================================================
+VERSION = "1.0.0"
+BUILD_DATE = "2026-06-18"
+START_TIME = time.time()
+
+# Metrics (thread-safe counters)
+_metrics_lock = threading.Lock()
+_metrics = {
+    'request_count': 0,
+    'error_count': 0,
+    'total_latency_ms': 0,
+    'provider_latency': {},  # {'groq': [latencies]}
+}
+
+def increment_metric(name: str, value: int = 1):
+    """Thread-safe metric increment."""
+    with _metrics_lock:
+        _metrics[name] = _metrics.get(name, 0) + value
+
+def record_latency(provider: str, latency_ms: float):
+    """Record provider latency."""
+    with _metrics_lock:
+        _metrics['total_latency_ms'] += latency_ms
+        if provider not in _metrics['provider_latency']:
+            _metrics['provider_latency'][provider] = []
+        _metrics['provider_latency'][provider].append(latency_ms)
+        # Keep last 100 latencies per provider
+        if len(_metrics['provider_latency'][provider]) > 100:
+            _metrics['provider_latency'][provider] = _metrics['provider_latency'][provider][-100:]
+
+def get_metrics() -> Dict[str, Any]:
+    """Get current metrics snapshot."""
+    with _metrics_lock:
+        m = _metrics.copy()
+        m['uptime_seconds'] = time.time() - START_TIME
+        
+        # Calculate average latencies
+        if m['provider_latency']:
+            avg_latencies = {
+                p: sum(vals) / len(vals) if vals else 0 
+                for p, vals in m['provider_latency'].items()
+            }
+            m['avg_provider_latency'] = avg_latencies
+        else:
+            m['avg_provider_latency'] = {}
+        
+        if m['request_count'] > 0:
+            m['avg_latency_ms'] = m['total_latency_ms'] / m['request_count']
+        else:
+            m['avg_latency_ms'] = 0
+            
+        return m
 
 # Initialize Flask app
 app = Flask(__name__, 
@@ -271,6 +328,9 @@ def admin():
 @login_required
 def api_chat():
     """Chat API endpoint - WEB CHANNEL ONLY."""
+    increment_metric('request_count')
+    start_time = time.time()
+    
     # Support both JSON and FormData
     if request.is_json:
         data = request.get_json()
@@ -327,6 +387,10 @@ def api_chat():
         result = loop.run_until_complete(get_response())
         loop.close()
         
+        # Record latency
+        latency_ms = (time.time() - start_time) * 1000
+        record_latency(result.provider_used or 'unknown', latency_ms)
+        
         # Store in database
         conn = get_db()
         cursor = conn.cursor()
@@ -353,6 +417,7 @@ def api_chat():
         })
         
     except Exception as e:
+        increment_metric('error_count')
         logger.error(f"Chat error: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -666,6 +731,101 @@ def api_test():
         'commit': '417a557',
         'unique': True,
         'timestamp': str(datetime.now())
+    })
+
+
+# ============================================================================
+# MONITORING ENDPOINTS
+# ============================================================================
+
+@app.route('/api/version', methods=['GET'])
+def api_version():
+    """Get version info."""
+    return jsonify({
+        'version': VERSION,
+        'build_date': BUILD_DATE,
+        'entrypoint': 'web/app.py'
+    })
+
+
+@app.route('/api/health', methods=['GET'])
+def api_health():
+    """Basic health check - is the server responding?"""
+    return jsonify({
+        'status': 'healthy',
+        'entrypoint': 'web/app.py'
+    })
+
+
+@app.route('/api/status', methods=['GET'])
+def api_status():
+    """Detailed status with metrics."""
+    metrics = get_metrics()
+    return jsonify({
+        'status': 'ok',
+        'entrypoint': 'web/app.py',
+        'metrics': metrics,
+        'timestamp': datetime.now().isoformat()
+    })
+
+
+@app.route('/api/diagnostics', methods=['GET'])
+def api_diagnostics():
+    """Full diagnostics - provider status, memory, uptime, version."""
+    try:
+        from genesis_protocol.ai.provider_chain import get_provider_chain
+        chain = get_provider_chain()
+        provider_status = chain.get_status()
+        available_providers = chain.get_available_providers()
+    except Exception as e:
+        provider_status = {'error': str(e)}
+        available_providers = []
+
+    # Check SQLite
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) as count FROM chat_history')
+        history_count = cursor.fetchone()['count']
+        cursor.execute('SELECT COUNT(*) as count FROM users')
+        user_count = cursor.fetchone()['count']
+        conn.close()
+        db_status = 'ok'
+    except Exception as e:
+        db_status = f'error: {str(e)}'
+        history_count = 0
+        user_count = 0
+
+    metrics = get_metrics()
+    
+    return jsonify({
+        'version': VERSION,
+        'build_date': BUILD_DATE,
+        'entrypoint': 'web/app.py',
+        'uptime': {
+            'seconds': metrics.get('uptime_seconds', 0),
+            'started_at': datetime.fromtimestamp(START_TIME).isoformat()
+        },
+        'providers': {
+            'available': available_providers,
+            'status': provider_status
+        },
+        'database': {
+            'status': db_status,
+            'history_count': history_count,
+            'user_count': user_count
+        },
+        'memory': {
+            'vector_db': 'chroma',  # TODO: check actual status
+            'cache': 'redis'  # TODO: check actual status
+        },
+        'metrics': metrics,
+        'environment': {
+            'groq_configured': os.environ.get('GROQ_API_KEY', '') != '',
+            'railway': os.environ.get('RAILWAY', '') != '',
+            'port': os.environ.get('PORT', '5000')
+        },
+        'timestamp': datetime.now().isoformat()
     })
 
 
