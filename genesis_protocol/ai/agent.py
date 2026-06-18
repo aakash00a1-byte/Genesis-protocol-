@@ -223,7 +223,9 @@ class GenesisAgent:
         )
         
         if result.success and result.response:
-            result.response.content = self._format_response(result.response.content)
+            # Fix: Check for None content before formatting
+            if result.response.content:
+                result.response.content = self._format_response(result.response.content)
         
         return result
     
