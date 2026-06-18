@@ -9,13 +9,47 @@ import psutil
 API_BASE = "https://genesis-protocol-00a1.up.railway.app"
 
 
-@st.cache_data(ttl=30)
-def get_debug_info():
-    """Fetch debug info from API."""
+@st.cache_data(ttl=10)
+def get_health():
+    """Fetch health check."""
     try:
-        response = requests.get(f"{API_BASE}/api/debug", timeout=5)
-        if response.status_code == 200:
-            return response.json()
+        r = requests.get(f"{API_BASE}/api/health", timeout=3)
+        return r.status_code == 200
+    except:
+        return False
+
+
+@st.cache_data(ttl=10)
+def get_version():
+    """Fetch version info."""
+    try:
+        r = requests.get(f"{API_BASE}/api/version", timeout=3)
+        if r.status_code == 200:
+            return r.json()
+    except:
+        pass
+    return None
+
+
+@st.cache_data(ttl=10)
+def get_status():
+    """Fetch metrics status."""
+    try:
+        r = requests.get(f"{API_BASE}/api/status", timeout=3)
+        if r.status_code == 200:
+            return r.json()
+    except:
+        pass
+    return None
+
+
+@st.cache_data(ttl=30)
+def get_diagnostics():
+    """Fetch full diagnostics."""
+    try:
+        r = requests.get(f"{API_BASE}/api/diagnostics", timeout=5)
+        if r.status_code == 200:
+            return r.json()
     except Exception as e:
         return {"error": str(e)}
     return {"error": "Unable to connect"}
@@ -23,113 +57,163 @@ def get_debug_info():
 
 def show():
     """Display dashboard page."""
-    st.header("📊 System Dashboard")
-
-    # Fetch real-time data
-    debug_data = get_debug_info()
-
-    # Metrics row
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        if "error" not in debug_data:
-            st.metric("Status", "✅ Online", "0 errors")
-        else:
-            st.metric("Status", "❌ Error", debug_data.get("error", "Unknown"))
-
-    with col2:
-        st.metric("Active Chats", "—", "Real-time soon")
-
-    with col3:
-        st.metric("Messages Today", "—", "Real-time soon")
-
-    with col4:
-        available = debug_data.get("available_providers", [])
-        provider = available[0] if available else "None"
-        st.metric("AI Provider", provider.title() if provider != "None" else "❌", "Active" if provider else "Not configured")
-
-    st.divider()
-
-    # System status
-    st.subheader("🖥️ System Status")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.write("**Memory Usage:**")
-        memory = psutil.virtual_memory()
-        st.progress(memory.percent / 100, text=f"{memory.percent:.1f}% used")
-
-        st.write("**CPU Usage:**")
-        cpu = psutil.cpu_percent(interval=1)
-        st.progress(cpu / 100, text=f"{cpu:.1f}% used")
-
-    with col2:
-        st.write("**Disk Usage:**")
-        disk = psutil.disk_usage('/')
-        st.progress(disk.percent / 100, text=f"{disk.percent:.1f}% used")
-
-        st.write("**Uptime:**")
-        st.text(f"Since {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-
-    st.divider()
-
-    # AI Provider Status
-    st.subheader("🤖 AI Provider Status")
-
-    if "error" not in debug_data:
-        provider_status = debug_data.get("provider_status", {})
-        
-        for name, info in provider_status.items():
-            configured = info.get("configured", False)
-            status = "✅ Available" if configured else "⏳ Not configured"
-            circuit = info.get("circuit_state", "unknown")
-            
-            col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
-            with col1:
-                st.write(f"**{name.upper()}**")
-            with col2:
-                st.write(status)
-            with col3:
-                st.write(f"Circuit: {circuit}")
-            with col4:
-                failures = info.get("failures", 0)
-                st.write(f"Failures: {failures}")
-    else:
-        st.warning("Unable to fetch provider status")
-
-    st.divider()
-
-    # API Debug Info
-    st.subheader("🔍 API Debug Info")
+    st.header("📊 Genesis Protocol Dashboard")
     
-    if "error" not in debug_data:
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write(f"**Groq Configured:** {debug_data.get('groq_configured', False)}")
-            st.write(f"**Available Providers:** {', '.join(debug_data.get('available_providers', []))}")
-        with col2:
-            st.json(debug_data)
-    else:
-        st.error(f"API Error: {debug_data.get('error')}")
+    # Version info
+    version_info = get_version()
+    if version_info:
+        st.caption(f"v{version_info.get('version', '?')} | Build: {version_info.get('build_date', '?')}")
+    
+    st.divider()
 
-    # Quick actions
+    # Health Panel
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        healthy = get_health()
+        if healthy:
+            st.success("🟢 Server Healthy")
+        else:
+            st.error("🔴 Server Unreachable")
+    
+    with col2:
+        status = get_status()
+        if status:
+            metrics = status.get('metrics', {})
+            st.metric("Requests", metrics.get('request_count', 0))
+        else:
+            st.metric("Requests", "—")
+    
+    with col3:
+        if status:
+            metrics = status.get('metrics', {})
+            errors = metrics.get('error_count', 0)
+            if errors > 0:
+                st.error(f"Errors: {errors}")
+            else:
+                st.success("Errors: 0")
+        else:
+            st.metric("Errors", "—")
+
+    st.divider()
+
+    # Metrics Section
+    st.subheader("📈 Performance Metrics")
+    
+    if status:
+        metrics = status.get('metrics', {})
+        avg_latency = metrics.get('avg_latency_ms', 0)
+        uptime = metrics.get('uptime_seconds', 0)
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Avg Latency", f"{avg_latency:.0f}ms")
+        
+        with col2:
+            hours = int(uptime // 3600)
+            mins = int((uptime % 3600) // 60)
+            st.metric("Uptime", f"{hours}h {mins}m")
+        
+        with col3:
+            st.metric("Requests", metrics.get('request_count', 0))
+        
+        with col4:
+            st.metric("Errors", metrics.get('error_count', 0))
+        
+        # Provider Latencies
+        avg_latencies = metrics.get('avg_provider_latency', {})
+        if avg_latencies:
+            st.write("**Provider Latency:**")
+            for provider, latency in avg_latencies.items():
+                st.text(f"  {provider}: {latency:.0f}ms avg")
+    else:
+        st.warning("Metrics unavailable")
+
+    st.divider()
+
+    # Diagnostics
+    diagnostics = get_diagnostics()
+    
+    if "error" not in diagnostics:
+        # Provider Status
+        st.subheader("🤖 AI Provider Status")
+        
+        providers = diagnostics.get('providers', {})
+        available = providers.get('available', [])
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write(f"**Available:** {', '.join(available) if available else 'None'}")
+        
+        with col2:
+            if available:
+                st.success("Providers Active")
+            else:
+                st.error("No Providers")
+        
+        # Database Status
+        st.subheader("💾 Database Status")
+        
+        db = diagnostics.get('database', {})
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Users", db.get('user_count', 0))
+        
+        with col2:
+            st.metric("Conversations", db.get('history_count', 0))
+        
+        with col3:
+            db_status = db.get('status', 'unknown')
+            if db_status == 'ok':
+                st.success("✅ Database OK")
+            else:
+                st.error(f"❌ {db_status}")
+        
+        # Expand full diagnostics
+        with st.expander("🔍 Full Diagnostics JSON"):
+            st.json(diagnostics)
+    else:
+        st.error(f"Diagnostics Error: {diagnostics.get('error')}")
+
+    st.divider()
+
+    # System Info (Local)
+    st.subheader("🖥️ Local System (Dashboard Host)")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        memory = psutil.virtual_memory()
+        st.write(f"**Memory:** {memory.percent:.1f}% used")
+        st.progress(memory.percent / 100)
+    
+    with col2:
+        cpu = psutil.cpu_percent(interval=0.5)
+        st.write(f"**CPU:** {cpu:.1f}%")
+        st.progress(cpu / 100)
+
+    st.divider()
+
+    # Quick Actions
     st.subheader("⚡ Quick Actions")
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        if st.button("🔄 Refresh Data"):
+        if st.button("🔄 Refresh All"):
             st.cache_data.clear()
             st.rerun()
 
     with col2:
-        if st.button("🧹 Clear Memory"):
-            st.warning("Clear memory functionality coming soon")
+        if st.button("📊 View History API"):
+            st.info("Use: GET /api/history")
 
     with col3:
-        if st.button("📊 Export Stats"):
-            st.warning("Export functionality coming soon")
+        if st.button("📋 View Full Status"):
+            st.json(status if status else {})
 
 
 if __name__ == "__main__":
