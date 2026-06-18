@@ -1,50 +1,67 @@
-# Changelog
+# Changelog - Genesis Protocol
 
-All notable changes to Genesis Protocol will be documented in this file.
+All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [1.0.0] - 2026-06-18
+## [1.1.0] - 2026-06-18
 
 ### Added
-- **Monitoring Endpoints**
-  - `/api/version` - Version information
-  - `/api/health` - Basic health check
-  - `/api/status` - Metrics with request count, latency
-  - `/api/diagnostics` - Full system diagnostics
 
-- **Metrics Tracking**
-  - Request count
-  - Error count
-  - Average latency
-  - Provider-specific latency
+#### Personality Layer ("Gluttony")
+- `PersonalityEngine` class with 5 personas: Normal, Jarvis, Gluttony, Friendly, Developer
+- `ConversationMode` system: Assistant, Friend, Casual modes
+- `UserPreferences` and `PreferenceManager` for persistent user memory
+- `HumorEngine` with jokes, witty responses, and encouragement
+- Personality-specific greetings, farewells, and catchphrases
 
-- **Backup System**
-  - `scripts/backup.py` - SQLite backup and chat history export
-  - `scripts/restore.py` - Database restore functionality
+#### Voice Infrastructure
+- `SpeechToTextProvider` abstract layer for STT providers
+- `TextToSpeechProvider` abstract layer for TTS providers
+- `VoiceManager` for unified voice I/O
+- Provider implementations: gTTS (free), OpenAI TTS
+- Multi-language support (en, hi, es, fr, de, zh, ja)
 
-- **Streamlit Dashboard**
-  - Live API status from `/api/debug`
-  - Provider configuration display
-  - Circuit breaker status
-  - Refresh button
+#### Image Understanding Module
+- `ImageAnalyzer` for image analysis
+- `VisionProvider` abstract layer with fallback support
+- Provider implementations: Groq Vision, OpenAI Vision, Claude Vision
+- Image validation and analysis results
 
-- **Unit Tests**
-  - Provider tests
-  - Memory fallback tests
-  - Health endpoint tests
+#### Autonomous Task Queue
+- `TaskQueue` with persistent storage
+- `TaskScheduler` for background job processing
+- Task priorities, retries, and status tracking
+- Reminder scheduling functionality
+- Thread-safe operations
 
-### Fixed
-- "None" response bug in AI chat
-- GROQ_API_KEY case sensitivity issue (was groq_api_key)
-- ChromaDB graceful fallback
-- Redis graceful fallback with in-memory fallback
+#### Long-term Memory Architecture
+- `LongTermMemory` with ChromaDB integration
+- `MemoryImportance` scoring: Critical, High, Medium, Low, Forgettable
+- `MemorySummarizer` for conversation summarization
+- Semantic search and context retrieval
+- Memory pruning for space management
 
-### Security
-- API key rotation documentation
-- Environment variable configuration
+### Changed
 
-### Infrastructure
-- Railway deployment configured
-- GitHub Actions for CI/CD
-- SQLite database for persistence
+- Enhanced conversation memory integration
+- Improved provider fallback mechanisms
+- Updated project structure for v1.1 modules
+
+## [1.0.0] - 2026-06-17
+
+### Added
+- Initial Genesis Protocol release
+- Groq provider integration
+- Redis caching layer
+- Vector store support
+- Telegram bot integration
+- Monitoring endpoints (health, status, version, debug)
+- Comprehensive documentation
+
+### Features
+- AI-powered chat with provider chain
+- Conversation memory with rolling context
+- Autonomous mode for continuous tasks
+- Code execution capabilities
+- Security encryption utilities

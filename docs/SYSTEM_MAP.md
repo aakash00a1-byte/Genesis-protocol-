@@ -1,235 +1,136 @@
-# System Map - Genesis Protocol
-
-**Version:** 1.0.0  
-**Architecture Type:** Multi-Channel AI Assistant
-
----
+# Genesis Protocol - System Map v1.1
 
 ## Architecture Overview
 
 ```
-                                    ┌─────────────────┐
-                                    │   Telegram Bot   │
-                                    │  (start_telegram)│
-                                    └────────┬────────┘
-                                             │ Polling
-                                             ▼
-┌─────────────┐     ┌─────────────────────────────────────────┐
-│   Web UI    │────▶│           Genesis Protocol               │
-│   (Flask)   │     │                                         │
-│   Port 5000 │     │  ┌─────────────────────────────────┐   │
-└─────────────┘     │  │         AI Layer (genesis_protocol) │   │
-                    │  │  ┌─────────┐ ┌─────────┐ ┌─────┐ │   │
-                    │  │  │ Groq    │ │ OpenAI  │ │More │ │   │
-                    │  │  │Provider │ │Provider │ │     │ │   │
-                    │  │  └─────────┘ └─────────┘ └─────┘ │   │
-                    │  └─────────────────────────────────┘   │
-                    │                                         │
-                    │  ┌─────────────────────────────────┐   │
-                    │  │       Memory Layer               │   │
-                    │  │  ┌─────────┐ ┌──────────────┐  │   │
-                    │  │  │ChromaDB │ │  SQLite DB    │  │   │
-                    │  │  │(Vector) │ │ (Historical)  │  │   │
-                    │  │  └─────────┘ └──────────────┘  │   │
-                    │  └─────────────────────────────────┘   │
-                    └─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                        Genesis Protocol v1.1                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐       │
+│  │ Personality │    │    Voice    │    │    Vision   │       │
+│  │   Layer     │    │    Module   │    │   Module    │       │
+│  ├─────────────┤    ├─────────────┤    ├─────────────┤       │
+│  │ • Gluttony  │    │ • STT       │    │ • Analyzer  │       │
+│  │ • Jarvis    │    │ • TTS       │    │ • Providers │       │
+│  │ • Friendly  │    │ • Manager   │    │             │       │
+│  │ • Developer │    │             │    │             │       │
+│  │ • Normal    │    │             │    │             │       │
+│  └─────────────┘    └─────────────┘    └─────────────┘       │
+│                                                                 │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐       │
+│  │    Tasks    │    │   Memory    │    │     AI      │       │
+│  │    Queue    │    │   Module    │    │    Core     │       │
+│  ├─────────────┤    ├─────────────┤    ├─────────────┤       │
+│  │ • Scheduler │    │ • LTM       │    │ • Providers │       │
+│  │ • Queue     │    │ • ChromaDB  │    │ • Chain     │       │
+│  │ • Reminders │    │ • Summary   │    │ • Scoring   │       │
+│  │ • Retry     │    │ • Importance│    │ • Reasoning │       │
+│  └─────────────┘    └─────────────┘    └─────────────┘       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
----
+## Module Structure
 
-## Process Flow
-
-### Web Chat Flow
+### personality/ - Personality Layer
 ```
-User → Web UI → Flask (/api/chat) → Genesis Agent → Groq API
-                                              │
-                                              ▼
-                                          SQLite DB ← Memory Layer
-```
-
-### Telegram Flow
-```
-User → Telegram → Bot API → start_telegram.py → Genesis Agent → Groq API
-                                                            │
-                                                            ▼
-                                                        SQLite DB
+personality/
+├── __init__.py
+├── personality_engine.py   # Core personality system
+├── user_preferences.py    # User preferences & memory
+└── humor_engine.py        # Humor & jokes
 ```
 
----
-
-## AI Layer Components
-
-### Provider Chain
-Location: `genesis_protocol/ai/provider_chain.py`
-
+### voice/ - Voice Infrastructure
 ```
-┌────────────────────────────────────────┐
-│           ProviderChain                │
-├────────────────────────────────────────┤
-│ • Groq (Primary) - llama-3.3-70b       │
-│ • OpenAI (Fallback)                     │
-│ • Gemini (Fallback)                     │
-│ • Claude (Fallback)                     │
-│ • HuggingFace (Fallback)               │
-├────────────────────────────────────────┤
-│ Circuit Breaker: Opens after 5 failures│
-│ Recovery: 60 seconds cooldown           │
-└────────────────────────────────────────┘
+voice/
+├── __init__.py
+├── stt.py                 # Speech-to-text abstraction
+├── tts.py                 # Text-to-speech abstraction
+├── voice_manager.py       # Unified voice I/O
+└── providers/
+    ├── __init__.py
+    ├── gtts_provider.py       # Google TTS (free)
+    └── openai_tts.py          # OpenAI TTS
 ```
 
-### Agent
-Location: `genesis_protocol/ai/agent.py`
-
+### vision/ - Image Understanding
 ```
-GenesisAgent
-├── process(message) → AI Response
-├── Tools:
-│   ├── web_search - Web search capability
-│   ├── calculator - Math operations
-│   └── code_executor - Run code
-├── Memory:
-│   ├── ConversationMemory (SQLite)
-│   └── VectorStore (ChromaDB)
-└── Modes:
-    ├── auto (default)
-    ├── creative
-    └── precise
+vision/
+├── __init__.py
+├── vision_providers.py    # Provider abstraction
+└── image_analyzer.py      # Image analysis
 ```
 
----
+### tasks/ - Autonomous Task Queue
+```
+tasks/
+├── __init__.py
+├── task_queue.py          # Task storage & management
+└── scheduler.py           # Background scheduler
+```
+
+### memory/ - Long-term Memory
+```
+memory/
+├── __init__.py
+├── long_term_memory.py    # ChromaDB integration
+└── memory_summarizer.py   # Conversation summarization
+```
 
 ## Memory Layers
 
-### 1. Conversation Memory (SQLite)
-**Location:** `genesis.db` (root) or `/app/data/genesis.db` (Railway)
-
-```sql
--- Tables:
-users (
-  id, username, email, password_hash, 
-  role, created_at, last_login, 
-  is_active, usage_count
-)
-
-chat_history (
-  id, user_id, message, response,
-  model_used, provider, quality_score,
-  mode, created_at
-)
+```
+┌────────────────────────────────────────────────────┐
+│                   Memory Architecture               │
+├────────────────────────────────────────────────────┤
+│                                                     │
+│  ┌─────────────┐    ┌─────────────┐               │
+│  │   Short     │ →  │    Long     │               │
+│  │   Term      │    │    Term     │               │
+│  ├─────────────┤    ├─────────────┤               │
+│  │ • Redis     │    │ • ChromaDB  │               │
+│  │ • Session   │    │ • Vector    │               │
+│  │ • Rolling   │    │ • Semantic  │               │
+│  │   Context   │    │   Search    │               │
+│  └─────────────┘    └─────────────┘               │
+│         ↓                   ↓                       │
+│  ┌─────────────────────────────────────────┐      │
+│  │         Conversation Memory              │      │
+│  │  • Rolling window (configurable)         │      │
+│  │  • Importance-based retention             │      │
+│  │  • Auto-summarization                    │      │
+│  └─────────────────────────────────────────┘      │
+│                                                     │
+└────────────────────────────────────────────────────┘
 ```
 
-### 2. Vector Memory (ChromaDB)
-**Location:** `./data/chroma_db/` or `/app/data/chroma_db/`
+## Personas
 
-```python
-# Used for semantic search
-VectorStore.search(query, limit=5)
-```
+| Persona    | Humor | Formality | Empathy | Use Case |
+|------------|-------|-----------|---------|----------|
+| Normal     | 0.3   | 0.5       | 0.7     | Default balanced |
+| Gluttony   | 0.9   | 0.1       | 0.9     | Fun, casual chat |
+| Jarvis     | 0.1   | 0.9       | 0.6     | Formal, precise |
+| Friendly   | 0.5   | 0.2       | 0.9     | Warm, supportive |
+| Developer  | 0.4   | 0.6       | 0.5     | Code-focused |
 
-### 3. Cache (Redis - Optional)
-**Location:** Redis server or in-memory fallback
+## Conversation Modes
 
-```python
-RedisCache.get(key) / RedisCache.set(key, value)
-# Falls back to in-memory dict if Redis unavailable
-```
-
----
-
-## API Endpoints
-
-### Monitoring (Public)
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/api/health` | GET | None | Health check |
-| `/api/version` | GET | None | Version info |
-| `/api/status` | GET | None | Metrics |
-| `/api/debug` | GET | None | Provider debug |
-
-### Diagnostics (Public)
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/api/diagnostics` | GET | None | Full system status |
-
-### Chat (Protected)
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/api/chat` | POST | Login | Send message |
-| `/api/history` | GET | Login | Get history |
-
-### Admin (Admin Only)
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/api/admin/stats` | GET | Admin | System stats |
-| `/api/admin/users` | GET | Admin | User list |
-| `/api/admin/logs` | GET | Admin | View logs |
-
----
-
-## File Structure
-
-```
-/workspace/project/
-├── web/
-│   ├── server_simple.py    # DEPLOYED web server
-│   ├── app.py              # Full web server (dev only)
-│   ├── templates/          # HTML templates
-│   └── static/             # CSS, JS, images
-│
-├── genesis_protocol/
-│   ├── __init__.py
-│   ├── config.py           # Configuration
-│   ├── ai/
-│   │   ├── agent.py        # Main agent
-│   │   ├── provider_chain.py
-│   │   ├── providers/
-│   │   │   ├── groq_provider.py
-│   │   │   └── base_provider.py
-│   │   └── llm_router.py
-│   ├── memory/
-│   │   ├── conversation_memory.py
-│   │   ├── vector_store.py
-│   │   └── redis_cache.py
-│   └── ...
-│
-├── start_telegram.py       # Telegram bot (DEPLOYED)
-├── genesis.db              # SQLite database
-├── Dockerfile              # Production Docker
-├── railway.json            # Railway config
-├── supervisord.conf        # Process manager
-└── requirements.txt        # Python dependencies
-```
-
----
+- **Assistant**: Formal, helpful, task-oriented
+- **Friend**: Casual, friendly, personal
+- **Casual**: Very relaxed, humor-heavy
 
 ## Dependencies
 
-### Core
-- flask>=3.0.0
-- groq>=0.4.0
-- python-dotenv>=1.0.0
+### Required for v1.1
+- `chromadb` - Vector database for long-term memory
+- `gtts` - Free TTS (optional)
+- `openai` - OpenAI API for TTS/Vision (optional)
+- `Pillow` - Image processing
 
-### Memory
-- chromadb>=0.4.0
-- redis>=5.0.0
-
-### Optional
-- openai (fallback)
-- anthropic (claude)
-- google-generativeai (gemini)
-
----
-
-## Configuration Priority
-
-1. Environment variables (highest)
-2. `.env` file
-3. Default values (lowest)
-
-### Key Config Values
-```python
-GROQ_MODEL = "llama-3.3-70b-versatile"
-CHROMA_DB_PATH = "./data/chroma_db"
-CIRCUIT_BREAKER_FAILURES = 5
-CIRCUIT_BREAKER_TIMEOUT = 60
-```
+### Optional Providers
+- Groq API (Vision, Whisper)
+- OpenAI API (GPT-4V, TTS)
+- Anthropic API (Claude Vision)
