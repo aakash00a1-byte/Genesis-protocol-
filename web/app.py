@@ -829,7 +829,99 @@ def api_diagnostics():
     })
 
 
+# ============================================================================
+# STARTUP SELF-CHECK
+# ============================================================================
+
+def run_startup_checks():
+    """Run startup checks to verify system health."""
+    print("=" * 50)
+    print("Genesis Protocol - Startup Checks")
+    print("=" * 50)
+    
+    all_passed = True
+    
+    # 1. Check SQLite
+    print("\n[1/4] Checking SQLite database...")
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM users")
+        cursor.execute("SELECT COUNT(*) FROM chat_history")
+        conn.close()
+        print("   ✅ SQLite OK")
+    except Exception as e:
+        print(f"   ❌ SQLite Error: {e}")
+        all_passed = False
+    
+    # 2. Check Groq Provider
+    print("\n[2/4] Checking Groq Provider...")
+    try:
+        from genesis_protocol.ai.provider_chain import get_provider_chain
+        chain = get_provider_chain()
+        if chain.is_provider_available('groq'):
+            print("   ✅ Groq Provider Available")
+        else:
+            print("   ⚠️  Groq Provider Not Configured (check GROQ_API_KEY)")
+    except Exception as e:
+        print(f"   ⚠️  Groq Check Error: {e}")
+    
+    # 3. Check Environment Variables
+    print("\n[3/4] Checking Environment Variables...")
+    env_vars = {
+        'GROQ_API_KEY': os.environ.get('GROQ_API_KEY', ''),
+        'SECRET_KEY': os.environ.get('SECRET_KEY', ''),
+    }
+    for var, value in env_vars.items():
+        if value:
+            # Mask the value for display
+            masked = value[:8] + '...' if len(value) > 8 else '***'
+            print(f"   ✅ {var}: {masked}")
+        else:
+            print(f"   ⚠️  {var}: Not Set")
+    
+    # 4. Check History System
+    print("\n[4/4] Checking History System...")
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chat_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                message TEXT NOT NULL,
+                response TEXT,
+                model_used TEXT,
+                provider TEXT,
+                quality_score REAL,
+                mode TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
+        conn.commit()
+        conn.close()
+        print("   ✅ History System OK")
+    except Exception as e:
+        print(f"   ❌ History System Error: {e}")
+        all_passed = False
+    
+    print("\n" + "=" * 50)
+    if all_passed:
+        print("✅ All startup checks passed!")
+    else:
+        print("⚠️  Some checks failed - system may not work correctly")
+    print("=" * 50)
+    
+    return all_passed
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    
+    # Run startup checks
+    run_startup_checks()
+    
+    print(f"\nStarting server on port {port}...")
     app.run(host='0.0.0.0', port=port, debug=debug)
