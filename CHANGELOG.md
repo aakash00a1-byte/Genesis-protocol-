@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.2.0] - 2026-06-18
+
+### Added
+
+#### Integration Layer
+- `GenesisIntegration`: Main integration class orchestrating all v1.1 modules
+- `ModuleStatus` enum: Track module states (READY, ERROR, DISABLED)
+- `/api/modules` endpoint: Shows all module statuses
+- Background loops: Memory summarization, task execution, health monitoring
+- Startup self-test for all modules
+
+#### Commands
+- `/persona <name>`: Switch personality (normal, jarvis, gluttony, friendly, developer)
+- `/mode <mode>`: Change conversation mode (assistant, friend, casual)
+- `/remind <time> <message>`: Schedule reminders
+- `/memory`, `/remember`, `/forget`: Memory commands
+- `/vision`, `/voice`: Feature toggles
+
+#### Chat Pipeline Integration
+- Personality engine affects every response
+- Long-term memory influences conversations
+- Task queue for reminders and delayed actions
+- Vision module for image analysis
+- Voice module for speech processing
+
+### Changed
+- Version bumped to 1.2.0
+- server_simple.py updated with v1.2 features
+- All v1.1 modules now accessible via integration layer
+
 ## [1.1.0] - 2026-06-18
 
 ### Added
@@ -41,12 +71,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `MemorySummarizer` for conversation summarization
 - Semantic search and context retrieval
 - Memory pruning for space management
-
-### Changed
-
-- Enhanced conversation memory integration
-- Improved provider fallback mechanisms
-- Updated project structure for v1.1 modules
 
 ## [1.0.0] - 2026-06-17
 
