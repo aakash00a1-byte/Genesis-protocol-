@@ -3,6 +3,7 @@
 HuggingFace Inference API integration for open models.
 """
 
+import asyncio
 import time
 from typing import List, Dict, Any
 

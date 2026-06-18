@@ -5,6 +5,7 @@ Encryption utilities for data protection.
 
 import base64
 import hashlib
+import hmac
 import os
 from typing import Optional
 

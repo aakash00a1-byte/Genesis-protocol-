@@ -6,6 +6,7 @@ Stage 2: Execution - Generate final response
 
 import asyncio
 import logging
+import re
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from enum import Enum
