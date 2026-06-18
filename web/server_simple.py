@@ -731,8 +731,71 @@ def api_diagnostics():
     })
 
 
+# ============================================================================
+# STARTUP BANNER
+# ============================================================================
+
+def print_startup_banner():
+    """Print startup banner with system info."""
+    import subprocess
+    
+    # Get commit hash
+    try:
+        commit = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], 
+                                        stderr=subprocess.DEVNULL).decode().strip()
+    except:
+        commit = 'unknown'
+    
+    # Get provider status
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from genesis_protocol.ai.provider_chain import get_provider_chain
+        chain = get_provider_chain()
+        available = chain.get_available_providers()
+        groq_ok = chain.is_provider_available('groq')
+    except:
+        available = []
+        groq_ok = False
+    
+    # Get memory status
+    chroma_ok = os.environ.get('CHROMA_DB_PATH', '') != ''
+    redis_ok = os.environ.get('REDIS_HOST', '') != ''
+    
+    banner = f"""
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   ██████╗ ███████╗███████╗██╗   ██╗███████╗ █████╗ ██╗     ║
+║   ██╔══██╗██╔════╝██╔════╝██║   ██║██╔════╝██╔══██╗██║     ║
+║   ██║  ██║█████╗  ███████╗██║   ██║█████╗  ███████║██║     ║
+║   ██║  ██║██╔══╝  ╚════██║██║   ██║██╔══╝  ██╔══██║██║     ║
+║   ██████╔╝███████╗███████║╚██████╔╝███████╗██║  ██║███████╗
+║   ╚═════╝ ╚══════╝╚══════╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝
+║                                                              ║
+║                    Protocol v{VERSION:<25}                 ║
+║                    Commit: {commit:<31}    ║
+║                    Build:  {BUILD_DATE:<31}    ║
+║                                                              ║
+╠══════════════════════════════════════════════════════════════╣
+║  PROVIDERS                                                   ║
+║  ├─ Groq:        {'✅ Available' if groq_ok else '⚠️  Not configured':<20}       ║
+║  └─ Available:   {', '.join(available) or 'None':<20}       ║
+║                                                              ║
+║  MEMORY                                                      ║
+║  ├─ ChromaDB:    {'✅ Configured' if chroma_ok else '⚠️  Using fallback':<20}    ║
+║  └─ Redis:       {'✅ Connected' if redis_ok else '⚠️  Using fallback':<20}       ║
+║                                                              ║
+║  UPTIME: {int(time.time() - START_TIME)}s                                               ║
+╚══════════════════════════════════════════════════════════════╝
+"""
+    print(banner)
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    
+    # Print startup banner
+    print_startup_banner()
+    
     logger.info(f"Starting Genesis Web on port {port}")
     app.run(host='0.0.0.0', port=port, debug=debug)
