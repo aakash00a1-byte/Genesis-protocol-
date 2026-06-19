@@ -925,3 +925,65 @@ if __name__ == '__main__':
     
     print(f"\nStarting server on port {port}...")
     app.run(host='0.0.0.0', port=port, debug=debug)
+
+# GLUTTONY v3.0 Entity API Endpoints
+@app.route('/api/entity', methods=['GET'])
+def api_entity():
+    """Get GLUTTONY entity info."""
+    try:
+        from genesis_protocol.gluttony import get_gluttony, get_identity
+        g = get_gluttony()
+        identity = get_identity()
+        return jsonify({
+            'entity': g.name,
+            'version': g.version,
+            'nickname': identity.nickname,
+            'layers': g._get_active_layers(),
+            'status': g.status()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/state', methods=['GET'])
+def api_state():
+    """Get full GLUTTONY state."""
+    try:
+        from genesis_protocol.gluttony import get_gluttony
+        g = get_gluttony()
+        return jsonify(g.get_state())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/proposals', methods=['GET'])
+def api_proposals():
+    """Get all proposals."""
+    try:
+        from genesis_protocol.proposal import get_proposal_manager
+        pm = get_proposal_manager()
+        return jsonify(pm.get_history())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/lessons', methods=['GET'])
+def api_lessons():
+    """Get learned lessons."""
+    try:
+        from genesis_protocol.learning import get_evaluation_engine
+        engine = get_evaluation_engine()
+        return jsonify({'lessons': engine.get_lessons() if hasattr(engine, 'get_lessons') else []})
+    except Exception as e:
+        return jsonify({'lessons': [], 'error': str(e)})
+
+
+@app.route('/api/survival/status', methods=['GET'])
+def api_survival():
+    """Get survival layer status."""
+    try:
+        from genesis_protocol.survival import get_survival_manager
+        sm = get_survival_manager()
+        return jsonify(sm.get_full_status())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
