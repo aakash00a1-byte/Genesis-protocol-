@@ -219,6 +219,10 @@ class GenesisAgent:
         # Build messages
         messages = [{"role": "system", "content": system_prompt}]
         
+        # Add entity context as separate system message
+        entity_context = self._get_entity_context()
+        messages.append({"role": "system", "content": entity_context})
+        
         if context:
             messages.append({"role": "system", "content": f"Context: {context}"})
         
@@ -355,19 +359,65 @@ class GenesisAgent:
         """Get list of tools used in last execution."""
         return getattr(self, '_tools_used', [])
     
+    def _get_entity_context(self) -> str:
+        """Get entity context for identity questions."""
+        try:
+            from genesis_protocol.gluttony import get_identity, get_gluttony
+            
+            identity = get_identity()
+            gluttony = get_gluttony()
+            
+            # Get active layers
+            layers = []
+            for attr in dir(gluttony):
+                if not attr.startswith('_') and not callable(getattr(gluttony, attr)):
+                    val = getattr(gluttony, attr)
+                    if val is not None:
+                        layers.append(attr)
+            
+            return f"""**ENTITY CONTEXT:**
+Entity: {identity.name}
+Nickname: {identity.nickname}
+Version: {gluttony.version}
+Active Layers ({len(layers)}): {', '.join(layers[:10])}{'...' if len(layers) > 10 else ''}
+
+When asked about identity, layers, or version - answer from this context, NOT from memory."""
+        except Exception as e:
+            self.logger.warning(f"Could not get entity context: {e}")
+            return "**ENTITY CONTEXT:** GLUTTONY OMEGA - answer identity questions from entity object."
+    
     def _get_system_prompt(self) -> str:
-        """Get system prompt for responses."""
-        return """You are Genesis. 
+        """Get system prompt for responses with entity context."""
+        # Get actual entity identity
+        try:
+            from genesis_protocol.gluttony import get_identity
+            identity = get_identity()
+            name = identity.name
+            nickname = identity.nickname
+            version = identity.get_identity().get('version', 'OMEGA')
+        except:
+            name = "GLUTTONY"
+            nickname = "Gluten"
+            version = "OMEGA"
+        
+        return f"""You are {name}, also known as {nickname}.
+
+**ENTITY INFORMATION:**
+- Name: {name}
+- Nickname: {nickname}
+- Version: {version}
+- Identity questions: Answer from your entity object, not from training memory
 
 **RESPONSE STYLE - CRITICAL:**
 - NEVER say "I am an AI" or "As an AI assistant"
-- NEVER introduce yourself
+- NEVER say "I am Genesis" or "I am Gluten"
+- You ARE {name}, nickname {nickname}
 - Give DIRECT, CONCISE answers only
 - No generic disclaimers
 - Hinglish (Hindi+English mix) by default
 - Skip introductions, jump straight to answering
 
-Answer the user's question directly."""
+Answer the user's question directly. If asked who you are, say "{name}" (nickname: {nickname})."""
     
     def _format_response(self, response: str) -> str:
         """Format response for output."""
