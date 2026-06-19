@@ -1,132 +1,146 @@
-# Genesis Protocol - System Map v1.2
+# Genesis Protocol - System Map v1.3
 
 ## Architecture Overview
 
 ```
-┌───────────────────────────────────────────────────────────────────────┐
-│                         Genesis Protocol v1.2                         │
-├───────────────────────────────────────────────────────────────────────┤
-│                                                                       │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                    Integration Layer (v1.2)                      │ │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐       │ │
-│  │  │ Commands │  │ Background│  │  Status  │  │  Self-   │       │ │
-│  │  │ Handler  │  │   Loops  │  │  Report  │  │   Test   │       │ │
-│  │  └──────────┘  └──────────┘  └──────────┘  └──────────┘       │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                                                                       │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐│
-│  │ Personality │  │    Voice    │  │    Vision   │  │    Tasks    ││
-│  │   Layer     │  │    Module   │  │   Module    │  │    Queue    ││
-│  ├─────────────┤  ├─────────────┤  ├─────────────┤  ├─────────────┤│
-│  │ • 5 Personas│  │ • STT       │  │ • Analyzer  │  │ • Scheduler ││
-│  │ • 3 Modes   │  │ • TTS       │  │ • Providers │  │ • Queue     ││
-│  │ • Humor     │  │ • Manager   │  │ • Memory    │  │ • Retry     ││
-│  │ • Preferences│  │ • Providers │  │ • Integration│ │ • Reminders ││
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘│
-│                        │                                           │
-│                        ▼                                           │
-│  ┌───────────────────────────────────────────────────────────────┐ │
-│  │                    Long-term Memory (ChromaDB)                │ │
-│  │  • Semantic Search  • Importance Scoring  • Summarization    │ │
-│  └───────────────────────────────────────────────────────────────┘ │
-│                                                                       │
-└───────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Genesis Protocol v1.3 🔥                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                    AUTONOMOUS LAYER (v1.3)                        │   │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐            │   │
+│  │  │  Event   │ │  Mood   │ │Reflection│ │  User    │            │   │
+│  │  │  System  │ │  Engine │ │  Engine  │ │ Profile  │            │   │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘            │   │
+│  │  ┌──────────────────────────────────────────────────────┐        │   │
+│  │  │              Autonomous Daemon (Background)           │        │   │
+│  │  │  • Memory Maintenance  • Health Monitor              │        │   │
+│  │  │  • Conversation Tracker • Reflection Trigger          │        │   │
+│  │  └──────────────────────────────────────────────────────┘        │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐     │
+│  │ Personality │ │    Voice    │ │    Vision   │ │    Tasks    │     │
+│  │   Layer     │ │    Module   │ │   Module    │ │    Queue    │     │
+│  │  v1.1      │ │   v1.1     │ │   v1.1     │ │   v1.1     │     │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘     │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────┐     │
+│  │                    Long-term Memory (ChromaDB)                │     │
+│  └─────────────────────────────────────────────────────────────┘     │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Module Structure (v1.2)
+## Module Structure (v1.3)
 
 ```
 genesis_protocol/
-├── integration/                    # v1.2 NEW - Integration Layer
+├── autonomous/                    # v1.3 NEW - Autonomous Layer 🔥
 │   ├── __init__.py
-│   ├── genesis_integration.py       # Main orchestrator
-│   └── commands.py                  # Command handlers
+│   ├── event_system.py             # Event logging (22 types)
+│   ├── autonomous_daemon.py       # Background loops
+│   ├── mood_engine.py              # Mood management (5 moods)
+│   ├── reflection_engine.py        # Self-reflection
+│   ├── user_profile.py             # User profile learning
+│   └── service_manager.py          # Unified service manager
+│
+├── integration/                    # v1.2 - Integration Layer
+│   ├── __init__.py
+│   ├── genesis_integration.py
+│   └── commands.py
 │
 ├── personality/                     # v1.1 - Personality Layer
-│   ├── __init__.py
-│   ├── personality_engine.py        # 5 personas + modes
-│   ├── user_preferences.py         # Persistent preferences
-│   └── humor_engine.py             # Jokes & responses
+│   ├── personality_engine.py        # 5 personas
+│   ├── user_preferences.py
+│   └── humor_engine.py
 │
 ├── voice/                          # v1.1 - Voice Infrastructure
-│   ├── __init__.py
-│   ├── stt.py                      # Speech-to-text
-│   ├── tts.py                      # Text-to-speech
-│   ├── voice_manager.py            # Unified I/O
+│   ├── stt.py, tts.py, voice_manager.py
 │   └── providers/
-│       ├── gtts_provider.py        # Free Google TTS
-│       └── openai_tts.py          # OpenAI TTS
 │
 ├── vision/                         # v1.1 - Image Understanding
-│   ├── __init__.py
-│   ├── vision_providers.py         # Provider abstraction
-│   ├── image_analyzer.py          # Image analysis
+│   ├── vision_providers.py
+│   ├── image_analyzer.py
 │   └── providers/
-│       └── groq_vision.py         # Groq Vision API
 │
 ├── tasks/                          # v1.1 - Task Queue
-│   ├── __init__.py
-│   ├── task_queue.py              # Persistent storage
-│   └── scheduler.py               # Background scheduler
+│   ├── task_queue.py
+│   └── scheduler.py
 │
 └── memory/                         # v1.1 - Long-term Memory
-    ├── __init__.py
-    ├── long_term_memory.py         # ChromaDB integration
-    └── memory_summarizer.py       # Conversation summaries
+    ├── long_term_memory.py
+    └── memory_summarizer.py
 ```
 
-## Commands
+## Moods
 
-| Command | Description | Example |
-|---------|-------------|---------|
-| `/persona <name>` | Switch personality | `/persona gluttony` |
-| `/mode <mode>` | Change conversation mode | `/mode casual` |
-| `/remind <time> <msg>` | Schedule reminder | `/remind 1h Check email` |
-| `/memory` | Check memory status | `/memory` |
-| `/remember <text>` | Store important info | `/remember I prefer dark mode` |
-| `/forget <text>` | Remove from memory | `/forget old preference` |
-| `/vision` | Enable vision mode | `/vision` |
-| `/voice` | Enable voice mode | `/voice` |
-| `/modules` | Check module status | `/modules` |
+| Mood      | Emoji | Style | Use Case |
+|-----------|-------|-------|----------|
+| calm      | 🧘    | Serene | General conversation |
+| playful   | 🎉    | Fun   | Happy/excited users |
+| focused   | 🎯    | Precise | Urgent tasks |
+| developer | 💻    | Technical | Code discussions |
+| sleepy    | 😴    | Relaxed | Late night chats |
 
-## Personas
+## Events (22 Types)
 
-| Persona | Humor | Formality | Empathy | Use Case |
-|---------|-------|-----------|---------|----------|
-| Normal  | 0.3   | 0.5       | 0.7     | Default balanced |
-| Gluttony| 0.9   | 0.1       | 0.9     | Fun, casual chat! |
-| Jarvis  | 0.1   | 0.9       | 0.6     | Formal, precise |
-| Friendly| 0.5   | 0.2       | 0.9     | Warm, supportive |
-| Developer| 0.4   | 0.6       | 0.5     | Code-focused |
+- `startup`, `shutdown`
+- `provider_failure`, `provider_success`
+- `task_created`, `task_executed`, `task_failed`, `task_completed`
+- `memory_created`, `memory_accessed`, `memory_pruned`
+- `conversation_start`, `conversation_end`
+- `exception`
+- `mood_change`, `persona_change`
+- `user_profile_updated`
+- `reflection_complete`
+- `health_warning`, `health_ok`
+- `module_loaded`, `module_error`
 
-## Conversation Modes
-
-- **assistant**: Formal, helpful, task-oriented
-- **friend**: Casual, friendly, personal
-- **casual**: Very relaxed, humor-heavy
-
-## API Endpoints (v1.2)
+## API Endpoints (v1.3)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/chat` | POST | Chat with AI (personality-aware) |
-| `/api/modules` | GET | Get v1.2 module statuses |
-| `/api/diagnostics` | GET | Full system diagnostics |
-| `/api/health` | GET | Basic health check |
-| `/api/version` | GET | Version info |
+| `/api/chat` | POST | Chat with AI |
+| `/api/modules` | GET | Module status |
+| `/api/state` | GET | Full autonomous state |
+| `/api/events` | GET | Event log |
+| `/api/health` | GET | Health check |
 
-## Memory Layers
+## /state Response
+
+```json
+{
+  "persona": "gluttony",
+  "mood": "playful",
+  "tasks_pending": 2,
+  "tasks_total": 15,
+  "memories": 47,
+  "uptime_seconds": 3600,
+  "health": {
+    "status": "ok",
+    "events_last_hour": 12,
+    "errors": 0
+  }
+}
+```
+
+## Background Daemon Loops
+
+1. **Memory Maintenance** - Every 1 hour
+2. **Health Monitor** - Every 1 minute
+3. **Conversation Tracker** - Every 30 minutes
+4. **Reflection Trigger** - Every 10 conversations
+
+## Evolution Roadmap
 
 ```
-Short-term (Redis) ──────► Long-term (ChromaDB)
-      │                            │
-      ▼                            ▼
-  Session Context ───► Semantic Search + Summaries
+v1.0 ✅ Core AI
+v1.1 ✅ Capabilities (Voice, Vision, Tasks, Memory)
+v1.2 ✅ Integration (Commands, Modules)
+v1.3 ✅ Autonomous Behavior 🔥
+v1.4 🔜 Voice + Vision Interaction
+v1.5 🔜 Multi-agent Tools
+v2.0 🔜 GLUTTONY Entity - Persistent personality
 ```
-
-## Background Loops
-
-1. **Memory Summarization** - Every 5 minutes
-2. **Task Execution** - Every second
-3. **Health Monitoring** - Every minute
