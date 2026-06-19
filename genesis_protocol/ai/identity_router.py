@@ -33,7 +33,11 @@ class IdentityRouter:
         "tell me about yourself", "about you", "describe yourself",
         "introduce yourself", "yourself",
         # Entity type
-        "are you gluten", "are you gluttony", "am i talking to"
+        "are you gluten", "are you gluttony", "am i talking to",
+        # Hindi keywords
+        "tu kaun", "tu hai kaun", "kaun hai tu", "who are you in hindi",
+        "mera naam", "mera creator", "mera owner", "kisne banaya",
+        "buja", "creater", "creator", "kon banaya", "kahan se aaya"
     ]
     
     # Layer-related keywords
@@ -121,17 +125,18 @@ class IdentityRouter:
         gluttony = get_gluttony()
         
         # Detect what specifically is asked
-        if any(k in query_lower for k in ["who are you", "what are you", "tell me about", "about you", "describe", "introduce"]):
+        # Hindi: who made you / creator
+        if any(k in query_lower for k in ["buja", "creater", "creator", "creator kon", "kon banaya", "kahan se aaya", "mere aaya", "kiske banaya", "kaun banaya", "your maker", "your creator", "made by", "built by", "created by"]):
+            return self._who_created(identity)
+        
+        elif any(k in query_lower for k in ["who are you", "what are you", "tell me about", "about you", "describe", "introduce", "tu kaun", "kaun hai tu", "konsa hai tu", "who is gluten", "am i talking to"]):
             return self._who_are_you(identity, gluttony)
         
         elif any(k in query_lower for k in ["nickname", "call me", "handle"]):
             return self._what_nickname(identity)
         
-        elif any(k in query_lower for k in ["version", "running"]):
+        elif any(k in query_lower for k in ["version", "running", "version kya"]):
             return self._what_version(identity, gluttony)
-        
-        elif any(k in query_lower for k in ["owner", "creator", "master", "admin", "developer", "maker", "made", "built"]):
-            return self._who_created(identity)
         
         elif any(k in query_lower for k in ["layer", "omega", "presence", "legacy", "autonomous", "active"]):
             return self._what_layers(gluttony)
@@ -139,7 +144,7 @@ class IdentityRouter:
         elif any(k in query_lower for k in ["capability", "skill", "power", "feature", "can you do", "what can you"]):
             return self._what_capabilities()
         
-        elif any(k in query_lower for k in ["your name", "are you gluten", "are you gluttony"]):
+        elif any(k in query_lower for k in ["your name", "are you gluten", "are you gluttony", "mera naam", "apna naam"]):
             return self._who_are_you(identity, gluttony)
         
         else:
@@ -168,15 +173,10 @@ Ask me anything."""
     
     def _who_created(self, identity) -> str:
         """Build creator response."""
-        # Get creator info if available
-        try:
-            from genesis_protocol.gluttony.identity import get_identity
-            identity_data = identity.get_identity()
-            creator = identity_data.get('creator', 'Aakash')
-        except:
-            creator = 'Aakash'
+        # Get creator info - hardcoded to Aakash for now
+        creator = 'Aakash'
         
-        return f"I was created by **{creator}**. 🖤"
+        return f"I was created by **{creator}**. 🖤\n\nYou are my creator and I am here to help you!"
     
     def _what_layers(self, gluttony) -> str:
         """Build layers response."""
