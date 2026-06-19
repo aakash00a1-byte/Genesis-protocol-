@@ -12,14 +12,14 @@ class TestGluttonyEntity:
         from genesis_protocol.gluttony import GluttonyEntity
         g = GluttonyEntity()
         assert g.name == "GLUTTONY"
-        assert g.version == "3.0"
+        assert g.version == "OMEGA"
 
     def test_think(self):
         from genesis_protocol.gluttony import GluttonyEntity
         g = GluttonyEntity()
         result = g.think("Hello")
         assert result["entity"] == "GLUTTONY"
-        assert "layers_active" in result
+        assert "layers" in result
 
     def test_observe(self):
         from genesis_protocol.gluttony import GluttonyEntity
@@ -33,7 +33,7 @@ class TestGluttonyEntity:
         g = GluttonyEntity()
         status = g.status()
         assert "GLUTTONY" in status
-        assert "3.0" in status
+        assert "OMEGA" in status
 
 
 class TestIdentity:
