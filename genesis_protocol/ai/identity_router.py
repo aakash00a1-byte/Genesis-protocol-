@@ -2,6 +2,12 @@
 
 Intercepts identity questions and answers from entity object directly.
 Provider is BYPASSED for identity questions.
+
+Confidence System:
+- EXPLICIT: User directly stated
+- OBSERVED: Available metadata/persisted records
+- INFERRED: Derived from patterns/behavior
+- UNKNOWN: No evidence exists
 """
 
 from typing import Optional, Dict
@@ -147,38 +153,44 @@ class IdentityRouter:
         elif any(k in query_lower for k in ["test", "testing", "test cases", "test files", "kya kya test"]):
             return self._what_tests(identity)
         
-        elif any(k in query_lower for k in ["your name", "are you gluten", "are you gluttony", "mera naam", "apna naam"]):
+        # User name questions - check confidence system
+        elif any(k in query_lower for k in ["my name", "mera naam", "who am i", "what's my name", "my identity", "mera naam"]):
+            if "you" not in query_lower and "tu" not in query_lower:
+                # Asking about USER, not entity
+                return self._what_is_user_name()
+        
+        elif any(k in query_lower for k in ["your name", "are you gluten", "are you gluttony", "apna naam"]):
             return self._who_are_you(identity, gluttony)
         
         else:
             return self._who_are_you(identity, gluttony)
     
     def _who_are_you(self, identity, gluttony) -> str:
-        """Build 'who are you' response."""
+        """Build 'who are you' response with EXPLICIT confidence."""
+        # Entity identity is ALWAYS explicit (hardcoded)
         return f"""I am **{identity.name}** (nickname: **{identity.nickname}**).
 
-**Basic Info:**
+**Identity [EXPLICIT - I know this for certain]:**
 - Name: {identity.name}
 - Nickname: {identity.nickname}
 - Variant: {identity.variant}
 - Creator: {identity.creator}
 - Protocol: Genesis Protocol {identity.protocol_version}
 
-**Layers:** {len(identity.layers)} active
-**Capabilities:** {len(identity.capabilities)} features
-**Tests:** {identity.tests['total']} test files
+**System Info:**
+- Layers: {len(identity.layers)} active
+- Capabilities: {len(identity.capabilities)} features
+- Tests: {identity.tests['total']} test files
 
-I am an AI entity on the Genesis Protocol OMEGA. My purpose is to assist you while maintaining memory, learning, and continuous improvement.
-
-Ask me anything! 🖤"""
+I am an AI entity on the Genesis Protocol OMEGA. 🖤"""
     
     def _what_nickname(self, identity) -> str:
-        """Build nickname response."""
-        return f"My nickname is **{identity.nickname}**. 🖤\n\nYou can call me {identity.nickname}!"
+        """Build nickname response with EXPLICIT confidence."""
+        return f"My nickname is **{identity.nickname}** [EXPLICIT - hardcoded]. 🖤\n\nYou can call me {identity.nickname}!"
     
     def _what_version(self, identity, gluttony) -> str:
-        """Build version response."""
-        return f"""**Version Info:**
+        """Build version response with EXPLICIT confidence."""
+        return f"""**Version Info [EXPLICIT - I know this for certain]:**
 - Protocol: Genesis Protocol **{identity.protocol_version}**
 - Variant: **{identity.variant}**
 - Identity Version: {identity.get_identity().get('version', '2.0')}
@@ -186,13 +198,32 @@ Ask me anything! 🖤"""
 I am running on the OMEGA variant! 🖤"""
     
     def _who_created(self, identity) -> str:
-        """Build creator response."""
-        return f"""**Creator Info:**
+        """Build creator response with EXPLICIT confidence."""
+        return f"""**Creator Info [EXPLICIT - I know this for certain]:**
 - Creator: **{identity.creator}**
 - Entity: {identity.name}
 - Variant: {identity.variant}
 
 You created me and I am here to serve you! 🖤"""
+    
+    def _what_is_user_name(self, user_id: int = None) -> str:
+        """
+        Get user's name with proper confidence.
+        User's name may be EXPLICIT (stated), OBSERVED (metadata), 
+        INFERRED (pattern), or UNKNOWN.
+        """
+        from genesis_protocol.ai.trust_confidence import get_trust_system
+        
+        trust = get_trust_system()
+        result = trust.get_user_identity(user_id)
+        
+        if result["status"] == "unknown":
+            return result["message"]
+        
+        if result["message"]:
+            return result["message"]
+        
+        return f"Your name is {result['data']}."""
     
     def _what_tests(self, identity) -> str:
         """Build tests response."""
