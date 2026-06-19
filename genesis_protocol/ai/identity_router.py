@@ -144,6 +144,9 @@ class IdentityRouter:
         elif any(k in query_lower for k in ["capability", "skill", "power", "feature", "can you do", "what can you"]):
             return self._what_capabilities()
         
+        elif any(k in query_lower for k in ["test", "testing", "test cases", "test files", "kya kya test"]):
+            return self._what_tests(identity)
+        
         elif any(k in query_lower for k in ["your name", "are you gluten", "are you gluttony", "mera naam", "apna naam"]):
             return self._who_are_you(identity, gluttony)
         
@@ -152,45 +155,97 @@ class IdentityRouter:
     
     def _who_are_you(self, identity, gluttony) -> str:
         """Build 'who are you' response."""
-        return f"""I am {identity.name}.
+        return f"""I am **{identity.name}** (nickname: **{identity.nickname}**).
 
-**Quick Info:**
+**Basic Info:**
 - Name: {identity.name}
 - Nickname: {identity.nickname}
-- Version: {gluttony.version}
+- Variant: {identity.variant}
+- Creator: {identity.creator}
+- Protocol: Genesis Protocol {identity.protocol_version}
 
-I am an AI entity built on the Genesis Protocol. My purpose is to assist you with various tasks while maintaining memory, learning, and continuous improvement.
+**Layers:** {len(identity.layers)} active
+**Capabilities:** {len(identity.capabilities)} features
+**Tests:** {identity.tests['total']} test files
 
-Ask me anything."""
+I am an AI entity on the Genesis Protocol OMEGA. My purpose is to assist you while maintaining memory, learning, and continuous improvement.
+
+Ask me anything! 🖤"""
     
     def _what_nickname(self, identity) -> str:
         """Build nickname response."""
-        return f"My nickname is **{identity.nickname}**. 🖤"
+        return f"My nickname is **{identity.nickname}**. 🖤\n\nYou can call me {identity.nickname}!"
     
     def _what_version(self, identity, gluttony) -> str:
         """Build version response."""
-        return f"I am running **{gluttony.version}** (Genesis Protocol {identity.get_identity().get('version', '2.0')})."
+        return f"""**Version Info:**
+- Protocol: Genesis Protocol **{identity.protocol_version}**
+- Variant: **{identity.variant}**
+- Identity Version: {identity.get_identity().get('version', '2.0')}
+
+I am running on the OMEGA variant! 🖤"""
     
     def _who_created(self, identity) -> str:
         """Build creator response."""
-        # Get creator info - hardcoded to Aakash for now
-        creator = 'Aakash'
+        return f"""**Creator Info:**
+- Creator: **{identity.creator}**
+- Entity: {identity.name}
+- Variant: {identity.variant}
+
+You created me and I am here to serve you! 🖤"""
+    
+    def _what_tests(self, identity) -> str:
+        """Build tests response."""
+        tests = identity.tests
+        test_list = "\n".join([f"- {t}" for t in tests['unit'][:5]])
         
-        return f"I was created by **{creator}**. 🖤\n\nYou are my creator and I am here to help you!"
+        return f"""**Implemented Tests ({tests['total']}):**
+{test_list}
+...
+
+Status: {tests['status']}"""
+    
+    def _what_capabilities(self) -> str:
+        """Build capabilities response."""
+        caps = self._get_all_capabilities_list()
+        cap_list = "\n".join([f"- {c}" for c in caps[:10]])
+        
+        return f"""**My Capabilities:**
+{cap_list}
+...
+
+Total: {len(caps)} capabilities. Ask me what you need! 🖤"""
+    
+    def _get_all_capabilities_list(self) -> List[str]:
+        """Get all capabilities."""
+        try:
+            from genesis_protocol.omega import get_capabilities
+            cap = get_capabilities()
+            all_caps = cap.get_all_capabilities()
+            
+            caps = []
+            for cat in all_caps.get('categories', []):
+                for cap_item in cat.get('capabilities', []):
+                    caps.append(cap_item.get('name', 'unknown'))
+            return caps
+        except:
+            return [
+                "chat", "memory", "learning", "autonomous",
+                "web_navigation", "api_calls", "file_management",
+                "code_execution", "automation", "self_improvement"
+            ]
     
     def _what_layers(self, gluttony) -> str:
         """Build layers response."""
-        layers = gluttony._get_active_layers()
+        # Use identity.layers for consistent info
+        layers = identity.layers
         
-        if not layers:
-            return "I have multiple active layers including omega, legacy, and autonomous systems."
-        
-        layer_list = "\n".join([f"- {layer}" for layer in layers[:10]])
+        layer_list = "\n".join([f"- {layer}" for layer in layers])
         
         return f"""**Active Layers ({len(layers)}):**
 {layer_list}
 
-These layers handle memory, learning, autonomous decisions, and continuous improvement."""
+These layers handle memory, learning, autonomous decisions, and continuous improvement. 🖤"""
     
     def _what_capabilities(self) -> str:
         """Build capabilities response."""
