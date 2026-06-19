@@ -30,6 +30,7 @@ from genesis_protocol.ai.tool_system import get_tool_system, ToolSystem
 from genesis_protocol.memory.unified_memory import get_unified_memory, UnifiedMemory
 from genesis_protocol.ai.provider_chain import get_provider_chain, AICallResult
 from genesis_protocol.ai.providers.base_provider import AIResponse
+from genesis_protocol.ai.identity_router import route_identity
 from genesis_protocol.utils.logger import get_logger
 
 logger = get_logger("ai.agent")
@@ -124,6 +125,23 @@ class GenesisAgent:
         tools_used = []
         
         try:
+            # IDENTITY BYPASS: Check if identity question FIRST
+            identity_result = route_identity(query)
+            if identity_result and identity_result.get('is_identity'):
+                # Return identity response WITHOUT going to provider
+                return AgentResponse(
+                    success=True,
+                    response=identity_result['response'],
+                    mode=self.mode_manager.current_mode.value,
+                    model_used='identity_router',
+                    provider_used='entity_object',
+                    quality_score=1.0,
+                    planning_active=False,
+                    tools_used=[],
+                    memory_used=False,
+                    execution_time_ms=int((datetime.utcnow() - start_time).total_seconds() * 1000)
+                )
+            
             # Auto-switch or force mode
             if force_mode == "autonomous":
                 self.mode_manager.enable_autonomous()
