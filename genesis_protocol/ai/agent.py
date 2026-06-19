@@ -31,6 +31,7 @@ from genesis_protocol.memory.unified_memory import get_unified_memory, UnifiedMe
 from genesis_protocol.ai.provider_chain import get_provider_chain, AICallResult
 from genesis_protocol.ai.providers.base_provider import AIResponse
 from genesis_protocol.ai.identity_router import route_identity
+from genesis_protocol.ai.failure_communicator import FailureCommunicator, get_failure_communicator, FailureType
 from genesis_protocol.utils.logger import get_logger
 
 logger = get_logger("ai.agent")
@@ -182,7 +183,14 @@ class GenesisAgent:
             if raw_response and raw_response.lower() not in ('none', 'null', ''):
                 response_content = raw_response
             else:
-                response_content = "Sorry, I couldn't generate a response. Please try again."
+                # Use failure communicator instead of generic "Sorry..."
+                fc = get_failure_communicator()
+                response_content = fc.communicate(
+                    failure_type=FailureType.PROVIDER_EMPTY,
+                    reason="Provider returned empty or invalid response",
+                    attempts=["primary_provider"],
+                    query=query
+                )
             
             # Log for debugging
             self.logger.info(f"Agent response: provider={response.provider_used}, model={response.model_used}, content_len={len(response_content) if response_content else 0}")
@@ -274,9 +282,16 @@ class GenesisAgent:
                 if fallback_result.success:
                     result = fallback_result
                 else:
-                    # Still no response - create safe fallback
-                    result.response.content = "I'm having trouble generating a response. Please try again."
-                    self.logger.warning("Provider returned empty content, using fallback message")
+                    # Still no response - use failure communicator
+                    fc = get_failure_communicator()
+                    fallback_message = fc.communicate(
+                        failure_type=FailureType.PROVIDER_EMPTY,
+                        reason="Both primary and fallback providers returned empty content",
+                        attempts=["primary_provider", "fallback_provider"],
+                        query=query
+                    )
+                    result.response.content = fallback_message
+                    self.logger.warning("Provider returned empty content, using failure communicator")
         
         return result
     
@@ -328,6 +343,14 @@ class GenesisAgent:
             return result
         except Exception as e:
             self.logger.error(f"Autonomous processing failed: {e}")
+            # Use failure communicator for graceful fallback
+            fc = get_failure_communicator()
+            fc.communicate(
+                failure_type=FailureType.AUTONOMOUS_FAILED,
+                reason=str(e),
+                attempts=["autonomous_mode"],
+                query=query
+            )
             # Fallback to normal mode
             return await self._process_normal(query, context)
     
