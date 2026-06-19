@@ -195,6 +195,10 @@ class AutonomousModeManager:
         """Check if currently in normal mode."""
         return self._current_mode == OperationMode.NORMAL
     
+    def reset_to_normal(self):
+        """Reset mode to NORMAL - called at start of each request."""
+        self._current_mode = OperationMode.NORMAL
+    
     def get_capabilities(self) -> Dict[str, bool]:
         """Get current capabilities based on mode."""
         config = self.config

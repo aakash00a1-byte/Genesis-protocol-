@@ -142,6 +142,10 @@ class GenesisAgent:
                     execution_time_ms=int((datetime.utcnow() - start_time).total_seconds() * 1000)
                 )
             
+            # FIX: Reset mode to NORMAL at start of each request
+            # This prevents mode from persisting across requests
+            self.mode_manager.reset_to_normal()
+            
             # Auto-switch or force mode
             if force_mode == "autonomous":
                 self.mode_manager.enable_autonomous()

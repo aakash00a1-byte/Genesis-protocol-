@@ -382,10 +382,17 @@ def api_chat():
             )
             return result
         
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        # FIX: Reuse existing event loop if available
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
         result = loop.run_until_complete(get_response())
-        loop.close()
         
         # Record latency
         latency_ms = (time.time() - start_time) * 1000
