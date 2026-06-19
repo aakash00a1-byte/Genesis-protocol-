@@ -153,6 +153,14 @@ class GluttonyEntity:
         layers = self._get_layers()
         return f"{self.name} v{self.version} - {len(layers)} layers"
     
+    def _get_active_layers(self) -> Dict:
+        """Get active layers with count (for API compatibility)."""
+        layers = self._get_layers()
+        return {
+            "count": len(layers),
+            "layers": [layer.split("-")[-1] for layer in layers]
+        }
+    
     def describe_self(self) -> str:
         """Full self-description."""
         if self.self_knowledge:

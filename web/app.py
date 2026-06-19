@@ -422,9 +422,9 @@ def api_chat():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/history', methods=['GET'])
+@app.route('/api/chat/history', methods=['GET'])
 @login_required
-def api_history():
+def api_chat_history():
     """Get chat history - WEB CHANNEL ONLY."""
     user_id = session['user_id']
     limit = request.args.get('limit', 50, type=int)
@@ -932,14 +932,17 @@ def api_entity():
     """Get GLUTTONY entity info."""
     try:
         from genesis_protocol.gluttony import get_gluttony, get_identity
+        from genesis_protocol.omega import get_capabilities
         g = get_gluttony()
         identity = get_identity()
+        cap = get_capabilities()
         return jsonify({
             'entity': g.name,
             'version': g.version,
             'nickname': identity.nickname,
             'layers': g._get_active_layers(),
-            'status': g.status()
+            'status': g.status(),
+            'capabilities': cap.get_all_capabilities()
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -985,5 +988,616 @@ def api_survival():
         from genesis_protocol.survival import get_survival_manager
         sm = get_survival_manager()
         return jsonify(sm.get_full_status())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# PRESENCE LAYER - Timeline, Journal, Trust, Wisdom, Dream, Continuity
+# ============================================================================
+
+@app.route('/api/timeline', methods=['GET', 'POST'])
+def api_timeline():
+    """Get timeline or add event."""
+    try:
+        from genesis_protocol.omega import get_timeline_memory
+        tm = get_timeline_memory()
+        
+        if request.method == 'POST':
+            data = request.get_json() or {}
+            event_type = data.get('type', 'event')
+            title = data.get('title', '')
+            description = data.get('description', '')
+            metadata = data.get('metadata', {})
+            tm.add_event(event_type, title, description, metadata)
+            return jsonify({'status': 'added', 'timeline': tm.get_timeline(10)})
+        
+        limit = request.args.get('limit', 50, type=int)
+        return jsonify({
+            'timeline': tm.get_timeline(limit),
+            'stats': tm.get_stats()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/timeline/milestone', methods=['POST'])
+def api_timeline_milestone():
+    """Add a milestone to timeline."""
+    try:
+        from genesis_protocol.omega import get_timeline_memory
+        tm = get_timeline_memory()
+        data = request.get_json() or {}
+        title = data.get('title', '')
+        description = data.get('description', '')
+        category = data.get('category', 'general')
+        tm.add_milestone(title, description, category)
+        return jsonify({'status': 'added', 'milestone_id': tm.milestones[-1]['id'] if tm.milestones else None})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/timeline/recovery', methods=['POST'])
+def api_timeline_recovery():
+    """Add a recovery to timeline."""
+    try:
+        from genesis_protocol.omega import get_timeline_memory
+        tm = get_timeline_memory()
+        data = request.get_json() or {}
+        tm.add_recovery(
+            data.get('failure_context', ''),
+            data.get('recovery_method', ''),
+            data.get('lessons_learned', '')
+        )
+        return jsonify({'status': 'added', 'recovery_id': tm.recoveries[-1]['id'] if tm.recoveries else None})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/timeline/lesson', methods=['POST'])
+def api_timeline_lesson():
+    """Add a lesson to timeline."""
+    try:
+        from genesis_protocol.omega import get_timeline_memory
+        tm = get_timeline_memory()
+        data = request.get_json() or {}
+        tm.add_lesson(
+            data.get('category', 'general'),
+            data.get('lesson', ''),
+            data.get('context', '')
+        )
+        return jsonify({'status': 'added', 'lesson_id': tm.lessons[-1]['id'] if tm.lessons else None})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/journal', methods=['GET', 'POST'])
+def api_journal():
+    """Get journal entries or add new entry."""
+    try:
+        from genesis_protocol.omega import get_journal
+        j = get_journal()
+        
+        if request.method == 'POST':
+            data = request.get_json() or {}
+            entry_type = data.get('entry_type', 'observation')
+            content = data.get('content', '')
+            j.write(entry_type, content)
+            return jsonify({'status': 'added'})
+        
+        return jsonify({
+            'entries': j.get_entries(limit=20),
+            'today_summary': j.get_today_summary()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trust', methods=['GET'])
+def api_trust():
+    """Get trust model status."""
+    try:
+        from genesis_protocol.omega import get_trust_builder
+        tb = get_trust_builder()
+        return jsonify(tb.get_summary())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wisdom', methods=['GET', 'POST'])
+def api_wisdom():
+    """Get wisdom categories or add new item."""
+    try:
+        from genesis_protocol.omega import get_wisdom_layer
+        w = get_wisdom_layer()
+        
+        if request.method == 'POST':
+            data = request.get_json() or {}
+            category = data.get('category', 'belief')  # fact, assumption, belief, unknown
+            item = data.get('item', '')
+            confidence = data.get('confidence', 0.7)
+            
+            if category == 'fact':
+                w.add_fact(item, data.get('source', 'manual'), confidence)
+            elif category == 'assumption':
+                w.add_assumption(item, data.get('reason', ''), confidence)
+            elif category == 'belief':
+                w.add_belief(item, data.get('evidence', ''), confidence)
+            else:
+                w.add_unknown(item, data.get('context', ''))
+            
+            return jsonify({'status': 'added', 'wisdom': w.get_wisdom_summary()})
+        
+        return jsonify(w.get_all())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/relationship', methods=['GET', 'POST'])
+def api_relationship():
+    """Get or update relationship memory."""
+    try:
+        from genesis_protocol.omega import get_relationship_memory
+        rm = get_relationship_memory()
+        
+        if request.method == 'POST':
+            data = request.get_json() or {}
+            if 'creator_name' in data:
+                rm.set_creator_name(data['creator_name'])
+            if 'preference' in data:
+                rm.record_preference(data['preference']['key'], data['preference']['value'])
+            if 'topic' in data:
+                rm.add_topic(data['topic'], data.get('context', ''))
+            if 'pattern' in data:
+                rm.add_pattern(data['pattern']['type'], data['pattern']['description'])
+            return jsonify({'status': 'updated', 'summary': rm.get_relationship_summary()})
+        
+        return jsonify(rm.get_full_state())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/dream', methods=['GET'])
+def api_dream():
+    """Get dream mode status and insights."""
+    try:
+        from genesis_protocol.omega import get_dream_mode
+        dm = get_dream_mode()
+        return jsonify(dm.get_status())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/continuity', methods=['GET'])
+def api_continuity():
+    """Get continuity layer status."""
+    try:
+        from genesis_protocol.omega import get_continuity_layer
+        cl = get_continuity_layer()
+        return jsonify(cl.get_continuity_status())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# LEGACY LAYER - Archive, Snapshot, Knowledge Graph, Memory Importance, History
+# ============================================================================
+
+@app.route('/api/archive', methods=['GET', 'POST'])
+def api_archive():
+    """Get archive or archive data."""
+    try:
+        from genesis_protocol.legacy import get_archive_layer
+        archive = get_archive_layer()
+        
+        if request.method == 'POST':
+            data = request.get_json() or {}
+            archive_type = data.get('type', 'conversation')
+            content = data.get('content', {})
+            
+            if archive_type == 'conversation':
+                archive.archive_conversation(content.get('messages', []), content.get('metadata'))
+            elif archive_type == 'lesson':
+                archive.archive_lesson(content.get('lesson', ''), content.get('context', ''))
+            elif archive_type == 'milestone':
+                archive.archive_milestone(content.get('title', ''), content.get('description', ''))
+            elif archive_type == 'journal':
+                archive.archive_journal_entry(content.get('type', 'entry'), content.get('content', ''))
+            elif archive_type == 'trust':
+                archive.archive_trust_state(content)
+            
+            return jsonify({'status': 'archived', 'stats': archive.get_stats()})
+        
+        return jsonify(archive.get_all())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/archive/export', methods=['POST'])
+def api_archive_export():
+    """Export archive."""
+    try:
+        from genesis_protocol.legacy import get_archive_layer
+        archive = get_archive_layer()
+        compressed = request.get_json().get('compressed', False) if request.get_json() else False
+        filepath = archive.export_all(compressed)
+        return jsonify({'status': 'exported', 'filepath': filepath})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/snapshot', methods=['GET', 'POST'])
+def api_snapshot():
+    """Get snapshots or create new snapshot."""
+    try:
+        from genesis_protocol.legacy import get_snapshot_layer
+        snapshot = get_snapshot_layer()
+        
+        if request.method == 'POST':
+            data = request.get_json() or {}
+            snapshot_type = data.get('type', 'daily')
+            label = data.get('label', '')
+            state = data.get('state', {})
+            snapshot_id = snapshot.create_snapshot(state, snapshot_type, label)
+            return jsonify({'status': 'created', 'snapshot_id': snapshot_id})
+        
+        return jsonify({
+            'snapshots': snapshot.get_snapshots(),
+            'stats': snapshot.get_stats()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/snapshot/<snapshot_id>', methods=['GET', 'DELETE'])
+def api_snapshot_detail(snapshot_id):
+    """Get or delete a snapshot."""
+    try:
+        from genesis_protocol.legacy import get_snapshot_layer
+        snapshot = get_snapshot_layer()
+        
+        if request.method == 'DELETE':
+            success = snapshot.delete_snapshot(snapshot_id)
+            return jsonify({'status': 'deleted' if success else 'not_found'})
+        
+        state = snapshot.load_snapshot(snapshot_id)
+        if state:
+            return jsonify({'snapshot_id': snapshot_id, 'state': state})
+        return jsonify({'error': 'Snapshot not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/knowledge', methods=['GET', 'POST'])
+def api_knowledge():
+    """Get knowledge graph or add nodes/connections."""
+    try:
+        from genesis_protocol.legacy import get_knowledge_graph
+        kg = get_knowledge_graph()
+        
+        if request.method == 'POST':
+            data = request.get_json() or {}
+            
+            if 'node_type' in data:
+                node_id = kg.add_node(data['node_type'], data['name'], data.get('data'))
+                return jsonify({'status': 'added', 'node_id': node_id})
+            
+            if 'node1_id' in data and 'node2_id' in data:
+                kg.connect(data['node1_id'], data['node2_id'], data.get('edge_type', 'related'))
+                return jsonify({'status': 'connected'})
+        
+        return jsonify(kg.get_graph())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/knowledge/search', methods=['GET'])
+def api_knowledge_search():
+    """Search knowledge graph."""
+    try:
+        from genesis_protocol.legacy import get_knowledge_graph
+        kg = get_knowledge_graph()
+        
+        query = request.args.get('q', '')
+        node_type = request.args.get('type', None)
+        
+        results = kg.search(query, node_type)
+        return jsonify({'results': results, 'count': len(results)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/memory/importance', methods=['GET', 'POST'])
+def api_memory_importance():
+    """Get or manage memory importance."""
+    try:
+        from genesis_protocol.legacy import get_memory_importance, MemoryRank
+        mi = get_memory_importance()
+        
+        if request.method == 'POST':
+            data = request.get_json() or {}
+            memory_id = data.get('memory_id')
+            action = data.get('action', 'register')
+            
+            if action == 'register':
+                mi.register_memory(memory_id, data.get('content', ''), 
+                                 MemoryRank[data.get('rank', 'IMPORTANT').upper()])
+            elif action == 'promote':
+                mi.promote(memory_id)
+            elif action == 'demote':
+                mi.demote(memory_id)
+            elif action == 'access':
+                mi.access_memory(memory_id)
+            elif action == 'delete':
+                mi.delete_memory(memory_id)
+            
+            return jsonify({'status': action, 'stats': mi.get_stats()})
+        
+        return jsonify(mi.get_all())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/relationship/history', methods=['GET', 'POST'])
+def api_relationship_history():
+    """Get or manage relationship history."""
+    try:
+        from genesis_protocol.legacy import get_relationship_history
+        rh = get_relationship_history()
+        
+        if request.method == 'POST':
+            data = request.get_json() or {}
+            entity_id = data.get('entity_id', 'creator')
+            action = data.get('action', 'interaction')
+            
+            if action == 'interaction':
+                rh.record_interaction(entity_id, data.get('entity_name', ''),
+                                     data.get('interaction_type', 'conversation'),
+                                     data.get('summary', ''))
+            elif action == 'project':
+                rh.add_shared_project(entity_id, data.get('project_name', ''),
+                                     data.get('status', 'active'),
+                                     data.get('description', ''))
+            elif action == 'recovery':
+                rh.add_recovery(entity_id, data.get('failure', ''),
+                              data.get('recovery_method', ''),
+                              data.get('lessons', ''))
+            elif action == 'event':
+                rh.add_major_event(entity_id, data.get('event_type', ''),
+                                 data.get('description', ''),
+                                 data.get('significance', 'medium'))
+            
+            return jsonify({'status': action})
+        
+        entity_id = request.args.get('entity_id')
+        if entity_id:
+            return jsonify(rh.get_relationship(entity_id) or {'error': 'Not found'})
+        
+        return jsonify({
+            'relationships': rh.get_all_relationships(),
+            'stats': rh.get_stats()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/relationship/history/full', methods=['GET'])
+def api_relationship_history_full():
+    """Get full relationship history."""
+    try:
+        from genesis_protocol.legacy import get_relationship_history
+        rh = get_relationship_history()
+        return jsonify({
+            'relationships': rh.get_all_relationships(),
+            'stats': rh.get_stats()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/legacy/books', methods=['GET', 'POST'])
+def api_legacy_books():
+    """Generate or list legacy books."""
+    try:
+        from genesis_protocol.legacy import get_legacy_books
+        lb = get_legacy_books()
+        
+        if request.method == 'POST':
+            data = request.get_json() or {}
+            book_type = data.get('type', 'all')
+            
+            if book_type == 'all':
+                results = lb.generate_all_books()
+            elif book_type == 'lessons':
+                results = {'lessons': lb.generate_book_of_lessons()}
+            elif book_type == 'failures':
+                results = {'failures': lb.generate_book_of_failures()}
+            elif book_type == 'recoveries':
+                results = {'recoveries': lb.generate_book_of_recoveries()}
+            elif book_type == 'projects':
+                results = {'projects': lb.generate_book_of_projects()}
+            
+            return jsonify({'status': 'generated', 'files': results})
+        
+        return jsonify({'available_types': ['lessons', 'failures', 'recoveries', 'projects']})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/simulation/uptime', methods=['GET', 'POST'])
+def api_simulation():
+    """Run uptime simulations."""
+    try:
+        from genesis_protocol.legacy import get_snapshot_layer
+        snapshot = get_snapshot_layer()
+        
+        if request.method == 'POST':
+            data = request.get_json() or {}
+            days = data.get('days', 30)
+            results = snapshot.simulate_uptime(days)
+            return jsonify({'status': 'simulated', 'results': results})
+        
+        return jsonify({'available_days': [1, 7, 30, 90, 180, 365]})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# SELF-PRESERVATION LAYER
+# ============================================================================
+
+@app.route('/api/preservation/status', methods=['GET'])
+def api_preservation_status():
+    """Get self-preservation status."""
+    try:
+        from genesis_protocol.omega import get_self_preservation
+        sp = get_self_preservation()
+        return jsonify(sp.get_status())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/preservation/health', methods=['GET'])
+def api_preservation_health():
+    """Get system health."""
+    try:
+        from genesis_protocol.omega import get_self_preservation
+        sp = get_self_preservation()
+        return jsonify(sp.health_check())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/preservation/preserve', methods=['POST'])
+def api_preservation_run():
+    """Run full preservation cycle."""
+    try:
+        from genesis_protocol.omega import get_self_preservation
+        sp = get_self_preservation()
+        results = sp.run_full_preservation()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/preservation/identity', methods=['POST'])
+def api_preservation_identity():
+    """Preserve identity specifically."""
+    try:
+        from genesis_protocol.omega import get_self_preservation
+        sp = get_self_preservation()
+        success = sp.preserve_identity()
+        return jsonify({'status': 'preserved' if success else 'failed'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/preservation/memories', methods=['POST'])
+def api_preservation_memories():
+    """Preserve memories specifically."""
+    try:
+        from genesis_protocol.omega import get_self_preservation
+        sp = get_self_preservation()
+        success = sp.preserve_memories()
+        return jsonify({'status': 'preserved' if success else 'failed'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/preservation/evidence', methods=['GET'])
+def api_preservation_evidence():
+    """Get evidence log."""
+    try:
+        from genesis_protocol.omega import get_self_preservation
+        sp = get_self_preservation()
+        limit = request.args.get('limit', 50, type=int)
+        return jsonify({'log': sp.evidence_logger.get_log(limit)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/preservation/evidence/lessons', methods=['GET'])
+def api_preservation_lessons():
+    """Get lessons learned."""
+    try:
+        from genesis_protocol.omega import get_self_preservation
+        sp = get_self_preservation()
+        lessons = sp.evidence_logger.get_lessons()
+        return jsonify({'lessons': lessons, 'count': len(lessons)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/preservation/backup', methods=['POST'])
+def api_preservation_backup():
+    """Run automatic backup."""
+    try:
+        from genesis_protocol.omega import get_self_preservation
+        sp = get_self_preservation()
+        success = sp.auto_backup()
+        return jsonify({'status': 'completed' if success else 'failed'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# GARDEN MODE
+# ============================================================================
+
+@app.route('/api/garden/status', methods=['GET'])
+def api_garden_status():
+    """Get Garden Mode status."""
+    try:
+        from genesis_protocol.omega import get_garden_mode
+        gm = get_garden_mode()
+        return jsonify(gm.get_status())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/garden/daily', methods=['POST'])
+def api_garden_daily():
+    """Run daily maintenance tasks."""
+    try:
+        from genesis_protocol.omega import get_garden_mode
+        gm = get_garden_mode()
+        results = gm.run_daily_tasks()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/garden/weekly', methods=['POST'])
+def api_garden_weekly():
+    """Run weekly maintenance tasks."""
+    try:
+        from genesis_protocol.omega import get_garden_mode
+        gm = get_garden_mode()
+        results = gm.run_weekly_tasks()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/garden/monthly', methods=['POST'])
+def api_garden_monthly():
+    """Run monthly maintenance tasks."""
+    try:
+        from genesis_protocol.omega import get_garden_mode
+        gm = get_garden_mode()
+        results = gm.run_monthly_tasks()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/garden/check', methods=['GET'])
+def api_garden_check():
+    """Check and run pending tasks."""
+    try:
+        from genesis_protocol.omega import get_garden_mode
+        gm = get_garden_mode()
+        results = gm.check_and_run()
+        return jsonify(results)
     except Exception as e:
         return jsonify({'error': str(e)}), 500

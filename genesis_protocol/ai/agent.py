@@ -29,6 +29,7 @@ from genesis_protocol.ai.autonomous_mode import (
 from genesis_protocol.ai.tool_system import get_tool_system, ToolSystem
 from genesis_protocol.memory.unified_memory import get_unified_memory, UnifiedMemory
 from genesis_protocol.ai.provider_chain import get_provider_chain, AICallResult
+from genesis_protocol.ai.providers.base_provider import AIResponse
 from genesis_protocol.utils.logger import get_logger
 
 logger = get_logger("ai.agent")
@@ -150,7 +151,11 @@ class GenesisAgent:
             
             # Evaluate quality
             # Handle both string and AIResponse objects
-            raw_response = response.response.content if hasattr(response.response, 'content') else str(response.response)
+            if response.response and hasattr(response.response, 'content'):
+                raw_response = response.response.content
+            else:
+                raw_response = str(response.response) if response.response else ""
+            
             # Fix: Check for None string and invalid responses
             if raw_response and raw_response.lower() not in ('none', 'null', ''):
                 response_content = raw_response
@@ -169,7 +174,11 @@ class GenesisAgent:
             # Store interaction in memory
             if chat_id:
                 # Extract content from response object if needed
-                bot_response = response.response.content if hasattr(response.response, 'content') else str(response.response)
+                if response.response and hasattr(response.response, 'content'):
+                    bot_response = response.response.content
+                else:
+                    bot_response = str(response.response) if response.response else ""
+                
                 # Fix: Check for None string before storing
                 if bot_response and bot_response.lower() in ('none', 'null', ''):
                     bot_response = response_content  # Use the already fixed response_content
@@ -222,30 +231,79 @@ class GenesisAgent:
             bypass_scoring=False
         )
         
-        if result.success and result.response:
-            # Fix: Check for None content before formatting
-            if result.response.content:
-                result.response.content = self._format_response(result.response.content)
+        # FIX: If provider returned None content, create fallback response
+        if result.success:
+            if not result.response:
+                # Provider returned success but no response object
+                result.response = AIResponse(
+                    content="Response unavailable",
+                    provider=result.provider_used or "unknown",
+                    model=result.model_used or "unknown",
+                    tokens_used=0,
+                    latency_ms=0
+                )
+            elif not result.response.content or result.response.content.lower() in ('none', 'null', ''):
+                # Response has no content - try fallback with direct call
+                fallback_result = await self._fallback_direct_call(messages, query)
+                if fallback_result.success:
+                    result = fallback_result
+                else:
+                    # Still no response - create safe fallback
+                    result.response.content = "I'm having trouble generating a response. Please try again."
+                    self.logger.warning("Provider returned empty content, using fallback message")
         
         return result
+    
+    async def _fallback_direct_call(self, messages: List[Dict], query: str) -> AICallResult:
+        """Direct fallback call bypassing scoring."""
+        try:
+            # Try groq directly as fallback
+            from genesis_protocol.ai.providers import GroqProvider, AIRequest, AIResponse
+            
+            groq = GroqProvider()
+            if not groq.is_configured():
+                return AICallResult(success=False, error="No fallback provider configured")
+            
+            request = AIRequest(
+                messages=messages,
+                model=groq.get_default_model(),
+                temperature=0.7,
+                max_tokens=1000
+            )
+            
+            response = await groq.generate(request)
+            
+            return AICallResult(
+                success=True,
+                response=response,
+                provider_used="groq",
+                model_used=response.model
+            )
+        except Exception as e:
+            self.logger.error(f"Fallback call failed: {e}")
+            return AICallResult(success=False, error=str(e))
     
     async def _process_autonomous(self, query: str, context: str,
                                   chat_id: int, user_id: int) -> AICallResult:
         """Process in AUTONOMOUS mode - full agent behavior."""
-        # Check for tool usage first (Tool-First Intelligence)
-        tools_needed = self._detect_tool_needs(query)
-        
-        if tools_needed:
-            # Use tools first
-            tool_results = await self._execute_tools(tools_needed, query)
-            context = f"{context}\n\nTool results:\n{tool_results}"
-        
-        # For now, use normal processing with enhanced context
-        # The execution loop will be enhanced in future iterations
-        result = await self._process_normal(query, context)
-        result.model_used = f"[AUTONOMOUS] {result.model_used}"
-        
-        return result
+        try:
+            # Check for tool usage first (Tool-First Intelligence)
+            tools_needed = self._detect_tool_needs(query)
+            
+            if tools_needed:
+                # Use tools first
+                tool_results = await self._execute_tools(tools_needed, query)
+                context = f"{context}\n\nTool results:\n{tool_results}"
+            
+            # Use normal processing with enhanced context
+            result = await self._process_normal(query, context)
+            result.model_used = f"[AUTONOMOUS] {result.model_used}"
+            
+            return result
+        except Exception as e:
+            self.logger.error(f"Autonomous processing failed: {e}")
+            # Fallback to normal mode
+            return await self._process_normal(query, context)
     
     def _detect_tool_needs(self, query: str) -> List[str]:
         """Detect which tools are needed for the query."""
