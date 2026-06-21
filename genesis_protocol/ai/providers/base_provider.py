@@ -28,7 +28,7 @@ class AIRequest:
     messages: List[Dict[str, str]]
     model: str
     temperature: float = 0.7
-    max_tokens: int = 1000
+    max_tokens: int = 4000
     stream: bool = False
     metadata: Dict[str, Any] = field(default_factory=dict)
 

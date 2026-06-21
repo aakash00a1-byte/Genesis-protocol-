@@ -30,7 +30,7 @@ class ShortTermMemory:
     """Redis-based short-term memory (last 10 messages)."""
     
     KEY_PREFIX = "genesis:memory:short:"
-    MAX_MESSAGES = 10
+    MAX_MESSAGES = 20
     
     def __init__(self):
         """Initialize short-term memory."""
@@ -287,7 +287,7 @@ class UnifiedMemory:
             for msg in recent:
                 role = msg.get("role", "user")
                 content = msg.get("content", "")
-                context_parts.append(f"- {role}: {content[:200]}")
+                context_parts.append(f"- {role}: {content}")
         
         # Get relevant long-term memories if query provided
         if query:

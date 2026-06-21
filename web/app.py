@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import logging
+import traceback
 import time
 import threading
 from datetime import datetime, timedelta
@@ -377,8 +378,8 @@ def api_chat():
                 message, 
                 chat_id=user_id, 
                 user_id=user_id,
-                provider=provider,
-                model=model
+                force_provider=provider,
+                model_name=model
             )
             return result
         
@@ -425,8 +426,8 @@ def api_chat():
         
     except Exception as e:
         increment_metric('error_count')
-        logger.error(f"Chat error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Chat error: {e} - {traceback.format_exc()}")
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/chat/history', methods=['GET'])
@@ -952,7 +953,7 @@ def api_entity():
             'capabilities': cap.get_all_capabilities()
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/state', methods=['GET'])
@@ -963,7 +964,7 @@ def api_state():
         g = get_gluttony()
         return jsonify(g.get_state())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/proposals', methods=['GET'])
@@ -974,7 +975,7 @@ def api_proposals():
         pm = get_proposal_manager()
         return jsonify(pm.get_history())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/lessons', methods=['GET'])
@@ -996,7 +997,7 @@ def api_survival():
         sm = get_survival_manager()
         return jsonify(sm.get_full_status())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 # ============================================================================
@@ -1025,7 +1026,7 @@ def api_timeline():
             'stats': tm.get_stats()
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/timeline/milestone', methods=['POST'])
@@ -1041,7 +1042,7 @@ def api_timeline_milestone():
         tm.add_milestone(title, description, category)
         return jsonify({'status': 'added', 'milestone_id': tm.milestones[-1]['id'] if tm.milestones else None})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/timeline/recovery', methods=['POST'])
@@ -1058,7 +1059,7 @@ def api_timeline_recovery():
         )
         return jsonify({'status': 'added', 'recovery_id': tm.recoveries[-1]['id'] if tm.recoveries else None})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/timeline/lesson', methods=['POST'])
@@ -1075,7 +1076,7 @@ def api_timeline_lesson():
         )
         return jsonify({'status': 'added', 'lesson_id': tm.lessons[-1]['id'] if tm.lessons else None})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/journal', methods=['GET', 'POST'])
@@ -1097,7 +1098,7 @@ def api_journal():
             'today_summary': j.get_today_summary()
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/trust', methods=['GET'])
@@ -1108,7 +1109,7 @@ def api_trust():
         tb = get_trust_builder()
         return jsonify(tb.get_summary())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/wisdom', methods=['GET', 'POST'])
@@ -1137,7 +1138,7 @@ def api_wisdom():
         
         return jsonify(w.get_all())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/relationship', methods=['GET', 'POST'])
@@ -1161,7 +1162,7 @@ def api_relationship():
         
         return jsonify(rm.get_full_state())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/dream', methods=['GET'])
@@ -1172,7 +1173,7 @@ def api_dream():
         dm = get_dream_mode()
         return jsonify(dm.get_status())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/continuity', methods=['GET'])
@@ -1183,7 +1184,7 @@ def api_continuity():
         cl = get_continuity_layer()
         return jsonify(cl.get_continuity_status())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 # ============================================================================
@@ -1217,7 +1218,7 @@ def api_archive():
         
         return jsonify(archive.get_all())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/archive/export', methods=['POST'])
@@ -1230,7 +1231,7 @@ def api_archive_export():
         filepath = archive.export_all(compressed)
         return jsonify({'status': 'exported', 'filepath': filepath})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/snapshot', methods=['GET', 'POST'])
@@ -1253,7 +1254,7 @@ def api_snapshot():
             'stats': snapshot.get_stats()
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/snapshot/<snapshot_id>', methods=['GET', 'DELETE'])
@@ -1272,7 +1273,7 @@ def api_snapshot_detail(snapshot_id):
             return jsonify({'snapshot_id': snapshot_id, 'state': state})
         return jsonify({'error': 'Snapshot not found'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/knowledge', methods=['GET', 'POST'])
@@ -1295,7 +1296,7 @@ def api_knowledge():
         
         return jsonify(kg.get_graph())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/knowledge/search', methods=['GET'])
@@ -1311,7 +1312,7 @@ def api_knowledge_search():
         results = kg.search(query, node_type)
         return jsonify({'results': results, 'count': len(results)})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/memory/importance', methods=['GET', 'POST'])
@@ -1342,7 +1343,7 @@ def api_memory_importance():
         
         return jsonify(mi.get_all())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/relationship/history', methods=['GET', 'POST'])
@@ -1385,7 +1386,7 @@ def api_relationship_history():
             'stats': rh.get_stats()
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/relationship/history/full', methods=['GET'])
@@ -1399,7 +1400,7 @@ def api_relationship_history_full():
             'stats': rh.get_stats()
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/legacy/books', methods=['GET', 'POST'])
@@ -1428,7 +1429,7 @@ def api_legacy_books():
         
         return jsonify({'available_types': ['lessons', 'failures', 'recoveries', 'projects']})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/simulation/uptime', methods=['GET', 'POST'])
@@ -1446,7 +1447,7 @@ def api_simulation():
         
         return jsonify({'available_days': [1, 7, 30, 90, 180, 365]})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 # ============================================================================
@@ -1461,7 +1462,7 @@ def api_preservation_status():
         sp = get_self_preservation()
         return jsonify(sp.get_status())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/preservation/health', methods=['GET'])
@@ -1472,7 +1473,7 @@ def api_preservation_health():
         sp = get_self_preservation()
         return jsonify(sp.health_check())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/preservation/preserve', methods=['POST'])
@@ -1484,7 +1485,7 @@ def api_preservation_run():
         results = sp.run_full_preservation()
         return jsonify(results)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/preservation/identity', methods=['POST'])
@@ -1496,7 +1497,7 @@ def api_preservation_identity():
         success = sp.preserve_identity()
         return jsonify({'status': 'preserved' if success else 'failed'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/preservation/memories', methods=['POST'])
@@ -1508,7 +1509,7 @@ def api_preservation_memories():
         success = sp.preserve_memories()
         return jsonify({'status': 'preserved' if success else 'failed'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/preservation/evidence', methods=['GET'])
@@ -1520,7 +1521,7 @@ def api_preservation_evidence():
         limit = request.args.get('limit', 50, type=int)
         return jsonify({'log': sp.evidence_logger.get_log(limit)})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/preservation/evidence/lessons', methods=['GET'])
@@ -1532,7 +1533,7 @@ def api_preservation_lessons():
         lessons = sp.evidence_logger.get_lessons()
         return jsonify({'lessons': lessons, 'count': len(lessons)})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/preservation/backup', methods=['POST'])
@@ -1544,7 +1545,7 @@ def api_preservation_backup():
         success = sp.auto_backup()
         return jsonify({'status': 'completed' if success else 'failed'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 # ============================================================================
@@ -1559,7 +1560,7 @@ def api_garden_status():
         gm = get_garden_mode()
         return jsonify(gm.get_status())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/garden/daily', methods=['POST'])
@@ -1571,7 +1572,7 @@ def api_garden_daily():
         results = gm.run_daily_tasks()
         return jsonify(results)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/garden/weekly', methods=['POST'])
@@ -1583,7 +1584,7 @@ def api_garden_weekly():
         results = gm.run_weekly_tasks()
         return jsonify(results)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/garden/monthly', methods=['POST'])
@@ -1595,7 +1596,7 @@ def api_garden_monthly():
         results = gm.run_monthly_tasks()
         return jsonify(results)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/api/garden/check', methods=['GET'])
@@ -1607,4 +1608,4 @@ def api_garden_check():
         results = gm.check_and_run()
         return jsonify(results)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
