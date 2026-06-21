@@ -377,8 +377,8 @@ def api_chat():
                 message, 
                 chat_id=user_id, 
                 user_id=user_id,
-                provider=provider,
-                model=model
+                force_provider=provider,
+                model_name=model
             )
             return result
         

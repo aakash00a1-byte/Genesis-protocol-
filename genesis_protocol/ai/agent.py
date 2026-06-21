@@ -109,7 +109,7 @@ class GenesisAgent:
         logger.info(f"Claude availability: {claude_available}")
     
     async def process(self, query: str, chat_id: int = 0, 
-                      user_id: int = 0, force_mode: str = None) -> AgentResponse:
+                      user_id: int = 0, force_mode: str = None, force_provider: str = None, model_name: str = None) -> AgentResponse:
         """
         Process user query through the agent system.
         
@@ -118,6 +118,8 @@ class GenesisAgent:
             chat_id: Telegram chat ID
             user_id: User ID
             force_mode: Force specific mode ('normal' or 'autonomous')
+            force_provider: Force specific provider
+            model_name: Force specific model
             
         Returns:
             AgentResponse with response and metadata
@@ -163,7 +165,7 @@ class GenesisAgent:
             
             # In NORMAL mode: Simple direct response
             if not is_autonomous:
-                response = await self._process_normal(query, memory_context)
+                response = await self._process_normal(query, memory_context, force_provider, model_name)
             else:
                 # In AUTONOMOUS mode: Full agent behavior
                 response = await self._process_autonomous(query, memory_context, chat_id, user_id)
@@ -241,7 +243,7 @@ class GenesisAgent:
                 execution_time_ms=int((datetime.utcnow() - start_time).total_seconds() * 1000)
             )
     
-    async def _process_normal(self, query: str, context: str) -> AICallResult:
+    async def _process_normal(self, query: str, context: str, force_provider=None, model_name=None) -> AICallResult:
         """Process in NORMAL mode - fast direct response."""
         # Build system prompt
         system_prompt = self._get_system_prompt()
@@ -262,7 +264,7 @@ class GenesisAgent:
         result = await self.provider_chain.call(
             messages=messages,
             user_input=query,
-            bypass_scoring=False
+            preferred_provider=force_provider, model=model_name, bypass_scoring=False
         )
         
         # FIX: If provider returned None content, create fallback response
@@ -337,7 +339,7 @@ class GenesisAgent:
                 context = f"{context}\n\nTool results:\n{tool_results}"
             
             # Use normal processing with enhanced context
-            result = await self._process_normal(query, context)
+            result = await self._process_normal(query, context, force_provider, model_name)
             result.model_used = f"[AUTONOMOUS] {result.model_used}"
             
             return result
@@ -352,7 +354,7 @@ class GenesisAgent:
                 query=query
             )
             # Fallback to normal mode
-            return await self._process_normal(query, context)
+            return await self._process_normal(query, context, force_provider, model_name)
     
     def _detect_tool_needs(self, query: str) -> List[str]:
         """Detect which tools are needed for the query."""
