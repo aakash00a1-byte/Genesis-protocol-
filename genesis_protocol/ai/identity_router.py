@@ -10,7 +10,7 @@ Confidence System:
 - UNKNOWN: No evidence exists
 """
 
-from typing import Optional, Dict
+from typing import Optional, Dict, List, Any
 import re
 
 
