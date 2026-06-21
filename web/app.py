@@ -28,8 +28,8 @@ from genesis_protocol.core.channel import Channel, get_channel_isolation
 # ============================================================================
 # VERSION & METRICS
 # ============================================================================
-VERSION = "1.0.0"
-BUILD_DATE = "2026-06-18"
+VERSION = "1.1.0"
+BUILD_DATE = "2026-06-20"
 START_TIME = time.time()
 
 # Metrics (thread-safe counters)

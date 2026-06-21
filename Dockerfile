@@ -27,7 +27,7 @@ COPY supervisord.conf ./
 # Environment variables
 ENV PYTHONUNBUFFERED=1
 ENV APP_ENV=production
-ENV FLASK_APP=web/server_simple.py
+ENV FLASK_APP=web/app.py
 
 # Expose port
 EXPOSE 5000
