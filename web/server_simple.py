@@ -266,6 +266,15 @@ def chat():
                           role=session.get('role'))
 
 
+@app.route('/settings')
+@login_required
+def settings():
+    """Settings page."""
+    return render_template('settings.html',
+                          username=session.get('username'),
+                          version=VERSION)
+
+
 @app.route('/admin')
 @admin_required
 def admin():

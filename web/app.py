@@ -315,6 +315,29 @@ def chat():
                           role=session.get('role'))
 
 
+@app.route('/settings')
+@login_required
+def settings():
+    """Settings page."""
+    config = get_config()
+    
+    # Get provider status
+    providers = {
+        'groq': config.groq.is_configured(),
+        'openai': config.openai.is_configured(),
+        'gemini': config.gemini.is_configured(),
+        'claude': config.claude.is_configured(),
+        'deepseek': config.deepseek.is_configured(),
+        'mistral': config.mistral.is_configured(),
+        'huggingface': config.huggingface.is_configured(),
+    }
+    
+    return render_template('settings.html',
+                          username=session.get('username'),
+                          providers=providers,
+                          version=VERSION)
+
+
 @app.route('/admin')
 @admin_required
 def admin():

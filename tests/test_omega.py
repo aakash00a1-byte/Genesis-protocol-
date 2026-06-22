@@ -120,4 +120,4 @@ class TestAutonomyController:
         ac = get_autonomy_controller()
         status = ac.get_status()
         assert "level" in status
-        assert "forbidden" in status
+        assert "forbidden_omega" in status
