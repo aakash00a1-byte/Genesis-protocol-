@@ -11,7 +11,8 @@ from typing import Optional, List, Dict, Any
 
 from genesis_protocol.ai.providers import (
     BaseProvider, GroqProvider, OpenAIProvider, 
-    GeminiProvider, HuggingFaceProvider, AIRequest, AIResponse
+    GeminiProvider, HuggingFaceProvider, AIRequest, AIResponse,
+    DeepSeekProvider, MistralProvider, PerplexityProvider
 )
 from genesis_protocol.ai.scoring_engine import get_scoring_engine
 from genesis_protocol.config import get_config
@@ -56,13 +57,16 @@ class ProviderChain:
             "claude": None,
             "groq": GroqProvider(),
             "huggingface": HuggingFaceProvider(),
+            "deepseek": DeepSeekProvider(),
+            "mistral": MistralProvider(),
+            "perplexity": PerplexityProvider(),
         }
         
         # Initialize Claude if key available
         self._init_claude()
         
         # Base provider order
-        self._base_order = ["openai", "gemini", "claude", "groq", "huggingface"]
+        self._base_order = ["openai", "gemini", "claude", "deepseek", "mistral", "perplexity", "groq", "huggingface"]
         
         # Request logging
         self._request_log: List[Dict] = []
@@ -196,13 +200,28 @@ class ProviderChain:
         
         if provider == "gemini" and "gemini" in model_lower:
             return model
+
         
         if provider == "claude" and "claude" in model_lower:
             return model
+
         
         if provider == "groq" and ("llama" in model_lower or "mixtral" in model_lower):
             return model
+
         
+
+        if provider == "deepseek" and "deepseek" in model_lower:
+            return model
+
+
+        if provider == "mistral" and "mistral" in model_lower:
+            return model
+
+
+        if provider == "perplexity" and ("sonar" in model_lower or "perplexity" in model_lower):
+            return model
+
         return provider_obj.get_default_model()
     
     def _get_fallback_chain(self, primary: str, available: List[str]) -> List[str]:
