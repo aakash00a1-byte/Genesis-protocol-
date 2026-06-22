@@ -59,14 +59,12 @@ class ProviderChain:
             "huggingface": HuggingFaceProvider(),
             "deepseek": DeepSeekProvider(),
             "mistral": MistralProvider(),
-            "perplexity": PerplexityProvider(),
         }
         
         # Initialize Claude if key available
         self._init_claude()
         
         # Base provider order
-        self._base_order = ["openai", "gemini", "claude", "deepseek", "mistral", "perplexity", "groq", "huggingface"]
         
         # Request logging
         self._request_log: List[Dict] = []
@@ -219,7 +217,6 @@ class ProviderChain:
             return model
 
 
-        if provider == "perplexity" and ("sonar" in model_lower or "perplexity" in model_lower):
             return model
 
         return provider_obj.get_default_model()

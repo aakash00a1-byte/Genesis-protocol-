@@ -181,27 +181,6 @@ class ScoringEngine:
             "speed_tier": 1,
             "max_tokens": 32000,
         },
-        # Perplexity
-        "sonar": {
-            "provider": "perplexity",
-            "capabilities": ["research", "reasoning", "fast"],
-            "strengths": ["real_time_info", "research", "fast"],
-            "weaknesses": ["creative_writing"],
-            "context_window": 128000,
-            "cost_tier": 1,
-            "speed_tier": 1,
-            "max_tokens": 8192,
-        },
-        "sonar-pro": {
-            "provider": "perplexity",
-            "capabilities": ["research", "reasoning", "analysis"],
-            "strengths": ["real_time_info", "research", "analysis"],
-            "weaknesses": ["creative_writing"],
-            "context_window": 128000,
-            "cost_tier": 2,
-            "speed_tier": 2,
-            "max_tokens": 16384,
-        },
         
         # Groq (Fast & Cheap)
         "llama-3.3-70b-versatile": {
@@ -249,13 +228,13 @@ class ScoringEngine:
             "gemini-2.0-flash": 0.98, "gemini-1.5-flash": 0.95,
             "llama-3.3-70b-versatile": 0.95, "mixtral-8x7b-32768": 0.90,
             "gpt-4o-mini": 0.85, "claude-3-haiku-20240307": 0.85,
-            "deepseek-chat": 0.80, "sonar": 0.82, "mistral-small": 0.78,
-            "deepseek-chat": 0.80, "sonar": 0.82, "mistral-small": 0.78,
-            "deepseek-chat": 0.80, "sonar": 0.82, "mistral-small": 0.78,
-            "deepseek-chat": 0.80, "sonar": 0.82, "mistral-small": 0.78,
-            "deepseek-chat": 0.80, "sonar": 0.82, "mistral-small": 0.78,
-            "deepseek-chat": 0.80, "sonar": 0.82, "mistral-small": 0.78,
-            "deepseek-chat": 0.80, "sonar": 0.82, "mistral-small": 0.78,
+            "deepseek-chat": 0.80, "mistral-small": 0.78,
+            "deepseek-chat": 0.80, "mistral-small": 0.78,
+            "deepseek-chat": 0.80, "mistral-small": 0.78,
+            "deepseek-chat": 0.80, "mistral-small": 0.78,
+            "deepseek-chat": 0.80, "mistral-small": 0.78,
+            "deepseek-chat": 0.80, "mistral-small": 0.78,
+            "deepseek-chat": 0.80, "mistral-small": 0.78,
         },
         "long_context": {
             "gemini-1.5-pro": 0.98, "gemini-2.0-flash": 0.90,

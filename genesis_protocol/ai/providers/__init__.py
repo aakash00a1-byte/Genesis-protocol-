@@ -13,7 +13,6 @@ from genesis_protocol.ai.providers.gemini_provider import GeminiProvider
 from genesis_protocol.ai.providers.huggingface_provider import HuggingFaceProvider
 from genesis_protocol.ai.providers.deepseek_provider import DeepSeekProvider
 from genesis_protocol.ai.providers.mistral_provider import MistralProvider
-from genesis_protocol.ai.providers.perplexity_provider import PerplexityProvider
 
 __all__ = [
     "BaseProvider",
@@ -26,5 +25,4 @@ __all__ = [
     "HuggingFaceProvider",
     "DeepSeekProvider",
     "MistralProvider",
-    "PerplexityProvider",
 ]
