@@ -64,7 +64,10 @@ class ProviderChain:
         # Initialize Claude if key available
         self._init_claude()
         
-        # Base provider order
+        # Base provider order (fallback priority)
+        self._base_order = [
+            "openai", "gemini", "claude", "deepseek", "mistral", "huggingface", "groq"
+        ]
         
         # Request logging
         self._request_log: List[Dict] = []
