@@ -12,7 +12,7 @@ from typing import Optional, List, Dict, Any
 from genesis_protocol.ai.providers import (
     BaseProvider, GroqProvider, OpenAIProvider, 
     GeminiProvider, HuggingFaceProvider, AIRequest, AIResponse,
-    DeepSeekProvider, MistralProvider, PerplexityProvider
+    DeepSeekProvider, MistralProvider
 )
 from genesis_protocol.ai.scoring_engine import get_scoring_engine
 from genesis_protocol.config import get_config
