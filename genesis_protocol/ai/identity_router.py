@@ -10,7 +10,7 @@ Confidence System:
 - UNKNOWN: No evidence exists
 """
 
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 import re
 
 
@@ -266,7 +266,7 @@ Total: {len(caps)} capabilities. Ask me what you need! 🖤"""
                 "code_execution", "automation", "self_improvement"
             ]
     
-    def _what_layers(self, gluttony) -> str:
+    def _what_layers(self, identity) -> str:
         """Build layers response."""
         # Use identity.layers for consistent info
         layers = identity.layers
