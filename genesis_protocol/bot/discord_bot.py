@@ -296,14 +296,15 @@ class DiscordBot(commands.Bot):
                 await asyncio.sleep(5)
                 await self.start_bot()
     
-    def run(self):
+    def run(self, token: str = None):
         """Run the bot (blocking)."""
-        token = os.environ.get("DISCORD_TOKEN")
+        if token is None:
+            token = os.environ.get("DISCORD_TOKEN")
         if not token:
             logger.error("DISCORD_TOKEN not found in environment")
             return
         
-        self.run(token)
+        super().run(token)
 
 
 def run_discord_bot():
