@@ -399,9 +399,7 @@ def api_chat():
             result = await agent.process(
                 message, 
                 chat_id=user_id, 
-                user_id=user_id,
-                provider=provider,
-                model=model
+                user_id=user_id
             )
             return result
         
