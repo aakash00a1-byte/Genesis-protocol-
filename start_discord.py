@@ -119,7 +119,7 @@ def main():
     intents.messages = True
     intents.guilds = True
     intents.guild_messages = True
-    intents.guild_members = True  # For welcome messages
+    intents.members = True  # For welcome messages
     intents.dm_messages = True
     
     # Create bot
