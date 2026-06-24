@@ -43,13 +43,14 @@ def main():
     #   DISCORD_TOKEN - Bot token from Discord Developer Portal
     # ============================================================
     
-    DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
+    # Check both DISCORD_TOKEN and DISCORD_BOT_TOKEN for compatibility
+    DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN") or os.environ.get("DISCORD_BOT_TOKEN")
     if not DISCORD_TOKEN:
-        print("❌ ERROR: DISCORD_TOKEN environment variable not set!")
-        print("   Required environment variables:")
-        print("   - DISCORD_TOKEN: Bot token from Discord Developer Portal")
+        print("❌ ERROR: Discord token not set!")
+        print("   Required environment variable:")
+        print("   - DISCORD_TOKEN or DISCORD_BOT_TOKEN: Bot token from Discord Developer Portal")
         print("")
-        print("   Set in Railway: railway variables set DISCORD_TOKEN=your_token")
+        print("   Set in Railway: railway variables set DISCORD_BOT_TOKEN=your_token")
         sys.exit(1)
     
     print(f"✅ DISCORD_TOKEN found: {DISCORD_TOKEN[:10]}...{DISCORD_TOKEN[-4:]}")
