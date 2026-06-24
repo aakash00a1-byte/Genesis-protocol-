@@ -1583,6 +1583,177 @@ def api_garden_status():
         return jsonify({'error': str(e)}), 500
 
 
+# ============================================================================
+# GENESIS PROTOCOL ∞ (INFINITY) - Self-Evolution
+# ============================================================================
+
+@app.route('/api/infinity/status', methods=['GET'])
+def api_infinity_status():
+    """Get Genesis Protocol Infinity status."""
+    try:
+        from genesis_protocol.infinity import (
+            SelfEvolution, NeuralPatternEngine, 
+            EmotionalEngine, AutoUpdateScheduler, FutureRoadmap
+        )
+        
+        se = SelfEvolution()
+        ne = NeuralPatternEngine()
+        ee = EmotionalEngine()
+        aus = AutoUpdateScheduler()
+        fr = FutureRoadmap()
+        
+        return jsonify({
+            "version": "∞ (Infinity)",
+            "evolution_level": "∞",
+            "components": {
+                "self_evolution": se.get_status(),
+                "neural_patterns": ne.get_status(),
+                "emotional_intelligence": ee.get_status(),
+                "auto_updates": aus.get_status(),
+                "future_roadmap": fr.get_status()
+            }
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'details': 'Infinity module not found'}), 500
+
+
+@app.route('/api/infinity/evolve', methods=['POST'])
+@admin_required
+def api_infinity_evolve():
+    """Trigger self-evolution."""
+    try:
+        from genesis_protocol.infinity import SelfEvolution
+        se = SelfEvolution()
+        
+        if se._should_evolve():
+            result = se.evolve()
+            return jsonify({"success": True, "evolution": result})
+        else:
+            return jsonify({
+                "success": False, 
+                "message": "Not ready to evolve yet",
+                "metrics": se.metrics.to_dict()
+            })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/infinity/learn', methods=['POST'])
+def api_infinity_learn():
+    """Learn new knowledge."""
+    try:
+        from genesis_protocol.infinity import SelfEvolution
+        se = SelfEvolution()
+        
+        data = request.get_json() or {}
+        topic = data.get('topic', 'general')
+        knowledge = data.get('knowledge', '')
+        source = data.get('source', 'user')
+        
+        if not knowledge:
+            return jsonify({'error': 'Knowledge required'}), 400
+        
+        learning_id = se.learn(topic, knowledge, source)
+        
+        return jsonify({
+            "success": True,
+            "learning_id": learning_id,
+            "total_learnings": len(se.learnings)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/infinity/emotion', methods=['POST'])
+def api_infinity_emotion():
+    """Analyze emotion in text."""
+    try:
+        from genesis_protocol.infinity import EmotionalEngine
+        ee = EmotionalEngine()
+        
+        data = request.get_json() or {}
+        text = data.get('text', '')
+        user_id = data.get('user_id', 'web_user')
+        
+        if not text:
+            return jsonify({'error': 'Text required'}), 400
+        
+        result = ee.analyze_and_respond(text, user_id)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/infinity/roadmap', methods=['GET'])
+def api_infinity_roadmap():
+    """Get evolution roadmap."""
+    try:
+        from genesis_protocol.infinity import FutureRoadmap, AutoUpdateScheduler
+        
+        fr = FutureRoadmap()
+        aus = AutoUpdateScheduler()
+        
+        return jsonify({
+            "evolution_path": fr.get_evolution_path(),
+            "milestones": [m.to_dict() for m in fr.get_milestones()],
+            "goals": fr.get_goals(),
+            "scheduled_updates": [u.to_dict() for u in aus.get_pending_updates()],
+            "roadmap_items": [r.to_dict() for r in aus.get_roadmap()]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/infinity/schedule', methods=['POST'])
+@admin_required
+def api_infinity_schedule():
+    """Schedule a future update."""
+    try:
+        from genesis_protocol.infinity import AutoUpdateScheduler
+        from genesis_protocol.infinity.auto_update_scheduler import UpdatePriority
+        
+        aus = AutoUpdateScheduler()
+        data = request.get_json() or {}
+        
+        name = data.get('name', 'Unnamed Update')
+        description = data.get('description', '')
+        days_from_now = data.get('days', 7)
+        priority = data.get('priority', 'MEDIUM')
+        
+        scheduled_date = datetime.now() + timedelta(days=days_from_now)
+        
+        update_id = aus.schedule_update(
+            name=name,
+            description=description,
+            scheduled_date=scheduled_date,
+            priority=UpdatePriority[priority]
+        )
+        
+        return jsonify({
+            "success": True,
+            "update_id": update_id,
+            "scheduled_date": scheduled_date.isoformat()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/infinity')
+def infinity_page():
+    """Genesis Protocol Infinity page."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('infinity.html', username=session.get('username'))
+
+
+@app.route('/infinity/roadmap')
+def roadmap_page():
+    """Evolution roadmap page."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('roadmap.html', username=session.get('username'))
+
+
 @app.route('/api/garden/daily', methods=['POST'])
 def api_garden_daily():
     """Run daily maintenance tasks."""
