@@ -71,19 +71,37 @@ Replace `BOT_CLIENT_ID` with your bot's Application ID.
 
 ## Bot Commands
 
-### Slash Commands
+### 🌐 PUBLIC Commands (Everyone can use)
 | Command | Description |
 |---------|-------------|
 | `/ping` | Check if bot is online |
 | `/status` | Show bot status and info |
+| `/health` | Show system health |
+| `/ask [question]` | Chat with Genesis AI |
 | `/help` | Show available commands |
+
+### 🔒 ADMIN Commands (Only admins)
+| Command | Description |
+|---------|-------------|
+| `/admin` | Open admin panel |
+| `/admin_status` | Detailed system status |
+| `/admin_stats` | View bot statistics |
+| `/admin_reload` | Reload configuration |
 
 ### Text Commands
 | Command | Response |
 |---------|----------|
 | `hello genesis` | Greets the user |
 | `hlo genesis` | Greets the user |
-| `@Genesis Protocol` | Responds to mentions |
+| `@Genesis Protocol` | AI chat response |
+| New member joins | Auto welcome message |
+
+### 👑 Admin Setup
+Set admin Discord IDs via environment variable:
+```bash
+railway variables set ADMIN_USER_IDS=123456789,987654321
+```
+Or the bot will default to the creator's Discord ID.
 
 ## Files
 - `start_discord.py` - Main Discord bot file
