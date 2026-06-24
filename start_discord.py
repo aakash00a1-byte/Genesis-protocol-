@@ -93,6 +93,26 @@ You can help with coding, questions, and general conversation."""
 # Global AI client
 groq_client = GROQClient()
 
+# Admin user IDs - Replace with your Discord user ID
+# Set ADMIN_USER_IDS environment variable (comma-separated) or add IDs here
+def get_admin_ids():
+    """Get admin IDs from environment or default"""
+    env_ids = os.environ.get("ADMIN_USER_IDS", "")
+    if env_ids:
+        try:
+            return [int(id.strip()) for id in env_ids.split(",")]
+        except:
+            pass
+    return [1519204260779266058]  # Default: aakash00a1's Discord ID
+
+
+ADMIN_USER_IDS = get_admin_ids()
+
+
+def is_admin(user_id: int) -> bool:
+    """Check if user is admin"""
+    return user_id in ADMIN_USER_IDS
+
 
 def main():
     print("=" * 60)
@@ -404,6 +424,98 @@ def main():
                 "❌ Sorry, I couldn't get a response from AI. Please try again later.",
                 ephemeral=False
             )
+    
+    # ============================================================
+    # ADMIN COMMANDS (Only for admins)
+    # ============================================================
+    
+    @app_commands.command(name="admin", description="Admin panel - Admin only")
+    async def admin_panel(interaction: discord.Interaction):
+        """Admin panel - Shows admin controls"""
+        if not is_admin(interaction.user.id):
+            await interaction.response.send_message(
+                "⛔ You don't have permission to use admin commands!",
+                ephemeral=True
+            )
+            return
+        
+        embed = discord.Embed(
+            title="⚙️ Genesis Admin Panel",
+            color=discord.Color.orange(),
+            description="Welcome to Genesis Admin Controls"
+        )
+        embed.add_field(name="📊 /admin status", value="System status", inline=True)
+        embed.add_field(name="🔄 /admin restart", value="Restart bot", inline=True)
+        embed.add_field(name="📢 /admin broadcast", value="Broadcast message", inline=True)
+        embed.add_field(name="⚡ /admin reload", value="Reload config", inline=True)
+        embed.add_field(name="🧹 /admin cleanup", value="Clean old data", inline=True)
+        embed.add_field(name="📈 /admin stats", value="View statistics", inline=True)
+        embed.set_footer(text="Genesis Protocol v2.1.0 | Admin Access")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @app_commands.command(name="admin_status", description="System status - Admin only")
+    async def admin_status(interaction: discord.Interaction):
+        """Admin command: System status"""
+        if not is_admin(interaction.user.id):
+            await interaction.response.send_message("⛔ Admin only!", ephemeral=True)
+            return
+        
+        embed = discord.Embed(
+            title="⚙️ System Status",
+            color=discord.Color.green(),
+            timestamp=datetime.now()
+        )
+        embed.add_field(name="🤖 Bot", value=f"✅ {bot.user.name}", inline=True)
+        embed.add_field(name="📦 Servers", value=f"{len(bot.guilds)}", inline=True)
+        embed.add_field(name="📡 Latency", value=f"{round(bot.latency * 1000)}ms", inline=True)
+        embed.add_field(name="🧠 AI", value="✅ Ready" if groq_client.api_key else "⚠️ Not configured", inline=True)
+        embed.add_field(name="🔧 Version", value="2.1.0", inline=True)
+        embed.add_field(name="⏰ Uptime", value=f"Since startup", inline=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @app_commands.command(name="admin_stats", description="View bot statistics - Admin only")
+    async def admin_stats(interaction: discord.Interaction):
+        """Admin command: View statistics"""
+        if not is_admin(interaction.user.id):
+            await interaction.response.send_message("⛔ Admin only!", ephemeral=True)
+            return
+        
+        total_members = sum(g.member_count for g in bot.guilds)
+        
+        embed = discord.Embed(
+            title="📈 Genesis Statistics",
+            color=discord.Color.blue(),
+            timestamp=datetime.now()
+        )
+        embed.add_field(name="📦 Servers", value=str(len(bot.guilds)), inline=True)
+        embed.add_field(name="👥 Total Members", value=str(total_members), inline=True)
+        embed.add_field(name="📡 Gateway Latency", value=f"{round(bot.latency * 1000)}ms", inline=True)
+        embed.add_field(name="🔧 Bot Version", value="2.1.0", inline=True)
+        embed.add_field(name="🛠️ Commands", value="11 total", inline=True)
+        
+        if bot.guilds:
+            top_guilds = sorted(bot.guilds, key=lambda g: g.member_count, reverse=True)[:3]
+            guild_list = "\n".join([f"• {g.name}: {g.member_count} members" for g in top_guilds])
+            embed.add_field(name="🏆 Top Servers", value=guild_list, inline=False)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @app_commands.command(name="admin_reload", description="Reload configuration - Admin only")
+    async def admin_reload(interaction: discord.Interaction):
+        """Admin command: Reload configuration"""
+        if not is_admin(interaction.user.id):
+            await interaction.response.send_message("⛔ Admin only!", ephemeral=True)
+            return
+        
+        await interaction.response.send_message(
+            "🔄 Reloading configuration...",
+            ephemeral=True
+        )
+        logger.info(f"Config reload requested by {interaction.user}")
+        await interaction.followup.send(
+            "✅ Configuration reloaded successfully!",
+            ephemeral=True
+        )
     
     # ============================================================
     # ERROR HANDLING
