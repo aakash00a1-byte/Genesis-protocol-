@@ -11,28 +11,40 @@ jobs:
   deploy:
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Install Railway CLI
         run: |
-          curl -fsSL https://railway.app/install.sh | sh
+          mkdir -p ~/.railway/bin
+          curl -fsSL https://railway.app/install.sh -o /tmp/install.sh
+          bash /tmp/install.sh
           echo "$HOME/.railway/bin" >> $GITHUB_PATH
-      
+          export PATH="$HOME/.railway/bin:$PATH"
+          railway --version
+
       - name: Login to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway login --token $RAILWAY_TOKEN
-      
+        run: |
+          export PATH="$HOME/.railway/bin:$PATH"
+          echo $RAILWAY_TOKEN | railway login
+
       - name: Link Project
         env:
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-        run: railway link --project $RAILWAY_PROJECT_ID
-      
+        run: |
+          export PATH="$HOME/.railway/bin:$PATH"
+          railway link --project $RAILWAY_PROJECT_ID
+
       - name: Deploy to Railway
-        run: railway up --service bot
-      
+        run: |
+          export PATH="$HOME/.railway/bin:$PATH"
+          railway up --service bot
+
       - name: Deployment Status
-        run: railway status
+        run: |
+          export PATH="$HOME/.railway/bin:$PATH"
+          railway status
