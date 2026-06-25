@@ -15,18 +15,13 @@ jobs:
       - name: Install Railway CLI
         run: |
           mkdir -p ~/.railway/bin
-          curl -fsSL https://railway.app/install.sh -o /tmp/install.sh
-          bash /tmp/install.sh
+          npm install -g @railway/cli@5.2.0
 
-      - name: Login to Railway
+      - name: Deploy to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
         run: |
           export PATH="$HOME/.railway/bin:$PATH"
           export RAILWAY_TOKEN=$RAILWAY_TOKEN
-          railway whoami
-
-      - name: Deploy
-        run: |
-          export PATH="$HOME/.railway/bin:$PATH"
-          railway up --service bot
+          railway up --project $RAILWAY_PROJECT_ID --service bot
