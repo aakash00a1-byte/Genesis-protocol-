@@ -21,9 +21,18 @@ jobs:
       - name: Configure Railway Token
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
         run: |
           mkdir -p ~/.railway
-          echo '{"user":{"accessToken":"'$RAILWAY_TOKEN'"}}' > ~/.railway/config.json
+          cat > ~/.railway/config.json << EOF
+{
+  "projects": {"$RAILWAY_PROJECT_ID": {"id": "$RAILWAY_PROJECT_ID"}},
+  "user": {
+    "id": "d8357c3c-f263-4922-a4a4-927db003cbba",
+    "accessToken": "$RAILWAY_TOKEN"
+  }
+}
+EOF
 
       - name: Deploy
         run: |
