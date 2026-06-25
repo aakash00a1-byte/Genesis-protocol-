@@ -87,8 +87,8 @@ I'm Genesis Protocol AI Bot. Here's what I can do:
 
 💬 Just send any message to chat with me!
 """
-        elif text == "/hi" or text.lower() == "hi genesis":
-            return chat_id, f"👋 Hi {user}! Kaise ho? 🎉\n\nUse /help to see all commands!"
+        elif text == "/hi" or "hi genesis" in text.lower():
+            return chat_id, f"👋 Hi {user}! Kaise ho? 🎉\n\nUse /help to see all commands!\n\n💬 Just send any message to chat with me!"
         
         elif text == "/help":
             return chat_id, """📚 *Genesis Protocol Commands*
@@ -168,9 +168,9 @@ All bots are online! 💪
         elif text.startswith("/admin") and not self.is_admin(user_id):
             return chat_id, "⛔ Admin only command!"
         
-        # AI Chat
+        # AI Chat - ANY text message goes to AI
         elif not text.startswith("/"):
-            return chat_id, "🤖 Processing..."
+            return chat_id, None  # Signal to run AI
         
         return None, None
     
@@ -206,14 +206,43 @@ All bots are online! 💪
                     print(f"[{self.username}] 📨 {msg.get('from', {}).get('first_name', 'User')}: {msg.get('text', '')[:50]}")
                     
                     chat_id, response = self.handle_message(msg)
+                    text = msg.get("text", "")
                     
-                    if response:
+                    # AI Chat - direct processing
+                    if response is None and not text.startswith("/"):
+                        question = text
+                        try:
+                            self.send(chat_id, "🤖 Thinking...")
+                            import asyncio
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            
+                            result = loop.run_until_complete(
+                                ai.call(
+                                    messages=[
+                                        {"role": "system", "content": f"You are {self.username}. Keep responses helpful and concise."},
+                                        {"role": "user", "content": question}
+                                    ],
+                                    user_input=question
+                                )
+                            )
+                            loop.close()
+                            
+                            if result.success and result.response:
+                                ai_response = result.response.content[:4000]
+                                self.send(chat_id, f"🤖 *Genesis AI:*\n\n{ai_response}")
+                            else:
+                                error_msg = result.error[:500] if result.error else "Unknown error"
+                                self.send(chat_id, f"❌ Error: {error_msg}")
+                        except Exception as e:
+                            self.send(chat_id, f"❌ Error: {str(e)[:500]}")
+                    
+                    elif response:
                         self.send(chat_id, response)
                         
-                        # AI processing for /ask and regular messages
-                        text = msg.get("text", "")
-                        if text.startswith("/ask ") or (not text.startswith("/")):
-                            question = text[5:] if text.startswith("/ask ") else text
+                        # AI processing for /ask command
+                        if text.startswith("/ask "):
+                            question = text[5:].strip()
                             try:
                                 import asyncio
                                 loop = asyncio.new_event_loop()
@@ -234,7 +263,8 @@ All bots are online! 💪
                                     ai_response = result.response.content[:4000]
                                     self.send(chat_id, f"🤖 *Genesis AI:*\n\n{ai_response}")
                                 else:
-                                    self.send(chat_id, f"❌ Error: {result.error[:500] if result.error else 'Unknown'}")
+                                    error_msg = result.error[:500] if result.error else "Unknown error"
+                                    self.send(chat_id, f"❌ Error: {error_msg}")
                             except Exception as e:
                                 self.send(chat_id, f"❌ Error: {str(e)[:500]}")
                 
