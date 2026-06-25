@@ -18,21 +18,12 @@ jobs:
           curl -fsSL https://railway.app/install.sh -o /tmp/install.sh
           bash /tmp/install.sh
 
-      - name: Configure Railway Token
+      - name: Login to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
         run: |
-          mkdir -p ~/.railway
-          cat > ~/.railway/config.json << EOF
-{
-  "projects": {"$RAILWAY_PROJECT_ID": {"id": "$RAILWAY_PROJECT_ID"}},
-  "user": {
-    "id": "d8357c3c-f263-4922-a4a4-927db003cbba",
-    "accessToken": "$RAILWAY_TOKEN"
-  }
-}
-EOF
+          export PATH="$HOME/.railway/bin:$PATH"
+          echo "$RAILWAY_TOKEN" | railway login
 
       - name: Deploy
         run: |
