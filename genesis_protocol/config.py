@@ -40,9 +40,30 @@ class TelegramConfig:
     api_hash: Optional[str] = None
     session_name: str = "genesis_session"
     
+    # Multi-bot support (comma-separated tokens for multiple bots)
+    additional_bot_tokens: str = ""
+    
     def validate(self) -> bool:
         """Validate Telegram configuration."""
         return bool(self.bot_token)
+    
+    def get_all_bot_configs(self) -> list:
+        """Get all bot token + username pairs."""
+        configs = []
+        if self.bot_token:
+            configs.append({
+                "token": self.bot_token,
+                "username": self.bot_username
+            })
+        # Parse additional bots from env var
+        if self.additional_bot_tokens:
+            tokens = [t.strip() for t in self.additional_bot_tokens.split(",") if t.strip()]
+            for i, token in enumerate(tokens, 1):
+                configs.append({
+                    "token": token,
+                    "username": f"bot_{i}"
+                })
+        return configs
 
 
 @dataclass
@@ -363,6 +384,7 @@ class Config:
         config.telegram.api_id = os.getenv("TELEGRAM_API_ID")
         config.telegram.api_hash = os.getenv("TELEGRAM_API_HASH")
         config.telegram.session_name = os.getenv("TELEGRAM_SESSION_NAME", "genesis_session")
+        config.telegram.additional_bot_tokens = os.getenv("TELEGRAM_ADDITIONAL_BOT_TOKENS", "")
         
         # Groq
         config.groq.api_key = os.getenv("GROQ_API_KEY", "")
