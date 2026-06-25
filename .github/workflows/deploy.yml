@@ -12,17 +12,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Railway CLI
-        run: |
-          mkdir -p ~/.railway/bin
-          npm install -g @railway/cli@5.2.0
-
       - name: Deploy to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-          RAILWAY_ENVIRONMENT: production
+          RAILWAY_ENVIRONMENT_ID: 0fd8acac-2aa7-41fb-89da-4febf0f62a35
+          RAILWAY_SERVICE_ID: 367c0693-01dd-4afb-ae67-129e1f0db41d
         run: |
-          export PATH="$HOME/.railway/bin:$PATH"
-          export RAILWAY_TOKEN=$RAILWAY_TOKEN
-          railway up --project $RAILWAY_PROJECT_ID --environment production --service bot
+          curl -s -X POST "https://backboard.railway.app/graphql/v2" \
+            -H "Authorization: Bearer $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"query":"mutation { serviceInstanceRedeploy(serviceId: \"'$RAILWAY_SERVICE_ID'\", environmentId: \"'$RAILWAY_ENVIRONMENT_ID'\") }"}'
