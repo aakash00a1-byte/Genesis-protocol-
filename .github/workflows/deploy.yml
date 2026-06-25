@@ -30,7 +30,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           export PATH="$HOME/.railway/bin:$PATH"
-          echo $RAILWAY_TOKEN | railway login
+          railway login --token $RAILWAY_TOKEN
 
       - name: Link Project
         env:
