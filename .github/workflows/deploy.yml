@@ -23,7 +23,8 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           export PATH="$HOME/.railway/bin:$PATH"
-          echo "$RAILWAY_TOKEN" | railway login
+          export RAILWAY_TOKEN=$RAILWAY_TOKEN
+          railway whoami
 
       - name: Deploy
         run: |
