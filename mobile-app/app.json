@@ -33,7 +33,9 @@
         "RECORD_AUDIO",
         "INTERNET",
         "VIBRATE",
-        "RECEIVE_BOOT_COMPLETED"
+        "RECEIVE_BOOT_COMPLETED",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ]
     },
     "web": {
@@ -57,8 +59,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "genesis-protocol-mobile"
+        "projectId": "fa826528-fab1-40b3-a5b5-bb49d251d17c"
       }
-    }
+    },
+    "owner": "aakash00a1"
   }
 }
