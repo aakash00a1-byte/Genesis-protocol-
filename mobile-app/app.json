@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "Genesis Protocol",
+    "slug": "genesis-protocol-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0a0a"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.genesis.protocol",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Genesis Protocol needs camera access for image analysis",
+        "NSMicrophoneUsageDescription": "Genesis Protocol needs microphone for voice commands"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0a0a"
+      },
+      "package": "com.genesis.protocol",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "INTERNET",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#00ff88"
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Genesis Protocol to use Face ID for secure login"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "genesis-protocol-mobile"
+      }
+    }
+  }
+}

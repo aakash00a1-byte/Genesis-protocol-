@@ -944,6 +944,15 @@ def run_startup_checks():
     return all_passed
 
 
+# Mobile API endpoints for Genesis Protocol Mobile App
+try:
+    from web.mobile_api import mobile_api_routes
+    mobile_api_routes(app)
+    logger.info("✅ Mobile API endpoints registered")
+except ImportError as e:
+    logger.warning(f"⚠️ Mobile API module not found: {e}")
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
