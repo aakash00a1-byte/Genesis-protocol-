@@ -171,11 +171,28 @@ def init_db():
 
 # Authentication decorators
 def login_required(f):
-    """Decorator to require login."""
+    """Decorator to require login - supports both session and Bearer token auth."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # Check for Bearer token in Authorization header
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            token = auth_header[7:]
+            # Validate token format: genesis_mobile_{user_id}_{timestamp}
+            if token.startswith('genesis_mobile_'):
+                parts = token.split('_')
+                if len(parts) >= 3:
+                    try:
+                        user_id = int(parts[2])
+                        # Set session user_id for downstream code
+                        session['user_id'] = user_id
+                        return f(*args, **kwargs)
+                    except ValueError:
+                        pass
+        
+        # Fall back to session check
         if 'user_id' not in session:
-            if request.is_json:
+            if request.is_json or request.path.startswith('/api/'):
                 return jsonify({'error': 'Unauthorized', 'login_required': True}), 401
             return redirect(url_for('login'))
         return f(*args, **kwargs)

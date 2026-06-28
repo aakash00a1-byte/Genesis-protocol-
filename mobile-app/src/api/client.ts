@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { API_CONFIG, getFullApiUrl } from './config';
+import { API_CONFIG } from './config';
 
 class ApiClient {
   private client: AxiosInstance;
@@ -8,7 +8,7 @@ class ApiClient {
 
   constructor() {
     this.client = axios.create({
-      baseURL: `${API_CONFIG.BASE_URL}/api/${API_CONFIG.API_VERSION}`,
+      baseURL: `${API_CONFIG.BASE_URL}/api`,
       timeout: API_CONFIG.TIMEOUT,
       headers: {
         'Content-Type': 'application/json',

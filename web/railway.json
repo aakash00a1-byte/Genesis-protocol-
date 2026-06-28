@@ -9,6 +9,6 @@
     "numReplicas": 1,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
-    "startCommand": "cd web && python3 app_v3.py"
+    "startCommand": "cd web && python3 app.py"
   }
 }

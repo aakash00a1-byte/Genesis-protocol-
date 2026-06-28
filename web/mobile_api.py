@@ -20,7 +20,7 @@ from flask import Flask, request, jsonify, session
 # Note: This module should be imported after app is created in app.py
 
 # Mobile API configuration
-API_VERSION = "v1"
+API_VERSION = "v1"  # Mobile API routes at /api/v1/
 API_PREFIX = f"/api/{API_VERSION}"
 
 
