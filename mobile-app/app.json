@@ -1,33 +1,33 @@
 {
   "expo": {
-    "name": "Genesis Protocol",
+    "name": "Genesis OS",
     "slug": "genesis-protocol-app",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0a0a0a"
+      "backgroundColor": "#0a0a0f"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.genesis.protocol",
+      "bundleIdentifier": "com.genesis.os",
       "infoPlist": {
-        "NSCameraUsageDescription": "Genesis Protocol needs camera access for image analysis",
-        "NSMicrophoneUsageDescription": "Genesis Protocol needs microphone for voice commands"
+        "NSCameraUsageDescription": "Genesis OS needs camera access for image analysis",
+        "NSMicrophoneUsageDescription": "Genesis OS needs microphone for voice commands"
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0a0a0a"
+        "backgroundColor": "#0a0a0f"
       },
-      "package": "com.genesis.protocol",
+      "package": "com.genesis.os",
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",

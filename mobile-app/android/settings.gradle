@@ -21,7 +21,7 @@ extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
   }
 }
 
-rootProject.name = 'Genesis Protocol'
+rootProject.name = 'Genesis OS'
 
 dependencyResolutionManagement {
   versionCatalogs {

@@ -1,4 +1,4 @@
-package com.genesis.protocol
+package com.genesis.os
 
 import android.app.Application
 import android.content.res.Configuration

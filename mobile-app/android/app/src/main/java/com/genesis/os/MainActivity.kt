@@ -1,4 +1,4 @@
-package com.genesis.protocol
+package com.genesis.os
 
 import android.os.Build
 import android.os.Bundle
