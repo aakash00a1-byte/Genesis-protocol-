@@ -52,7 +52,8 @@ const ChatScreen = () => {
   const checkConnection = async () => {
     try {
       const response = await chatService.checkHealth();
-      setIsConnected(response.healthy);
+      // Backend returns { status: "healthy", entrypoint: "..." }
+      setIsConnected(response.status === 'healthy' || response.healthy);
     } catch (error) {
       setIsConnected(false);
     }
@@ -94,11 +95,12 @@ const ChatScreen = () => {
 
     try {
       const response = await chatService.sendMessage(userMessage.content);
+      // Backend returns { success: true, response: "...", ... }
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: response.message,
-        timestamp: response.timestamp,
+        content: response.response || response.message || 'No response',
+        timestamp: response.timestamp || Date.now(),
       };
       setMessages(prev => [...prev, assistantMessage]);
       

@@ -9,8 +9,10 @@ export interface ChatMessage {
 }
 
 export interface ChatResponse {
-  message: string;
-  timestamp: number;
+  success?: boolean;
+  message?: string;
+  response?: string;
+  timestamp?: number;
 }
 
 export interface SystemStatus {
