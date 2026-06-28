@@ -59,29 +59,42 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (email: string, password: string): Promise<void> => {
     try {
-      // For demo purposes, simulate login
-      // In production, this would call the backend API
-      const mockToken = `genesis_${Date.now()}`;
-      await apiClient.setToken(mockToken);
+      const response = await apiClient.post<{success: boolean; token: string; user: any}>('/auth/login', {
+        username: email,
+        password: password,
+      });
+      
+      if (!response.success || !response.token) {
+        throw new Error('Login failed. Please check your credentials.');
+      }
+      
+      await apiClient.setToken(response.token);
       await secureStorage.storeApiKey('user_email', email);
       
-      setUser({
+      setUser(response.user || {
         id: '1',
         email,
         name: email.split('@')[0],
         createdAt: Date.now(),
       });
-    } catch (error) {
-      throw new Error('Login failed. Please check your credentials.');
+    } catch (error: any) {
+      throw new Error(error?.message || 'Login failed. Please check your credentials.');
     }
   };
 
   const register = async (name: string, email: string, password: string): Promise<void> => {
     try {
-      // For demo purposes, simulate registration
-      // In production, this would call the backend API
-      const mockToken = `genesis_${Date.now()}`;
-      await apiClient.setToken(mockToken);
+      const response = await apiClient.post<{success: boolean; token: string; user: any}>('/auth/register', {
+        username: name,
+        email: email,
+        password: password,
+      });
+      
+      if (!response.success || !response.token) {
+        throw new Error('Registration failed. Please try again.');
+      }
+      
+      await apiClient.setToken(response.token);
       
       setUser({
         id: '1',
