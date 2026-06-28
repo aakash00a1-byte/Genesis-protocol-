@@ -198,7 +198,6 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-
 def admin_required(f):
     """Decorator to require admin role."""
     @wraps(f)
@@ -213,6 +212,144 @@ def admin_required(f):
             return redirect(url_for('chat'))
         return f(*args, **kwargs)
     return decorated_function
+
+
+# ============================================================================
+# API AUTH ROUTES (for mobile app)
+# ============================================================================
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_auth_login():
+    """Mobile API login endpoint."""
+    data = request.get_json() or {}
+    username = data.get('username')
+    password = data.get('password')
+    
+    if not username or not password:
+        return jsonify({'error': 'Username and password required'}), 400
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, username, email, password_hash, role, is_active 
+        FROM users WHERE username = ?
+    ''', (username,))
+    user = cursor.fetchone()
+    conn.close()
+    
+    if not user:
+        return jsonify({'error': 'Invalid credentials'}), 401
+    
+    if not check_password_hash(user['password_hash'], password):
+        return jsonify({'error': 'Invalid credentials'}), 401
+    
+    if not user['is_active']:
+        return jsonify({'error': 'Account disabled'}), 403
+    
+    # Create session
+    session.permanent = True
+    session['user_id'] = user['id']
+    session['username'] = user['username']
+    session['role'] = user['role']
+    
+    # Generate token for mobile auth
+    token = f"genesis_mobile_{user['id']}_{int(time.time())}"
+    
+    return jsonify({
+        'success': True,
+        'token': token,
+        'user': {
+            'id': user['id'],
+            'username': user['username'],
+            'email': user['email'],
+            'role': user['role']
+        }
+    })
+
+
+@app.route('/api/auth/register', methods=['POST'])
+def api_auth_register():
+    """Mobile API registration endpoint."""
+    data = request.get_json() or {}
+    username = data.get('username')
+    email = data.get('email')
+    password = data.get('password')
+    
+    if not username or not email or not password:
+        return jsonify({'error': 'All fields required'}), 400
+    
+    if len(password) < 8:
+        return jsonify({'error': 'Password must be at least 8 characters'}), 400
+    
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        password_hash = generate_password_hash(password)
+        cursor.execute('''
+            INSERT INTO users (username, email, password_hash, role)
+            VALUES (?, ?, ?, ?)
+        ''', (username, email, password_hash, 'user'))
+        user_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        # Auto-login
+        session.permanent = True
+        session['user_id'] = user_id
+        session['username'] = username
+        session['role'] = 'user'
+        
+        token = f"genesis_mobile_{user_id}_{int(time.time())}"
+        
+        return jsonify({
+            'success': True,
+            'token': token,
+            'user': {
+                'id': user_id,
+                'username': username,
+                'email': email,
+                'role': 'user'
+            }
+        })
+    except sqlite3.IntegrityError:
+        return jsonify({'error': 'Username or email already exists'}), 409
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+def api_auth_logout():
+    """Mobile API logout endpoint."""
+    session.clear()
+    return jsonify({'success': True})
+
+
+@app.route('/api/auth/me', methods=['GET'])
+def api_auth_me():
+    """Get current user info."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    conn = get_db()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, username, email, role, created_at
+        FROM users WHERE id = ?
+    ''', (session['user_id'],))
+    user = cursor.fetchone()
+    conn.close()
+    
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    return jsonify({
+        'user': {
+            'id': user['id'],
+            'username': user['username'],
+            'email': user['email'],
+            'role': user['role'],
+            'created_at': user['created_at']
+        }
+    })
 
 
 # Authentication routes
