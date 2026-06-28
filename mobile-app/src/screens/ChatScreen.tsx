@@ -9,6 +9,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
@@ -21,11 +23,40 @@ const ChatScreen = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
+  const [typingAnimation] = useState(new Animated.Value(0));
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
     loadChatHistory();
+    checkConnection();
+    // Typing animation loop
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(typingAnimation, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(typingAnimation, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
   }, []);
+
+  const checkConnection = async () => {
+    try {
+      const response = await chatService.checkHealth();
+      setIsConnected(response.healthy);
+    } catch (error) {
+      setIsConnected(false);
+    }
+  };
 
   const loadChatHistory = async () => {
     try {
@@ -40,6 +71,15 @@ const ChatScreen = () => {
 
   const sendMessage = async () => {
     if (!inputText.trim()) return;
+
+    if (!isConnected) {
+      Alert.alert(
+        'Connection Error',
+        'Unable to connect to Genesis Protocol server. Please check your connection and try again.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -63,24 +103,36 @@ const ChatScreen = () => {
       setMessages(prev => [...prev, assistantMessage]);
       
       // Cache messages
-      await cacheStorage.set('chat_history', [...messages, userMessage, assistantMessage], 60);
-    } catch (error) {
-      // If backend is not available, simulate a response
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'Genesis Protocol is currently offline. Your message has been queued for processing when the connection is restored.',
-        timestamp: Date.now(),
-      };
-      setMessages(prev => [...prev, assistantMessage]);
+      const updatedMessages = [...messages, userMessage, assistantMessage];
+      await cacheStorage.set('chat_history', updatedMessages, 60);
+    } catch (error: any) {
+      // Show real error message
+      const errorMessage = error?.response?.data?.message || 
+                          error?.message || 
+                          'Failed to send message. Please try again.';
+      
+      Alert.alert('Error', errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
   const clearChat = async () => {
-    setMessages([]);
-    await cacheStorage.remove('chat_history');
+    Alert.alert(
+      'Clear Chat',
+      'Are you sure you want to clear all messages?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Clear', 
+          style: 'destructive',
+          onPress: async () => {
+            setMessages([]);
+            await cacheStorage.remove('chat_history');
+          }
+        },
+      ]
+    );
   };
 
   const renderMessage = ({ item }: { item: ChatMessage }) => {
@@ -125,6 +177,8 @@ const ChatScreen = () => {
     );
   };
 
+  const statusColor = isConnected ? '#00ff88' : '#ff4444';
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <KeyboardAvoidingView
@@ -135,11 +189,11 @@ const ChatScreen = () => {
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: theme.border }]}>
           <View style={styles.headerTitle}>
-            <Text style={[styles.headerText, { color: theme.text }]}>Genesis Chat</Text>
-            <View style={[styles.statusDot, { backgroundColor: theme.success }]} />
+            <Text style={[styles.headerText, { color: theme.text }]}>GENESIS OS</Text>
+            <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
           </View>
           <TouchableOpacity onPress={clearChat}>
-            <Text style={[styles.clearButton, { color: theme.primary }]}>Clear</Text>
+            <Text style={[styles.clearButton, { color: theme.primary }]}>CLEAR</Text>
           </TouchableOpacity>
         </View>
 

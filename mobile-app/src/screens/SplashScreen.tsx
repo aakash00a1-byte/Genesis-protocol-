@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
@@ -13,22 +13,49 @@ const SplashScreen = () => {
   const { isAuthenticated } = useAuth();
   const navigation = useNavigation<SplashScreenNavigationProp>();
   
-  const fadeAnim = new Animated.Value(0);
-  const scaleAnim = new Animated.Value(0.8);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Main entrance animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 1000,
+        duration: 800,
         useNativeDriver: true,
       }),
       Animated.spring(scaleAnim, {
         toValue: 1,
-        tension: 50,
-        friction: 7,
+        tension: 40,
+        friction: 6,
         useNativeDriver: true,
       }),
+      // Slow rotation animation
+      Animated.loop(
+        Animated.timing(rotateAnim, {
+          toValue: 1,
+          duration: 10000,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      ),
+      // Glow pulse animation
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(glowAnim, {
+            toValue: 0,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ])
+      ),
     ]).start(() => {
       setTimeout(() => {
         if (isAuthenticated) {
@@ -36,12 +63,25 @@ const SplashScreen = () => {
         } else {
           navigation.replace('Login');
         }
-      }, 1500);
+      }, 2000);
     });
   }, [isAuthenticated, navigation]);
 
+  const spin = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.8],
+  });
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Background grid effect */}
+      <View style={styles.gridOverlay} />
+      
       <Animated.View
         style={[
           styles.logoContainer,
@@ -51,22 +91,62 @@ const SplashScreen = () => {
           },
         ]}
       >
+        {/* Outer ring */}
+        <Animated.View
+          style={[
+            styles.outerRing,
+            { 
+              borderColor: theme.primary,
+              transform: [{ rotate: spin }],
+              opacity: glowOpacity,
+            },
+          ]}
+        />
+        
+        {/* Main logo container */}
         <View style={[styles.logoOuter, { borderColor: theme.primary }]}>
+          <Animated.View 
+            style={[
+              styles.logoGlow, 
+              { 
+                backgroundColor: theme.primary,
+                opacity: glowOpacity,
+              }
+            ]} 
+          />
           <View style={[styles.logoInner, { backgroundColor: theme.primary }]}>
             <Text style={[styles.logoText, { color: theme.background }]}>G</Text>
           </View>
         </View>
-        <Text style={[styles.title, { color: theme.text }]}>Genesis Protocol</Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          Autonomous AI Agent
+        
+        <Text style={[styles.title, { color: theme.text }]}>GENESIS OS</Text>
+        <Text style={[styles.subtitle, { color: theme.primary }]}>
+          v2.0
+        </Text>
+        <Text style={[styles.tagline, { color: theme.textSecondary }]}>
+          OPERATING SYSTEM
         </Text>
       </Animated.View>
       
+      {/* Loading indicator */}
       <Animated.View style={[styles.loadingContainer, { opacity: fadeAnim }]}>
-        <View style={[styles.loadingDot, { backgroundColor: theme.primary }]} />
-        <View style={[styles.loadingDot, { backgroundColor: theme.primary }]} />
-        <View style={[styles.loadingDot, { backgroundColor: theme.primary }]} />
+        <View style={[styles.loadingBar, { backgroundColor: theme.border }]}>
+          <Animated.View 
+            style={[
+              styles.loadingProgress, 
+              { backgroundColor: theme.primary }
+            ]} 
+          />
+        </View>
+        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+          INITIALIZING SYSTEMS...
+        </Text>
       </Animated.View>
+      
+      {/* Version */}
+      <Text style={[styles.version, { color: theme.textSecondary }]}>
+        GENESIS PROTOCOL © 2026
+      </Text>
     </View>
   );
 };
@@ -77,17 +157,37 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  gridOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.03,
+  },
   logoContainer: {
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  outerRing: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    borderWidth: 2,
+    borderStyle: 'dashed',
   },
   logoOuter: {
-    width: 120,
-    height: 120,
-    borderRadius: 30,
+    width: 140,
+    height: 140,
+    borderRadius: 35,
     borderWidth: 3,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
+    overflow: 'hidden',
+  },
+  logoGlow: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
   },
   logoInner: {
     width: 100,
@@ -97,29 +197,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoText: {
-    fontSize: 48,
+    fontSize: 56,
     fontWeight: 'bold',
+    letterSpacing: 4,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    fontSize: 32,
+    fontWeight: '900',
+    letterSpacing: 6,
+    marginBottom: 4,
   },
   subtitle: {
-    fontSize: 16,
-    letterSpacing: 2,
+    fontSize: 18,
+    fontWeight: '300',
+    letterSpacing: 8,
+    marginBottom: 12,
+  },
+  tagline: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 4,
   },
   loadingContainer: {
-    flexDirection: 'row',
     position: 'absolute',
-    bottom: 100,
+    bottom: 120,
+    alignItems: 'center',
   },
-  loadingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginHorizontal: 4,
-    opacity: 0.5,
+  loadingBar: {
+    width: 200,
+    height: 2,
+    borderRadius: 1,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  loadingProgress: {
+    width: '60%',
+    height: '100%',
+    borderRadius: 1,
+  },
+  loadingText: {
+    fontSize: 10,
+    letterSpacing: 2,
+    fontWeight: '500',
+  },
+  version: {
+    position: 'absolute',
+    bottom: 40,
+    fontSize: 10,
+    letterSpacing: 1,
   },
 });
 

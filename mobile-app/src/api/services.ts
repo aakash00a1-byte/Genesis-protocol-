@@ -58,6 +58,10 @@ export const chatService = {
   clearHistory: async (): Promise<void> => {
     await apiClient.post('/chat/clear');
   },
+
+  checkHealth: async (): Promise<HealthCheck> => {
+    return apiClient.get<HealthCheck>('/health');
+  },
 };
 
 // System Service

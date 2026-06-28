@@ -60,7 +60,7 @@ export interface NotificationPreferences {
   activityUpdates: boolean;
 }
 
-// Theme Types
+// Theme Types - Genesis OS v2
 export interface ThemeColors {
   primary: string;
   secondary: string;
@@ -72,6 +72,9 @@ export interface ThemeColors {
   success: string;
   warning: string;
   border: string;
+  card: string;
+  accent: string;
+  glow: string;
 }
 
 export type ThemeMode = 'dark' | 'light';
