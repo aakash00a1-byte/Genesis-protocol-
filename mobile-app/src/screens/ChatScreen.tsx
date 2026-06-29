@@ -108,7 +108,18 @@ const ChatScreen = () => {
       const updatedMessages = [...messages, userMessage, assistantMessage];
       await cacheStorage.set('chat_history', updatedMessages, 60);
     } catch (error: any) {
-      // Show real error message
+      console.log('[Chat] Error:', JSON.stringify(error));
+      
+      // Check for 401 Unauthorized
+      if (error?.response?.status === 401 || error?.message?.includes('401')) {
+        Alert.alert(
+          'Session Expired', 
+          'Please login again.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      
       const errorMessage = error?.response?.data?.message || 
                           error?.message || 
                           'Failed to send message. Please try again.';

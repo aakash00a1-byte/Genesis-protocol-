@@ -22,11 +22,17 @@ class ApiClient {
           this.token = await SecureStore.getItemAsync('auth_token');
         }
         if (this.token) {
-          config.headers.Authorization = `Bearer ${this.token}`;
+          config.headers['Authorization'] = `Bearer ${this.token}`;
+          console.log('[API] Token added:', this.token.substring(0, 20) + '...');
+        } else {
+          console.log('[API] No token found');
         }
         return config;
       },
-      (error) => Promise.reject(error)
+      (error) => {
+        console.log('[API] Request error:', error);
+        return Promise.reject(error);
+      }
     );
 
     // Response interceptor for error handling
