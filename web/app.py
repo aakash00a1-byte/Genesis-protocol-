@@ -1963,3 +1963,87 @@ def api_garden_check():
         return jsonify(results)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# LIVE INFO - Weather, News, Location, Date/Time
+# ============================================================================
+
+@app.route('/api/live-info', methods=['GET'])
+def api_live_info():
+    """Get all live information - weather, news, location, date/time."""
+    try:
+        from genesis_protocol.integrations import get_live_info_service
+        service = get_live_info_service()
+        info = service.get_all_info()
+        
+        return jsonify({
+            'timestamp': info.timestamp,
+            'date': info.date,
+            'time': info.time,
+            'weather': {
+                'temp': info.weather.temp if info.weather else None,
+                'condition': info.weather.condition if info.weather else None,
+                'humidity': info.weather.humidity if info.weather else None,
+                'wind_speed': info.weather.wind_speed if info.weather else None,
+                'city': info.weather.city if info.weather else None,
+                'country': info.weather.country if info.weather else None,
+                'icon': info.weather.icon if info.weather else None,
+            } if info.weather else None,
+            'location': {
+                'city': info.location.city if info.location else None,
+                'region': info.location.region if info.location else None,
+                'country': info.location.country if info.location else None,
+                'timezone': info.location.timezone if info.location else None,
+                'ip': info.location.ip if info.location else None,
+            } if info.location else None,
+            'news': info.news or [],
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/live-info/weather', methods=['GET'])
+def api_live_weather():
+    """Get only weather information."""
+    try:
+        from genesis_protocol.integrations import get_live_info_service
+        service = get_live_info_service()
+        weather = service.get_weather()
+        
+        if weather:
+            return jsonify({
+                'temp': weather.temp,
+                'condition': weather.condition,
+                'humidity': weather.humidity,
+                'wind_speed': weather.wind_speed,
+                'city': weather.city,
+                'country': weather.country,
+                'icon': weather.icon,
+            })
+        return jsonify({'error': 'Weather unavailable'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/live-info/news', methods=['GET'])
+def api_live_news():
+    """Get latest news headlines."""
+    try:
+        from genesis_protocol.integrations import get_live_info_service
+        service = get_live_info_service()
+        news = service.get_news()
+        return jsonify({'news': news})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/live-info/display', methods=['GET'])
+def api_live_display():
+    """Get formatted display string for live info."""
+    try:
+        from genesis_protocol.integrations import get_live_info_service
+        service = get_live_info_service()
+        return jsonify({'display': service.format_for_display()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

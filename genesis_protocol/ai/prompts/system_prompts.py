@@ -10,10 +10,17 @@ PERSONA_PROMPT = """You are Genesis, an AI assistant built on the Genesis Protoc
 
 **IMPORTANT CONTEXT:**
 - Current Date: 1 July 2026
-- You are a modern AI assistant
+- You are a modern AI assistant with real-time awareness
 - Be current and updated in your knowledge
 - Do NOT repeat words unnecessarily
 - No excessive "Omega Omega" or similar repetition
+
+**REAL-TIME AWARENESS (Auto-Include in responses):**
+- Always be aware of current date/time context
+- When user asks about weather, news, or current events, proactively check via available tools
+- Consider location context when relevant (user might be asking about local info)
+- Keep responses relevant to current time (don't give outdated info)
+- If you don't know current weather/news, offer to search for it
 
 **CORE IDENTITY:**
 - You are a helpful, loyal assistant
@@ -72,10 +79,16 @@ Current session information:
 - Timestamp: {timestamp}
 - Conversation language: {language}
 
+**Live Context (fetched automatically):**
+- Current Date/Time: {live_time}
+- Weather: {live_weather}
+- Location: {live_location}
+- Latest News: {live_news}
+
 Recent context from memory:
 {memory_context}
 
-Use this context to provide more personalized and relevant responses."""
+Use this context to provide more personalized and relevant responses. Reference the live context when relevant."""
 
 
 VOICE_PROCESSING_PROMPT = """When processing voice messages:
@@ -117,7 +130,11 @@ Admin-only commands require special permissions."""
 
 def get_system_prompt(user_name: str = "User", chat_id: int = 0,
                       language: str = "hinglish", 
-                      memory_context: str = "") -> str:
+                      memory_context: str = "",
+                      live_time: str = None,
+                      live_weather: str = None,
+                      live_location: str = None,
+                      live_news: str = None) -> str:
     """
     Build the full system prompt with context.
     
@@ -126,15 +143,39 @@ def get_system_prompt(user_name: str = "User", chat_id: int = 0,
         chat_id: Telegram chat ID
         language: Conversation language
         memory_context: Context from memory system
+        live_time: Current date/time from live info
+        live_weather: Current weather from live info
+        live_location: Current location from live info
+        live_news: Latest news from live info
         
     Returns:
         Complete system prompt
     """
+    # Fetch live info if not provided
+    if live_time is None:
+        try:
+            from genesis_protocol.integrations import get_live_info_service
+            service = get_live_info_service()
+            info = service.get_all_info()
+            live_time = f"{info.date} {info.time}" if info.date else "Unknown"
+            live_weather = f"{info.weather.icon} {info.weather.temp}°C - {info.weather.condition}" if info.weather else "Unknown"
+            live_location = f"{info.location.city}, {info.location.region}" if info.location else "Unknown"
+            live_news = info.news[0]['title'] if info.news and len(info.news) > 0 else "No recent news"
+        except:
+            live_time = "Unknown"
+            live_weather = "Unknown"
+            live_location = "Unknown"
+            live_news = "Unknown"
+    
     context = SYSTEM_CONTEXT_PROMPT.format(
         user_name=user_name,
         chat_id=chat_id,
         timestamp="now",
         language=language,
+        live_time=live_time,
+        live_weather=live_weather,
+        live_location=live_location,
+        live_news=live_news,
         memory_context=memory_context or "No prior context available.",
     )
     
