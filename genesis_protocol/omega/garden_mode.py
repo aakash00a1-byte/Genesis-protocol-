@@ -291,7 +291,7 @@ class GardenMode:
         """Get garden mode status."""
         return {
             'status': 'active',
-            'active_since': '2026-06-19',
+            'active_since': '2026-07-01',
             'phase': 'STABILITY',
             'last_daily': self.last_daily,
             'last_weekly': self.last_weekly,
