@@ -469,6 +469,15 @@ def chat():
                           role=session.get('role'))
 
 
+@app.route('/agent')
+@login_required
+def agent_workspace():
+    """AI Agent Workspace - Full autonomous agent experience."""
+    return render_template('agent_workspace.html',
+                          username=session.get('username'),
+                          role=session.get('role'))
+
+
 @app.route('/settings')
 @login_required
 def settings():

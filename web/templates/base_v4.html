@@ -49,6 +49,10 @@
                         <span class="nav-item-icon">💬</span>
                         <span class="nav-item-text">Chat</span>
                     </a>
+                    <a href="/agent" class="nav-item {% if request.endpoint == 'agent_workspace' %}active{% endif %}">
+                        <span class="nav-item-icon">⚡</span>
+                        <span class="nav-item-text">AI Agent</span>
+                    </a>
                     <a href="/agents" class="nav-item">
                         <span class="nav-item-icon">🤖</span>
                         <span class="nav-item-text">Agents</span>
