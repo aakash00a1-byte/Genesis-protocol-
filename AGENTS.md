@@ -1,7 +1,7 @@
-# Genesis Protocol - Agent Memory & Context
+# Gluttony OS - Agent Memory & Context
 
 ## Identity
-- **Name**: Genesis Protocol
+- **Name**: Gluttony OS
 - **Creator**: Aakash Kumar (@aakash00a1-byte)
 - **Type**: AI Agent / Assistant
 - **Platform**: OpenHands-based agent with Discord integration

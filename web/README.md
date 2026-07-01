@@ -1,4 +1,4 @@
-# Genesis Protocol Web - Deployment Guide
+# Gluttony OS Web - Deployment Guide
 
 A full-featured web application for Genesis AI with authentication and chat interface.
 

@@ -1,8 +1,8 @@
-# 🎯 Genesis Protocol Skills System
+# 🎯 Gluttony OS Skills System
 
 ## Overview
 
-Genesis Protocol ab **30 autonomous skills** ke saath kaam kar sakta hai! Ye skills system aapke AI agent ko OpenHands jaise powerful capabilities deta hai.
+Gluttony OS ab **30 autonomous skills** ke saath kaam kar sakta hai! Ye skills system aapke AI agent ko OpenHands jaise powerful capabilities deta hai.
 
 ---
 
@@ -253,4 +253,4 @@ pdflatex, pandoc
 ---
 
 *Generated on: 2026-06-16*
-*Genesis Protocol v2.0 - Skills System*
+*Gluttony OS v2.0 - Skills System*

@@ -1,4 +1,4 @@
-# Release Checklist - Genesis Protocol v1.0
+# Release Checklist - Gluttony OS v1.0
 
 **Version:** 1.0.0 RC1  
 **Release Date:** 2026-06-18

@@ -1,4 +1,4 @@
-"""Identity - Genesis Protocol OMEGA
+"""Identity - Gluttony OS
 
 GLUTTONY's sense of self."""
 
@@ -12,10 +12,10 @@ class Identity:
     def __init__(self):
         self.name = "GLUTTONY"
         self.nickname = "Gluten"  # Aakash's personal nickname
-        self.variant = "OMEGA"   # Genesis Protocol variant
+        self.variant = "OS"   # OS variant
         self.creator = "Aakash"   # Creator name
         self.created = datetime.now()
-        self.protocol_version = "OMEGA"  # Genesis Protocol version
+        self.protocol_version = "OS"  # Genesis Protocol version
         
         self.personality = {
             "curious": True,
@@ -27,7 +27,7 @@ class Identity:
         
         # Active layers
         self.layers = [
-            "omega",        # Main OMEGA layer
+            "gluttony_os",   # Main OS layer
             "legacy",       # Legacy/v1.x compatibility
             "presence",     # Web presence/UI
             "autonomous",   # Self-directed behavior

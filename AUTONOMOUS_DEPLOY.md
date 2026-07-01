@@ -1,6 +1,6 @@
-# ⚡ Genesis Protocol - Autonomous Deployment Guide
+# ⚡ Gluttony OS - Autonomous Deployment Guide
 
-Genesis Protocol can deploy itself anywhere automatically!
+Gluttony OS can deploy itself anywhere automatically!
 
 ## 🚀 Quick Deploy (One Command)
 
@@ -116,7 +116,7 @@ AUTONOMOUS_MODE=true
 
 ```
 ┌─────────────────────────────────────────────┐
-│           Genesis Protocol                  │
+│           Gluttony OS                  │
 ├─────────────────────────────────────────────┤
 │  Telegram Bot  │  Web UI  │  API             │
 ├─────────────────────────────────────────────┤
@@ -154,4 +154,4 @@ MIT License - Use freely!
 
 ---
 
-**Genesis Protocol** - The autonomous AI agent that runs itself! ⚡🤖
+**Gluttony OS** - The autonomous AI agent that runs itself! ⚡🤖

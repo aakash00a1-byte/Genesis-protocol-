@@ -1,4 +1,4 @@
-# Genesis Protocol
+# Gluttony OS
 
 **Autonomous Multimodal AI Agent with Telegram Interface**
 
@@ -8,7 +8,7 @@
 
 ## Overview
 
-Genesis Protocol is an autonomous AI agent system that processes text, voice, and image inputs through an intelligent multi-provider AI fallback chain. It provides a Telegram interface for seamless communication with persistent conversation memory.
+Gluttony OS is an autonomous AI agent system that processes text, voice, and image inputs through an intelligent multi-provider AI fallback chain. It provides a Telegram interface for seamless communication with persistent conversation memory.
 
 ## Features
 
@@ -24,7 +24,7 @@ Genesis Protocol is an autonomous AI agent system that processes text, voice, an
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Genesis Protocol                          │
+│                        Gluttony OS                          │
 ├─────────────────────────────────────────────────────────────────┤
 │  ┌──────────────┐     ┌──────────────────────────────────────┐  │
 │  │   Telegram   │────▶│           Message Processor          │  │
@@ -184,4 +184,4 @@ MIT License - See [LICENSE](LICENSE) for details.
 
 ---
 
-**Built with ❤️ by Genesis Protocol Team**
+**Built with ❤️ by Gluttony OS Team**

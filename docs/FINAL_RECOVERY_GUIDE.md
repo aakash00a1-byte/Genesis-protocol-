@@ -1,4 +1,4 @@
-# Final Recovery Guide - Genesis Protocol
+# Final Recovery Guide - Gluttony OS
 
 **Version:** 1.0.0  
 **Purpose:** Complete disaster recovery procedures

@@ -1,4 +1,4 @@
-# Genesis Protocol - GitHub Sync Report
+# Gluttony OS - GitHub Sync Report
 
 **Generated:** 2026-06-11T04:38:00Z  
 **Audit Type:** Repository Recovery Audit  

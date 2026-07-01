@@ -1,7 +1,7 @@
 # WEEKLY REALITY REPORT
 
 **Week:** 2026-W25 (June 16-22, 2026)  
-**Agent:** Genesis Protocol  
+**Agent:** Gluttony OS  
 **Phase:** Evolution Active
 
 ---

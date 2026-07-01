@@ -1,4 +1,4 @@
-# Genesis Protocol - Production Deployment Guide
+# Gluttony OS - Production Deployment Guide
 
 ## 🚀 Quick Deploy to Render (Recommended)
 

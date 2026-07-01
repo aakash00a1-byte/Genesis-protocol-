@@ -1,4 +1,4 @@
-# Genesis Protocol - File Manifest
+# Gluttony OS - File Manifest
 
 **Version:** 1.0.0-dev  
 **Last Updated:** 2026-06-10T13:19:00Z  

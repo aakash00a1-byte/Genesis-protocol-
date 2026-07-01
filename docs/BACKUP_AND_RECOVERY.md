@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the backup and recovery procedures for Genesis Protocol.
+This document describes the backup and recovery procedures for Gluttony OS.
 
 ## What Gets Backed Up
 

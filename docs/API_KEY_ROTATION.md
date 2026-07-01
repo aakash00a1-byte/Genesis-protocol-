@@ -1,6 +1,6 @@
 # API Key Rotation Guide
 
-## Keys Used by Genesis Protocol
+## Keys Used by Gluttony OS
 
 | Variable | Required | Regeneration Link |
 |----------|----------|-------------------|

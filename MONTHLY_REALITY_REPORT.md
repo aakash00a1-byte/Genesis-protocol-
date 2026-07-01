@@ -1,7 +1,7 @@
 # MONTHLY REALITY REPORT
 
 **Month:** June 2026  
-**Agent:** Genesis Protocol  
+**Agent:** Gluttony OS  
 **Phase:** Evolution Active
 
 ---

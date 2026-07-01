@@ -1,7 +1,7 @@
 # Discord Integration Guide
 
 ## Overview
-Genesis Protocol Discord Bot - Python 3.11+ with discord.py
+Gluttony OS Discord Bot - Python 3.11+ with discord.py
 
 ## Features
 - Message listening in #general channel
@@ -30,7 +30,7 @@ Genesis Protocol Discord Bot - Python 3.11+ with discord.py
 ### 1. Create Application
 1. Go to https://discord.com/developers/applications
 2. Click "New Application"
-3. Name it (e.g., "Genesis Protocol")
+3. Name it (e.g., "Gluttony OS")
 
 ### 2. Create Bot
 1. Select your application
@@ -93,7 +93,7 @@ Replace `BOT_CLIENT_ID` with your bot's Application ID.
 |---------|----------|
 | `hello genesis` | Greets the user |
 | `hlo genesis` | Greets the user |
-| `@Genesis Protocol` | AI chat response |
+| `@Gluttony OS` | AI chat response |
 | New member joins | Auto welcome message |
 
 ### 👑 Admin Setup

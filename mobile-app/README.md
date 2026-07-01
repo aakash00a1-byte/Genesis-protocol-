@@ -1,10 +1,10 @@
-# Genesis Protocol Mobile App
+# Gluttony OS Mobile App
 
 **Autonomous AI Agent Mobile Application**
 
 ## 📱 Overview
 
-Genesis Protocol Mobile App connects to your Genesis Protocol backend running on Railway, providing real-time monitoring, chat, and control of your autonomous AI agent from your mobile device.
+Gluttony OS Mobile App connects to your Gluttony OS backend running on Railway, providing real-time monitoring, chat, and control of your autonomous AI agent from your mobile device.
 
 ## ✨ Features
 
@@ -219,4 +219,4 @@ MIT License - See LICENSE file for details.
 
 **Built with ❤️ using Expo & React Native**
 
-**Genesis Protocol - Autonomous AI Agent**
+**Gluttony OS - Autonomous AI Agent**

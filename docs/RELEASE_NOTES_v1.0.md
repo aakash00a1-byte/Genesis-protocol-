@@ -1,4 +1,4 @@
-# Genesis Protocol v1.0 Release Notes
+# Gluttony OS v1.0 Release Notes
 
 **Version:** 1.0.0  
 **Type:** Release Candidate 1 (RC1)  
@@ -9,7 +9,7 @@
 
 ## Overview
 
-Genesis Protocol v1.0 is a multi-channel AI assistant platform with:
+Gluttony OS v1.0 is a multi-channel AI assistant platform with:
 
 - **Web Interface** - Flask-based chat application
 - **Telegram Bot** - Integration with Telegram messaging
@@ -179,7 +179,7 @@ railway logs --service genesis-protocol
 
 ## Contributors
 
-- Genesis Protocol Development Team
+- Gluttony OS Development Team
 
 ---
 

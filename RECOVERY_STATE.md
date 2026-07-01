@@ -1,4 +1,4 @@
-# Genesis Protocol - Recovery State
+# Gluttony OS - Recovery State
 
 **Last Updated:** 2026-06-10T13:25:00Z  
 **Session ID:** live-validation-session-004  
@@ -153,5 +153,5 @@ docker-compose up -d
 
 ---
 
-**Recovery System:** Genesis Protocol Automated Recovery  
+**Recovery System:** Gluttony OS Automated Recovery  
 **Last Checkpoint:** 2026-06-10 12:15:00 UTC

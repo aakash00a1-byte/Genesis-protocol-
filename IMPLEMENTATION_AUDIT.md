@@ -1,4 +1,4 @@
-# Genesis Protocol - Implementation Audit
+# Gluttony OS - Implementation Audit
 
 **Audit Date:** 2026-06-10T12:02:00Z  
 **Auditor:** Repository Audit Mode  

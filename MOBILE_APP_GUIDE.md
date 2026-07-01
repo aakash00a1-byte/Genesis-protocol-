@@ -1,4 +1,4 @@
-# Genesis Protocol Mobile App - Implementation Summary
+# Gluttony OS Mobile App - Implementation Summary
 
 **Created:** 2026-06-27  
 **Status:** ✅ Implementation Complete
@@ -7,13 +7,13 @@
 
 ## 📱 What Was Built
 
-A complete React Native/Expo mobile application for Genesis Protocol that connects to the Railway backend, providing real-time monitoring, chat, and control of the autonomous AI agent from mobile devices.
+A complete React Native/Expo mobile application for Gluttony OS that connects to the Railway backend, providing real-time monitoring, chat, and control of the autonomous AI agent from mobile devices.
 
 ## 🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Genesis Protocol System                        │
+│                    Gluttony OS System                        │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  ┌──────────────────┐     ┌───────────────────────────────────┐ │
@@ -219,4 +219,4 @@ eas build --platform android --profile production
 
 **Built with ❤️ using Expo & React Native**
 
-*Genesis Protocol - Autonomous AI Agent System*
+*Gluttony OS - Autonomous AI Agent System*

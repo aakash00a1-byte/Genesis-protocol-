@@ -1,4 +1,4 @@
-# Genesis Protocol - Work Summary Report
+# Gluttony OS - Work Summary Report
 
 **Date:** 2026-06-11  
 **Session:** Recovery, Stabilization & Deployment Prep  
@@ -11,7 +11,7 @@
 
 ### What We Did
 
-1. **Recovered** Genesis Protocol from archived conversations
+1. **Recovered** Gluttony OS from archived conversations
 2. **Stabilized** all components (ChromaDB, Redis, Tavily)
 3. **Added** Hinglish language support
 4. **Prepared** deployment configs for multiple platforms

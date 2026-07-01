@@ -1,4 +1,4 @@
-# Genesis Protocol - Build Status
+# Gluttony OS - Build Status
 
 **Last Updated:** 2026-06-10T13:25:00Z  
 **Build Status:** ALL SYSTEMS OPERATIONAL  
