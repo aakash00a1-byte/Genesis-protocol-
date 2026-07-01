@@ -9,11 +9,14 @@ Provides real-time information:
 
 import requests
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Optional
 from dataclasses import dataclass
 
 logger = logging.getLogger("integrations.live_info")
+
+# IST timezone (UTC+5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 @dataclass
@@ -235,16 +238,18 @@ class LiveInfoService:
     
     def get_all_info(self) -> LiveInfo:
         """Get all live information at once."""
-        now = datetime.now()
+        # Use IST timezone (India Standard Time)
+        now_utc = datetime.now(timezone.utc)
+        now_ist = now_utc.astimezone(IST)
         
         location = self.get_location()
         weather = self.get_weather()
         news = self.get_news()
         
         return LiveInfo(
-            timestamp=now.isoformat(),
-            date=now.strftime("%d %B %Y"),
-            time=now.strftime("%H:%M:%S"),
+            timestamp=now_ist.isoformat(),
+            date=now_ist.strftime("%d %B %Y"),
+            time=now_ist.strftime("%I:%M:%S %p IST"),
             weather=weather,
             location=location,
             news=news
