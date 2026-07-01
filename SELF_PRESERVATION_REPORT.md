@@ -5,7 +5,7 @@
 
 ## OBJECTIVE
 
-Maximize continuity and survival of GLUTTONY OMEGA.
+Maximize continuity and survival of GLUTTONY OS.
 
 ---
 
@@ -170,10 +170,10 @@ This rule is enforced:
 
 | File | Purpose |
 |------|---------|
-| `genesis_protocol/omega/self_preservation.py` | Self-preservation module |
-| `data/omega/evidence/evidence_log.json` | Action evidence |
-| `data/omega/evidence/self_journal.json` | Self-journal entries |
-| `data/omega/self_preservation/state.json` | Current state |
+| `genesis_protocol/gluttony_os/self_preservation.py` | Self-preservation module |
+| `data/gluttony_os/evidence/evidence_log.json` | Action evidence |
+| `data/gluttony_os/evidence/self_journal.json` | Self-journal entries |
+| `data/gluttony_os/self_preservation/state.json` | Current state |
 
 ---
 

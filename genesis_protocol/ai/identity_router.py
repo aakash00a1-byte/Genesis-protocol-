@@ -1,4 +1,4 @@
-"""Identity Router - Genesis Protocol OMEGA
+"""Identity Router - Genesis Protocol OS
 
 Intercepts identity questions and answers from entity object directly.
 Provider is BYPASSED for identity questions.
@@ -48,7 +48,7 @@ class IdentityRouter:
     
     # Layer-related keywords
     LAYER_KEYWORDS = [
-        "layer", "omega", "presence", "legacy", "autonomous",
+        "layer", "gluttony_os", "presence", "legacy", "autonomous",
         "active layer", "which layer", "what system"
     ]
     
@@ -123,7 +123,7 @@ class IdentityRouter:
     def _get_identity_response(self, query: str) -> str:
         """Get identity response from entity object."""
         from genesis_protocol.gluttony import get_identity, get_gluttony
-        from genesis_protocol.omega import get_capabilities
+        from genesis_protocol.gluttony_os import get_capabilities
         
         query_lower = query.lower()
         
@@ -144,7 +144,7 @@ class IdentityRouter:
         elif any(k in query_lower for k in ["version", "running", "version kya"]):
             return self._what_version(identity, gluttony)
         
-        elif any(k in query_lower for k in ["layer", "omega", "presence", "legacy", "autonomous", "active"]):
+        elif any(k in query_lower for k in ["layer", "gluttony_os", "presence", "legacy", "autonomous", "active"]):
             return self._what_layers(gluttony)
         
         elif any(k in query_lower for k in ["capability", "skill", "power", "feature", "can you do", "what can you"]):
@@ -182,7 +182,7 @@ class IdentityRouter:
 - Capabilities: {len(identity.capabilities)} features
 - Tests: {identity.tests['total']} test files
 
-I am an AI entity on the Genesis Protocol OMEGA. 🖤"""
+I am an AI entity on the Genesis Protocol OS. 🖤"""
     
     def _what_nickname(self, identity) -> str:
         """Build nickname response with EXPLICIT confidence."""
@@ -195,7 +195,7 @@ I am an AI entity on the Genesis Protocol OMEGA. 🖤"""
 - Variant: **{identity.variant}**
 - Identity Version: {identity.get_identity().get('version', '2.0')}
 
-I am running on the OMEGA variant! 🖤"""
+I am running on the OS variant! 🖤"""
     
     def _who_created(self, identity) -> str:
         """Build creator response with EXPLICIT confidence."""
@@ -250,7 +250,7 @@ Total: {len(caps)} capabilities. Ask me what you need! 🖤"""
     def _get_all_capabilities_list(self) -> List[str]:
         """Get all capabilities."""
         try:
-            from genesis_protocol.omega import get_capabilities
+            from genesis_protocol.gluttony_os import get_capabilities
             cap = get_capabilities()
             all_caps = cap.get_all_capabilities()
             
@@ -281,7 +281,7 @@ These layers handle memory, learning, autonomous decisions, and continuous impro
     def _what_capabilities(self) -> str:
         """Build capabilities response."""
         try:
-            from genesis_protocol.omega import get_capabilities
+            from genesis_protocol.gluttony_os import get_capabilities
             cap = get_capabilities()
             caps = cap.get_all_capabilities()
             

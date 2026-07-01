@@ -49,7 +49,7 @@ class LegacyBooks:
         
         # Generate markdown
         content = f"""# BOOK OF LESSONS
-*GLUTTONY Ω+2 Legacy*
+*GLUTTONY  OS+2 Legacy*
 
 Generated: {datetime.now().isoformat()}
 Total Lessons: {len(lessons)}
@@ -90,7 +90,7 @@ Total Lessons: {len(lessons)}
         failures = []
         
         # Load from journal
-        journal_path = "./data/omega/journal"
+        journal_path = "./data/gluttony_os/journal"
         if os.path.exists(journal_path):
             import json
             for date_dir in os.listdir(journal_path):
@@ -103,7 +103,7 @@ Total Lessons: {len(lessons)}
                             failures.extend([e for e in entries if e.get('type') == 'failure'])
         
         content = f"""# BOOK OF FAILURES
-*GLUTTONY Ω+2 Legacy*
+*GLUTTONY  OS+2 Legacy*
 
 Generated: {datetime.now().isoformat()}
 Total Failures Recorded: {len(failures)}
@@ -144,7 +144,7 @@ to ensure they are never repeated unnecessarily.
                 recoveries = data.get('recoveries', [])
         
         content = f"""# BOOK OF RECOVERIES
-*GLUTTONY Ω+2 Legacy*
+*GLUTTONY  OS+2 Legacy*
 
 Generated: {datetime.now().isoformat()}
 Total Recoveries: {len(recoveries)}
@@ -195,7 +195,7 @@ GLUTTONY recovered from failures.
                 projects.extend([n for n in nodes.values() if n.get('type') == 'project'])
         
         content = f"""# BOOK OF PROJECTS
-*GLUTTONY Ω+2 Legacy*
+*GLUTTONY  OS+2 Legacy*
 
 Generated: {datetime.now().isoformat()}
 Total Projects: {len(projects)}

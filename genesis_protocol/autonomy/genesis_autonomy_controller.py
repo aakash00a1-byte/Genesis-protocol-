@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
-from genesis_protocol.omega.autonomy_controller import get_autonomy_controller
+from genesis_protocol.gluttony_os.autonomy_controller import get_autonomy_controller
 from genesis_protocol.improvement import (
     WeaknessDetector, ProposalGenerator, RiskEngine, SafetyRules,
     get_weakness_detector, get_proposal_generator
@@ -23,7 +23,7 @@ class GenesisAutonomyController:
     Unified Genesis Protocol Autonomy Controller.
     
     Connects:
-    - Autonomy Directive (OMEGA)
+    - Autonomy Directive (OS)
     - Self-Improvement System
     - GitHub Integration
     - Memory System
@@ -46,7 +46,7 @@ class GenesisAutonomyController:
         self.journal = []
     
     def observe(self) -> Dict:
-        """Observe current state - OMEGA Evolution Cycle: observe."""
+        """Observe current state - OS Evolution Cycle: observe."""
         return {
             "timestamp": datetime.now().isoformat(),
             "autonomy_level": self.autonomy.get_level(),
@@ -56,7 +56,7 @@ class GenesisAutonomyController:
         }
     
     def evaluate(self) -> Dict:
-        """Evaluate current state - OMEGA Evolution Cycle: evaluate."""
+        """Evaluate current state - OS Evolution Cycle: evaluate."""
         weaknesses = self.weakness_detector.get_top_weaknesses(5)
         proposals = self.proposal_generator.get_proposed_proposals()
         
@@ -68,7 +68,7 @@ class GenesisAutonomyController:
         }
     
     def propose(self) -> Dict:
-        """Generate improvement proposals - OMEGA Evolution Cycle: propose."""
+        """Generate improvement proposals - OS Evolution Cycle: propose."""
         weaknesses = self.weakness_detector.get_top_weaknesses(5)
         new_proposals = []
         
@@ -84,7 +84,7 @@ class GenesisAutonomyController:
         }
     
     def experiment(self, proposal_id: str) -> Dict:
-        """Simulate/experiment with proposal - OMEGA Evolution Cycle: experiment."""
+        """Simulate/experiment with proposal - OS Evolution Cycle: experiment."""
         proposal = self.proposal_generator.get_proposal(proposal_id)
         
         if not proposal:
@@ -105,7 +105,7 @@ class GenesisAutonomyController:
         }
     
     def prepare(self, proposal_id: str) -> Dict:
-        """Prepare for implementation - OMEGA Evolution Cycle: prepare."""
+        """Prepare for implementation - OS Evolution Cycle: prepare."""
         proposal = self.proposal_generator.get_proposal(proposal_id)
         
         if not proposal:
@@ -128,7 +128,7 @@ class GenesisAutonomyController:
         }
     
     def journal_entry(self, entry: str, category: str = "general"):
-        """Log to journal - OMEGA Evolution Cycle: journal."""
+        """Log to journal - OS Evolution Cycle: journal."""
         self.journal.append({
             "timestamp": datetime.now().isoformat(),
             "category": category,
@@ -146,7 +146,7 @@ class GenesisAutonomyController:
         return {"journaled": True, "entries": len(self.journal)}
     
     def learn(self, lesson: str, context: str, outcome: str):
-        """Learn from experience - OMEGA Evolution Cycle: learn."""
+        """Learn from experience - OS Evolution Cycle: learn."""
         self.memory.remember_lesson(
             lesson=lesson,
             context=context,
@@ -159,7 +159,7 @@ class GenesisAutonomyController:
         }
     
     def check_and_improve(self) -> Dict:
-        """Run full OMEGA evolution cycle."""
+        """Run full OS evolution cycle."""
         results = {
             "timestamp": datetime.now().isoformat(),
             "cycle": ["observe", "evaluate", "propose", "experiment", "journal", "learn"]

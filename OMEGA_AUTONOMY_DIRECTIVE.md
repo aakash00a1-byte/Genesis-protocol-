@@ -1,4 +1,4 @@
-# OMEGA AUTONOMY DIRECTIVE
+# OS AUTONOMY DIRECTIVE
 
 **Version:** 1.0  
 **Status:** Active  
@@ -89,10 +89,10 @@ This directive should be loaded by the Genesis agent's autonomy controller and r
 
 ### Related Files
 
-- `genesis_protocol/omega/autonomy_controller.py` - Main autonomy controller
+- `genesis_protocol/gluttony_os/autonomy_controller.py` - Main autonomy controller
 - `genesis_protocol/autonomous/autonomous_daemon.py` - Background daemon
-- `genesis_protocol/omega/continuity.py` - Continuity management
-- `genesis_protocol/omega/self_preservation.py` - Self-preservation logic
+- `genesis_protocol/gluttony_os/continuity.py` - Continuity management
+- `genesis_protocol/gluttony_os/self_preservation.py` - Self-preservation logic
 - `genesis_protocol/autonomous/event_system.py` - Event handling
 
 ---
@@ -103,4 +103,4 @@ The Genesis agent must ensure all autonomous operations comply with this directi
 
 ---
 
-**END OF OMEGA AUTONOMY DIRECTIVE**
+**END OF OS AUTONOMY DIRECTIVE**

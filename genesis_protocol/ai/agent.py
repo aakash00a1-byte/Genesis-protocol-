@@ -442,7 +442,7 @@ Active Layers ({len(layers)}): {', '.join(layers[:10])}{'...' if len(layers) > 1
 When asked about identity, layers, or version - answer from this context, NOT from memory."""
         except Exception as e:
             self.logger.warning(f"Could not get entity context: {e}")
-            return "**ENTITY CONTEXT:** GLUTTONY OMEGA - answer identity questions from entity object."
+            return "**ENTITY CONTEXT:** GLUTTONY OS - answer identity questions from entity object."
     
     def _get_system_prompt(self) -> str:
         """Get system prompt for responses with entity context and live info."""
@@ -452,11 +452,11 @@ When asked about identity, layers, or version - answer from this context, NOT fr
             identity = get_identity()
             name = identity.name
             nickname = identity.nickname
-            version = identity.get_identity().get('version', 'OMEGA')
+            version = identity.get_identity().get('version', 'OS')
         except:
             name = "GLUTTONY"
             nickname = "Gluten"
-            version = "OMEGA"
+            version = "OS"
         
         # Get live info
         try:

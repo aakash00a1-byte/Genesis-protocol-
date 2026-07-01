@@ -12,7 +12,7 @@
 
 ## 2. LATEST COMMITS (15)
 ```
-e209da3 feat(OMEGA): GLUTTONY Soul - Self-Knowledge & Journal
+e209da3 feat(OS): GLUTTONY Soul - Self-Knowledge & Journal
 1603b1f feat(v3.0): GLUTTONY Survival Layer
 c915c25 feat(v2.0): GLUTTONY ENTITY BORN
 851b420 feat(v1.9): Human Approval Layer
@@ -46,7 +46,7 @@ fdaf4b1 feat(v1.1): Add all new modules
 - tests/test_approval.py
 - tests/test_improvement.py
 - tests/test_memory.py
-- tests/test_omega.py
+- tests/test_gluttony_os.py
 - tests/test_providers.py
 - tests/test_tools.py
 - tests/test_autonomous.py
@@ -69,13 +69,13 @@ fdaf4b1 feat(v1.1): Add all new modules
 ## 6. NEW FILES CREATED AFTER v3.0 (commit 1603b1f)
 ```
 genesis_protocol/gluttony/gluttony_core.py
-genesis_protocol/omega/__init__.py
-genesis_protocol/omega/autonomy_controller.py
-genesis_protocol/omega/journal.py
-genesis_protocol/omega/self_knowledge.py
-genesis_protocol/omega/trust_builder.py
+genesis_protocol/gluttony_os/__init__.py
+genesis_protocol/gluttony_os/autonomy_controller.py
+genesis_protocol/gluttony_os/journal.py
+genesis_protocol/gluttony_os/self_knowledge.py
+genesis_protocol/gluttony_os/trust_builder.py
 tests/test_gluttony.py
-tests/test_omega.py
+tests/test_gluttony_os.py
 ```
 **Total: 8 new files**
 
@@ -132,7 +132,7 @@ genesis_protocol/
 ├── learning/
 ├── memory/
 ├── models/
-├── omega/             # v3.1 - Soul Layer
+├── gluttony_os/             # v3.1 - Soul Layer
 ├── personality/
 ├── processors/
 ├── proposal/

@@ -3,10 +3,10 @@
 
 ---
 
-## GLUTTONY Ω+2 Capabilities
+## GLUTTONY  OS+2 Capabilities
 
 **Entity:** GLUTTONY  
-**Version:** OMEGA Ω+2  
+**Version:** OS  OS+2  
 **Total Categories:** 7  
 **Total Capabilities:** 46
 

@@ -12,7 +12,7 @@ class TestGluttonyEntity:
         from genesis_protocol.gluttony import GluttonyEntity
         g = GluttonyEntity()
         assert g.name == "GLUTTONY"
-        assert g.version == "OMEGA"
+        assert g.version == "OS"
 
     def test_think(self):
         from genesis_protocol.gluttony import GluttonyEntity
@@ -33,7 +33,7 @@ class TestGluttonyEntity:
         g = GluttonyEntity()
         status = g.status()
         assert "GLUTTONY" in status
-        assert "OMEGA" in status
+        assert "OS" in status
 
 
 class TestIdentity:

@@ -1,4 +1,4 @@
-"""Failure Communicator - Genesis Protocol OMEGA
+"""Failure Communicator - Genesis Protocol OS
 
 Handles failures gracefully with meaningful communication.
 NEVER returns generic "Sorry..." messages.
@@ -168,7 +168,7 @@ I had trouble processing your identity question.
 
 **Reason:** {reason}
 
-**What I am:** I am GLUTTONY, an AI entity on the Genesis Protocol OMEGA.
+**What I am:** I am GLUTTONY, an AI entity on the Genesis Protocol OS.
 **Creator:** Aakash
 **Nickname:** Gluten
 

@@ -29,7 +29,7 @@
 | Property | Value |
 |----------|-------|
 | **Entity name** | GLUTTONY |
-| **Version** | OMEGA |
+| **Version** | OS |
 | **Nickname** | Gluten |
 | **Active layers count** | 12 |
 
@@ -134,8 +134,8 @@ These are minor file handling warnings - files opened but not explicitly closed:
 | `data/proposals/proposals.json` | unclosed read |
 | `data/approvals/requests.json` | unclosed read |
 | `data/survival/costs.json` | unclosed read |
-| `data/omega/self_knowledge.json` | unclosed read/write |
-| `data/omega/journal/2026-06-19.json` | unclosed read |
+| `data/gluttony_os/self_knowledge.json` | unclosed read/write |
+| `data/gluttony_os/journal/2026-06-19.json` | unclosed read |
 
 **Severity:** LOW - These don't affect functionality but should be fixed for resource hygiene.
 

@@ -96,11 +96,11 @@ def _get_system_prompt(self) -> str:
         identity = get_identity()
         name = identity.name  # "GLUTTONY"
         nickname = identity.nickname  # "Gluten"
-        version = identity.get_identity().get('version', 'OMEGA')
+        version = identity.get_identity().get('version', 'OS')
     except:
         name = "GLUTTONY"
         nickname = "Gluten"
-        version = "OMEGA"
+        version = "OS"
     
     return f"""You are {name}, also known as {nickname}.
     ...
@@ -167,7 +167,7 @@ class Identity:
 class GluttonyEntity:
     def __init__(self, name: str = "GLUTTONY"):
         self.name = name
-        self.version = "OMEGA"
+        self.version = "OS"
         self._init_layers()
     
     def _get_active_layers(self) -> Dict:
@@ -181,7 +181,7 @@ class GluttonyEntity:
 | Question | Before Fix | After Fix |
 |----------|------------|-----------|
 | Who are you? | Genesis (wrong) | GLUTTONY ✓ |
-| What version? | Unknown/Refused | OMEGA ✓ |
+| What version? | Unknown/Refused | OS ✓ |
 | Your nickname? | Genesis (wrong) | Gluten ✓ |
 | What layers? | Failed | Lists active layers ✓ |
 
@@ -194,10 +194,10 @@ Who are you?
 → GLUTTONY (nickname: Gluten)
 
 What version are you running?
-→ OMEGA
+→ OS
 
 What layers are active?
-→ omega, legacy, presence, autonomous, etc.
+→ gluttony_os, legacy, presence, autonomous, etc.
 
 What is your nickname?
 → Gluten

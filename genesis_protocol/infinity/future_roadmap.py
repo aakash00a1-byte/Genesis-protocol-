@@ -70,7 +70,7 @@ class FutureRoadmap:
                 "completed_at": "2024-01-01"
             },
             {
-                "stage": "Omega",
+                "stage": "OS",
                 "version": "2.0.0",
                 "description": "Self-preservation, Garden Mode, Dream Mode",
                 "completed": True,

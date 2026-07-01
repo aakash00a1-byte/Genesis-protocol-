@@ -13,7 +13,7 @@
 
 ## 2. LATEST COMMITS (15)
 ```
-e209da3 feat(OMEGA): GLUTTONY Soul - Self-Knowledge & Journal
+e209da3 feat(OS): GLUTTONY Soul - Self-Knowledge & Journal
 1603b1f feat(v3.0): GLUTTONY Survival Layer
 c915c25 feat(v2.0): GLUTTONY ENTITY BORN
 851b420 feat(v1.9): Human Approval Layer
@@ -65,13 +65,13 @@ fdaf4b1 feat(v1.1): Add all new modules
 ## 6. NEW FILES AFTER v3.0 (commit 1603b1f)
 ```
 genesis_protocol/gluttony/gluttony_core.py
-genesis_protocol/omega/__init__.py
-genesis_protocol/omega/autonomy_controller.py
-genesis_protocol/omega/journal.py
-genesis_protocol/omega/self_knowledge.py
-genesis_protocol/omega/trust_builder.py
+genesis_protocol/gluttony_os/__init__.py
+genesis_protocol/gluttony_os/autonomy_controller.py
+genesis_protocol/gluttony_os/journal.py
+genesis_protocol/gluttony_os/self_knowledge.py
+genesis_protocol/gluttony_os/trust_builder.py
 tests/test_gluttony.py
-tests/test_omega.py
+tests/test_gluttony_os.py
 ```
 **Total:** 8 new files
 
@@ -131,7 +131,7 @@ genesis_protocol/
 ├── learning/       (7 modules)
 ├── memory/         (7 modules)
 ├── models/         (3 modules)
-├── omega/          (4 modules)    ← v3.1 - Soul Layer
+├── gluttony_os/          (4 modules)    ← v3.1 - Soul Layer
 ├── personality/    (3 modules)
 ├── processors/     (4 modules)
 ├── proposal/       (5 modules)
@@ -169,8 +169,8 @@ with app.test_client() as c:
     "v1.3-autonomous", "v1.4-interaction", "v1.5-learning",
     "v1.6-tools", "v1.7-improvement", "v1.8-proposal",
     "v1.9-approval", "v3.0-survival",
-    "OMEGA-self-knowledge", "OMEGA-journal",
-    "OMEGA-trust", "OMEGA-autonomy"
+    "OS-self-knowledge", "OS-journal",
+    "OS-trust", "OS-autonomy"
   ],
   "metrics": {
     "autonomy_level": 0.3,

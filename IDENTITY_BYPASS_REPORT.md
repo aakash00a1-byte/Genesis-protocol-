@@ -115,7 +115,7 @@ route_identity() → is_identity_question() = TRUE
   ↓
 _get_identity_response() from entity object
   ↓
-Return: "I am GLUTTONY. Nickname: Gluten. Version: OMEGA."
+Return: "I am GLUTTONY. Nickname: Gluten. Version: OS."
   ↓
 NEVER contacts provider
 ```
@@ -142,7 +142,7 @@ Provider answers normally
 | What | "what are you", "what version", "what capabilities" |
 | Name | "your name", "your nickname", "call me" |
 | Creator | "your owner", "your creator", "your master" |
-| Layers | "layer", "omega", "presence", "legacy", "autonomous" |
+| Layers | "layer", "gluttony_os", "presence", "legacy", "autonomous" |
 | Capabilities | "capabilities", "can you do", "skills", "powers" |
 
 ---
@@ -153,7 +153,7 @@ Provider answers normally
 |----------|-------------------|----------------|
 | Who are you? | Hallucinated | "I am GLUTTONY" |
 | Nickname? | Wrong | "Gluten" |
-| Version? | Unknown | "OMEGA" |
+| Version? | Unknown | "OS" |
 | Creator? | Wrong | "Aakash" |
 | Layers? | Hallucinated | Lists actual layers |
 | Capabilities? | Generic | Lists from entity |

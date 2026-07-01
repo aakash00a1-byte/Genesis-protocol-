@@ -6,7 +6,7 @@
 ## EVIDENCE
 
 ### 1. Timeline Memory
-**File:** `genesis_protocol/omega/timeline.py`
+**File:** `genesis_protocol/gluttony_os/timeline.py`
 **Endpoints:** `/api/timeline`, `/api/timeline/milestone`, `/api/timeline/recovery`, `/api/timeline/lesson`
 
 **Features:**
@@ -29,7 +29,7 @@ Status: 200
 ---
 
 ### 2. Journal Engine
-**File:** `genesis_protocol/omega/journal.py` (existing)
+**File:** `genesis_protocol/gluttony_os/journal.py` (existing)
 **Endpoint:** `/api/journal`
 
 **Features:**
@@ -49,7 +49,7 @@ Status: 200
 ---
 
 ### 3. Trust Model
-**File:** `genesis_protocol/omega/trust_builder.py` (existing)
+**File:** `genesis_protocol/gluttony_os/trust_builder.py` (existing)
 **Endpoint:** `/api/trust`
 
 **Features:**
@@ -74,7 +74,7 @@ Status: 200
 ---
 
 ### 4. Relationship Memory
-**File:** `genesis_protocol/omega/relationship.py`
+**File:** `genesis_protocol/gluttony_os/relationship.py`
 **Endpoint:** `/api/relationship`
 
 **Features:**
@@ -100,7 +100,7 @@ Status: 200
 ---
 
 ### 5. Dream Mode
-**File:** `genesis_protocol/omega/dream_mode.py`
+**File:** `genesis_protocol/gluttony_os/dream_mode.py`
 **Endpoint:** `/api/dream`
 
 **Features:**
@@ -127,7 +127,7 @@ Status: 200
 ---
 
 ### 6. Wisdom Layer
-**File:** `genesis_protocol/omega/wisdom.py`
+**File:** `genesis_protocol/gluttony_os/wisdom.py`
 **Endpoint:** `/api/wisdom`
 
 **Features:**
@@ -151,7 +151,7 @@ Status: 200
 ---
 
 ### 7. Continuity Layer
-**File:** `genesis_protocol/omega/continuity.py`
+**File:** `genesis_protocol/gluttony_os/continuity.py`
 **Endpoint:** `/api/continuity`
 
 **Features:**
@@ -181,11 +181,11 @@ Status: 200
 
 | File | Purpose |
 |------|---------|
-| `genesis_protocol/omega/timeline.py` | Timeline memory |
-| `genesis_protocol/omega/relationship.py` | Relationship memory |
-| `genesis_protocol/omega/wisdom.py` | Wisdom layer |
-| `genesis_protocol/omega/dream_mode.py` | Dream mode |
-| `genesis_protocol/omega/continuity.py` | Continuity layer |
+| `genesis_protocol/gluttony_os/timeline.py` | Timeline memory |
+| `genesis_protocol/gluttony_os/relationship.py` | Relationship memory |
+| `genesis_protocol/gluttony_os/wisdom.py` | Wisdom layer |
+| `genesis_protocol/gluttony_os/dream_mode.py` | Dream mode |
+| `genesis_protocol/gluttony_os/continuity.py` | Continuity layer |
 | `tests/test_presence.py` | Tests for presence layer |
 
 **Total new files:** 6
@@ -250,7 +250,7 @@ Returns:
 | Test files | 12 | 13 |
 | Total tests | 146 | 183 |
 | API endpoints | 10 | 17 |
-| Omega modules | 4 | 9 |
+| OS modules | 4 | 9 |
 
 ---
 

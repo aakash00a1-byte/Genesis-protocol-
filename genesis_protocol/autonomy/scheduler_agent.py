@@ -30,7 +30,7 @@ class SchedulerAgent:
     
     VERSION = "1.0.0"
     
-    # Default daily tasks from OMEGA LONG ROAD DIRECTIVE
+    # Default daily tasks from OS LONG ROAD DIRECTIVE
     DEFAULT_TASKS = [
         {
             "name": "health_check",

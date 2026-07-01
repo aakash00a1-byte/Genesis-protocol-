@@ -1,4 +1,4 @@
-"""GLUTTONY Legacy Module - Ω+2
+"""GLUTTONY Legacy Module -  OS+2
 
 Preserves identity and continuity across years, devices and failures."""
 

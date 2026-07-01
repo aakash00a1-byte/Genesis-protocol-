@@ -1,4 +1,4 @@
-"""Garden Mode - GLUTTONY Ω+2
+"""Garden Mode - GLUTTONY  OS+2
 
 Maintenance scheduler for daily, weekly, and monthly tasks."""
 
@@ -11,7 +11,7 @@ from pathlib import Path
 class GardenMode:
     """Garden Mode maintenance scheduler."""
     
-    def __init__(self, storage_path: str = "data/omega/garden"):
+    def __init__(self, storage_path: str = "data/gluttony_os/garden"):
         self.storage_path = storage_path
         Path(storage_path).mkdir(parents=True, exist_ok=True)
         
@@ -93,7 +93,7 @@ class GardenMode:
         
         try:
             # Import here to avoid circular imports
-            from genesis_protocol.omega import get_self_preservation, get_journal
+            from genesis_protocol.gluttony_os import get_self_preservation, get_journal
             from genesis_protocol.legacy import get_archive_layer, get_snapshot_layer
             
             sp = get_self_preservation()
@@ -152,7 +152,7 @@ class GardenMode:
         }
         
         try:
-            from genesis_protocol.omega import get_timeline_memory
+            from genesis_protocol.gluttony_os import get_timeline_memory
             from genesis_protocol.legacy import get_archive_layer, get_snapshot_layer
             
             tm = get_timeline_memory()
@@ -218,7 +218,7 @@ class GardenMode:
         }
         
         try:
-            from genesis_protocol.omega import get_continuity_layer, get_timeline_memory
+            from genesis_protocol.gluttony_os import get_continuity_layer, get_timeline_memory
             from genesis_protocol.legacy import get_legacy_books, get_snapshot_layer
             
             cl = get_continuity_layer()

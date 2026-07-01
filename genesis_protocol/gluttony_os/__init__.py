@@ -1,4 +1,4 @@
-"""GLUTTONY OMEGA - Self-Knowledge & Journal System
+"""GLUTTONY OS - Self-Knowledge & Journal System
 
 The soul of GLUTTONY - continuous learning and self-understanding."""
 

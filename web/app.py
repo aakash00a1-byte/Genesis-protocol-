@@ -1132,7 +1132,7 @@ def api_entity():
     """Get GLUTTONY entity info."""
     try:
         from genesis_protocol.gluttony import get_gluttony, get_identity
-        from genesis_protocol.omega import get_capabilities
+        from genesis_protocol.gluttony_os import get_capabilities
         g = get_gluttony()
         identity = get_identity()
         cap = get_capabilities()
@@ -1200,7 +1200,7 @@ def api_survival():
 def api_timeline():
     """Get timeline or add event."""
     try:
-        from genesis_protocol.omega import get_timeline_memory
+        from genesis_protocol.gluttony_os import get_timeline_memory
         tm = get_timeline_memory()
         
         if request.method == 'POST':
@@ -1225,7 +1225,7 @@ def api_timeline():
 def api_timeline_milestone():
     """Add a milestone to timeline."""
     try:
-        from genesis_protocol.omega import get_timeline_memory
+        from genesis_protocol.gluttony_os import get_timeline_memory
         tm = get_timeline_memory()
         data = request.get_json() or {}
         title = data.get('title', '')
@@ -1241,7 +1241,7 @@ def api_timeline_milestone():
 def api_timeline_recovery():
     """Add a recovery to timeline."""
     try:
-        from genesis_protocol.omega import get_timeline_memory
+        from genesis_protocol.gluttony_os import get_timeline_memory
         tm = get_timeline_memory()
         data = request.get_json() or {}
         tm.add_recovery(
@@ -1258,7 +1258,7 @@ def api_timeline_recovery():
 def api_timeline_lesson():
     """Add a lesson to timeline."""
     try:
-        from genesis_protocol.omega import get_timeline_memory
+        from genesis_protocol.gluttony_os import get_timeline_memory
         tm = get_timeline_memory()
         data = request.get_json() or {}
         tm.add_lesson(
@@ -1275,7 +1275,7 @@ def api_timeline_lesson():
 def api_journal():
     """Get journal entries or add new entry."""
     try:
-        from genesis_protocol.omega import get_journal
+        from genesis_protocol.gluttony_os import get_journal
         j = get_journal()
         
         if request.method == 'POST':
@@ -1297,7 +1297,7 @@ def api_journal():
 def api_trust():
     """Get trust model status."""
     try:
-        from genesis_protocol.omega import get_trust_builder
+        from genesis_protocol.gluttony_os import get_trust_builder
         tb = get_trust_builder()
         return jsonify(tb.get_summary())
     except Exception as e:
@@ -1308,7 +1308,7 @@ def api_trust():
 def api_wisdom():
     """Get wisdom categories or add new item."""
     try:
-        from genesis_protocol.omega import get_wisdom_layer
+        from genesis_protocol.gluttony_os import get_wisdom_layer
         w = get_wisdom_layer()
         
         if request.method == 'POST':
@@ -1337,7 +1337,7 @@ def api_wisdom():
 def api_relationship():
     """Get or update relationship memory."""
     try:
-        from genesis_protocol.omega import get_relationship_memory
+        from genesis_protocol.gluttony_os import get_relationship_memory
         rm = get_relationship_memory()
         
         if request.method == 'POST':
@@ -1361,7 +1361,7 @@ def api_relationship():
 def api_dream():
     """Get dream mode status and insights."""
     try:
-        from genesis_protocol.omega import get_dream_mode
+        from genesis_protocol.gluttony_os import get_dream_mode
         dm = get_dream_mode()
         return jsonify(dm.get_status())
     except Exception as e:
@@ -1372,7 +1372,7 @@ def api_dream():
 def api_continuity():
     """Get continuity layer status."""
     try:
-        from genesis_protocol.omega import get_continuity_layer
+        from genesis_protocol.gluttony_os import get_continuity_layer
         cl = get_continuity_layer()
         return jsonify(cl.get_continuity_status())
     except Exception as e:
@@ -1650,7 +1650,7 @@ def api_simulation():
 def api_preservation_status():
     """Get self-preservation status."""
     try:
-        from genesis_protocol.omega import get_self_preservation
+        from genesis_protocol.gluttony_os import get_self_preservation
         sp = get_self_preservation()
         return jsonify(sp.get_status())
     except Exception as e:
@@ -1661,7 +1661,7 @@ def api_preservation_status():
 def api_preservation_health():
     """Get system health."""
     try:
-        from genesis_protocol.omega import get_self_preservation
+        from genesis_protocol.gluttony_os import get_self_preservation
         sp = get_self_preservation()
         return jsonify(sp.health_check())
     except Exception as e:
@@ -1672,7 +1672,7 @@ def api_preservation_health():
 def api_preservation_run():
     """Run full preservation cycle."""
     try:
-        from genesis_protocol.omega import get_self_preservation
+        from genesis_protocol.gluttony_os import get_self_preservation
         sp = get_self_preservation()
         results = sp.run_full_preservation()
         return jsonify(results)
@@ -1684,7 +1684,7 @@ def api_preservation_run():
 def api_preservation_identity():
     """Preserve identity specifically."""
     try:
-        from genesis_protocol.omega import get_self_preservation
+        from genesis_protocol.gluttony_os import get_self_preservation
         sp = get_self_preservation()
         success = sp.preserve_identity()
         return jsonify({'status': 'preserved' if success else 'failed'})
@@ -1696,7 +1696,7 @@ def api_preservation_identity():
 def api_preservation_memories():
     """Preserve memories specifically."""
     try:
-        from genesis_protocol.omega import get_self_preservation
+        from genesis_protocol.gluttony_os import get_self_preservation
         sp = get_self_preservation()
         success = sp.preserve_memories()
         return jsonify({'status': 'preserved' if success else 'failed'})
@@ -1708,7 +1708,7 @@ def api_preservation_memories():
 def api_preservation_evidence():
     """Get evidence log."""
     try:
-        from genesis_protocol.omega import get_self_preservation
+        from genesis_protocol.gluttony_os import get_self_preservation
         sp = get_self_preservation()
         limit = request.args.get('limit', 50, type=int)
         return jsonify({'log': sp.evidence_logger.get_log(limit)})
@@ -1720,7 +1720,7 @@ def api_preservation_evidence():
 def api_preservation_lessons():
     """Get lessons learned."""
     try:
-        from genesis_protocol.omega import get_self_preservation
+        from genesis_protocol.gluttony_os import get_self_preservation
         sp = get_self_preservation()
         lessons = sp.evidence_logger.get_lessons()
         return jsonify({'lessons': lessons, 'count': len(lessons)})
@@ -1732,7 +1732,7 @@ def api_preservation_lessons():
 def api_preservation_backup():
     """Run automatic backup."""
     try:
-        from genesis_protocol.omega import get_self_preservation
+        from genesis_protocol.gluttony_os import get_self_preservation
         sp = get_self_preservation()
         success = sp.auto_backup()
         return jsonify({'status': 'completed' if success else 'failed'})
@@ -1748,7 +1748,7 @@ def api_preservation_backup():
 def api_garden_status():
     """Get Garden Mode status."""
     try:
-        from genesis_protocol.omega import get_garden_mode
+        from genesis_protocol.gluttony_os import get_garden_mode
         gm = get_garden_mode()
         return jsonify(gm.get_status())
     except Exception as e:
@@ -1930,7 +1930,7 @@ def roadmap_page():
 def api_garden_daily():
     """Run daily maintenance tasks."""
     try:
-        from genesis_protocol.omega import get_garden_mode
+        from genesis_protocol.gluttony_os import get_garden_mode
         gm = get_garden_mode()
         results = gm.run_daily_tasks()
         return jsonify(results)
@@ -1942,7 +1942,7 @@ def api_garden_daily():
 def api_garden_weekly():
     """Run weekly maintenance tasks."""
     try:
-        from genesis_protocol.omega import get_garden_mode
+        from genesis_protocol.gluttony_os import get_garden_mode
         gm = get_garden_mode()
         results = gm.run_weekly_tasks()
         return jsonify(results)
@@ -1954,7 +1954,7 @@ def api_garden_weekly():
 def api_garden_monthly():
     """Run monthly maintenance tasks."""
     try:
-        from genesis_protocol.omega import get_garden_mode
+        from genesis_protocol.gluttony_os import get_garden_mode
         gm = get_garden_mode()
         results = gm.run_monthly_tasks()
         return jsonify(results)
@@ -1966,7 +1966,7 @@ def api_garden_monthly():
 def api_garden_check():
     """Check and run pending tasks."""
     try:
-        from genesis_protocol.omega import get_garden_mode
+        from genesis_protocol.gluttony_os import get_garden_mode
         gm = get_garden_mode()
         results = gm.check_and_run()
         return jsonify(results)

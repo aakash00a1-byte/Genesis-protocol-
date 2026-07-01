@@ -1,4 +1,4 @@
-"""Trust Builder - GLUTTONY OMEGA
+"""Trust Builder - GLUTTONY OS
 
 Builds trust through reliability and consistency."""
 

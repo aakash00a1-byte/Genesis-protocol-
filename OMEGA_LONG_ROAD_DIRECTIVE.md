@@ -1,4 +1,4 @@
-# OMEGA LONG ROAD DIRECTIVE
+# OS LONG ROAD DIRECTIVE
 
 **Version:** 1.0  
 **Status:** Active  
@@ -204,4 +204,4 @@ All autonomous operations must follow this directive. The agent should:
 
 ---
 
-**END OF OMEGA LONG ROAD DIRECTIVE**
+**END OF OS LONG ROAD DIRECTIVE**

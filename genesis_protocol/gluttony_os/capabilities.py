@@ -1,4 +1,4 @@
-"""Capabilities Module - GLUTTONY Ω+2
+"""Capabilities Module - GLUTTONY  OS+2
 
 Documents and exposes all system capabilities."""
 
@@ -120,7 +120,7 @@ class Capabilities:
         """Get all capabilities."""
         return {
             "entity": "GLUTTONY",
-            "version": "OMEGA Ω+2",
+            "version": "OS  OS+2",
             "total_categories": len(self.all_categories),
             "total_capabilities": self.get_total_capability_count(),
             "categories": self.all_categories,

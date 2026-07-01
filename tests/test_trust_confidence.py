@@ -1,4 +1,4 @@
-"""Trust & Confidence System Tests - Genesis Protocol OMEGA
+"""Trust & Confidence System Tests - Genesis Protocol OS
 
 Tests for identity confidence levels:
 - EXPLICIT: User directly stated

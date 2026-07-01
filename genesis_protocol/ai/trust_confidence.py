@@ -1,4 +1,4 @@
-"""Trust & Identity Confidence System - Genesis Protocol OMEGA
+"""Trust & Identity Confidence System - Genesis Protocol OS
 
 Manages confidence levels for identity claims.
 Never promotes inference into fact.
@@ -73,9 +73,9 @@ class TrustConfidenceSystem:
             "data": {
                 "name": "GLUTTONY",
                 "nickname": "Gluten",
-                "variant": "OMEGA",
+                "variant": "OS",
                 "creator": "Aakash",
-                "protocol_version": "OMEGA"
+                "protocol_version": "OS"
             },
             "source": "hardcoded_entity_definition",
             "message": None  # No qualification needed

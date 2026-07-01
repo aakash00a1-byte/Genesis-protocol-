@@ -1,4 +1,4 @@
-"""GLUTTONY Core - Genesis Protocol OMEGA
+"""GLUTTONY Core - Genesis Protocol OS
 
 The unified entity - truth over appearance, evidence over claims."""
 
@@ -11,7 +11,7 @@ class GluttonyEntity:
     
     def __init__(self, name: str = "GLUTTONY"):
         self.name = name
-        self.version = "OMEGA"
+        self.version = "OS"
         self.created_at = datetime.now()
         self.last_active = datetime.now()
         self._init_layers()
@@ -67,9 +67,9 @@ class GluttonyEntity:
         except:
             self.survival = None
         
-        # OMEGA layer
+        # OS layer
         try:
-            from genesis_protocol.omega import get_self_knowledge, get_journal, get_trust_builder, get_autonomy_controller
+            from genesis_protocol.gluttony_os import get_self_knowledge, get_journal, get_trust_builder, get_autonomy_controller
             self.self_knowledge = get_self_knowledge()
             self.journal = get_journal()
             self.trust_builder = get_trust_builder()
@@ -125,10 +125,10 @@ class GluttonyEntity:
         if self.proposals: layers.append("v1.8-proposal")
         if self.approval: layers.append("v1.9-approval")
         if self.survival: layers.append("v3.0-survival")
-        if self.self_knowledge: layers.append("OMEGA-self-knowledge")
-        if self.journal: layers.append("OMEGA-journal")
-        if self.trust_builder: layers.append("OMEGA-trust")
-        if self.autonomy: layers.append("OMEGA-autonomy")
+        if self.self_knowledge: layers.append("OS-self-knowledge")
+        if self.journal: layers.append("OS-journal")
+        if self.trust_builder: layers.append("OS-trust")
+        if self.autonomy: layers.append("OS-autonomy")
         return layers
     
     def observe(self) -> Dict:

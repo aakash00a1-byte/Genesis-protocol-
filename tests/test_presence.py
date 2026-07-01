@@ -12,7 +12,7 @@ class TestTimelineMemory:
     
     def test_create_timeline(self, tmp_path):
         """Test timeline creation."""
-        from genesis_protocol.omega import TimelineMemory
+        from genesis_protocol.gluttony_os import TimelineMemory
         storage = str(tmp_path / "timeline.json")
         tm = TimelineMemory(storage)
         assert tm is not None
@@ -20,7 +20,7 @@ class TestTimelineMemory:
     
     def test_add_event(self, tmp_path):
         """Test adding events."""
-        from genesis_protocol.omega import TimelineMemory
+        from genesis_protocol.gluttony_os import TimelineMemory
         storage = str(tmp_path / "timeline.json")
         tm = TimelineMemory(storage)
         
@@ -31,7 +31,7 @@ class TestTimelineMemory:
     
     def test_add_milestone(self, tmp_path):
         """Test adding milestones."""
-        from genesis_protocol.omega import TimelineMemory
+        from genesis_protocol.gluttony_os import TimelineMemory
         storage = str(tmp_path / "timeline.json")
         tm = TimelineMemory(storage)
         
@@ -41,7 +41,7 @@ class TestTimelineMemory:
     
     def test_add_recovery(self, tmp_path):
         """Test adding recoveries."""
-        from genesis_protocol.omega import TimelineMemory
+        from genesis_protocol.gluttony_os import TimelineMemory
         storage = str(tmp_path / "timeline.json")
         tm = TimelineMemory(storage)
         
@@ -51,7 +51,7 @@ class TestTimelineMemory:
     
     def test_add_lesson(self, tmp_path):
         """Test adding lessons."""
-        from genesis_protocol.omega import TimelineMemory
+        from genesis_protocol.gluttony_os import TimelineMemory
         storage = str(tmp_path / "timeline.json")
         tm = TimelineMemory(storage)
         
@@ -61,7 +61,7 @@ class TestTimelineMemory:
     
     def test_get_timeline(self, tmp_path):
         """Test getting timeline."""
-        from genesis_protocol.omega import TimelineMemory
+        from genesis_protocol.gluttony_os import TimelineMemory
         storage = str(tmp_path / "timeline.json")
         tm = TimelineMemory(storage)
         
@@ -73,7 +73,7 @@ class TestTimelineMemory:
     
     def test_get_stats(self, tmp_path):
         """Test getting stats."""
-        from genesis_protocol.omega import TimelineMemory
+        from genesis_protocol.gluttony_os import TimelineMemory
         storage = str(tmp_path / "timeline.json")
         tm = TimelineMemory(storage)
         
@@ -95,7 +95,7 @@ class TestRelationshipMemory:
     
     def test_create_relationship(self, tmp_path):
         """Test relationship creation."""
-        from genesis_protocol.omega import RelationshipMemory
+        from genesis_protocol.gluttony_os import RelationshipMemory
         storage = str(tmp_path / "relationship.json")
         rm = RelationshipMemory(storage)
         assert rm is not None
@@ -103,7 +103,7 @@ class TestRelationshipMemory:
     
     def test_set_creator_name(self, tmp_path):
         """Test setting creator name."""
-        from genesis_protocol.omega import RelationshipMemory
+        from genesis_protocol.gluttony_os import RelationshipMemory
         storage = str(tmp_path / "relationship.json")
         rm = RelationshipMemory(storage)
         
@@ -112,7 +112,7 @@ class TestRelationshipMemory:
     
     def test_record_preference(self, tmp_path):
         """Test recording preferences."""
-        from genesis_protocol.omega import RelationshipMemory
+        from genesis_protocol.gluttony_os import RelationshipMemory
         storage = str(tmp_path / "relationship.json")
         rm = RelationshipMemory(storage)
         
@@ -121,7 +121,7 @@ class TestRelationshipMemory:
     
     def test_add_topic(self, tmp_path):
         """Test adding topics."""
-        from genesis_protocol.omega import RelationshipMemory
+        from genesis_protocol.gluttony_os import RelationshipMemory
         storage = str(tmp_path / "relationship.json")
         rm = RelationshipMemory(storage)
         
@@ -131,7 +131,7 @@ class TestRelationshipMemory:
     
     def test_add_pattern(self, tmp_path):
         """Test adding patterns."""
-        from genesis_protocol.omega import RelationshipMemory
+        from genesis_protocol.gluttony_os import RelationshipMemory
         storage = str(tmp_path / "relationship.json")
         rm = RelationshipMemory(storage)
         
@@ -141,7 +141,7 @@ class TestRelationshipMemory:
     
     def test_record_interaction(self, tmp_path):
         """Test recording interactions."""
-        from genesis_protocol.omega import RelationshipMemory
+        from genesis_protocol.gluttony_os import RelationshipMemory
         storage = str(tmp_path / "relationship.json")
         rm = RelationshipMemory(storage)
         
@@ -151,7 +151,7 @@ class TestRelationshipMemory:
     
     def test_get_summary(self, tmp_path):
         """Test getting relationship summary."""
-        from genesis_protocol.omega import RelationshipMemory
+        from genesis_protocol.gluttony_os import RelationshipMemory
         storage = str(tmp_path / "relationship.json")
         rm = RelationshipMemory(storage)
         
@@ -168,7 +168,7 @@ class TestWisdomLayer:
     
     def test_create_wisdom(self, tmp_path):
         """Test wisdom layer creation."""
-        from genesis_protocol.omega import WisdomLayer
+        from genesis_protocol.gluttony_os import WisdomLayer
         storage = str(tmp_path / "wisdom.json")
         w = WisdomLayer(storage)
         assert w is not None
@@ -176,7 +176,7 @@ class TestWisdomLayer:
     
     def test_add_fact(self, tmp_path):
         """Test adding facts."""
-        from genesis_protocol.omega import WisdomLayer
+        from genesis_protocol.gluttony_os import WisdomLayer
         storage = str(tmp_path / "wisdom.json")
         w = WisdomLayer(storage)
         
@@ -187,7 +187,7 @@ class TestWisdomLayer:
     
     def test_add_assumption(self, tmp_path):
         """Test adding assumptions."""
-        from genesis_protocol.omega import WisdomLayer
+        from genesis_protocol.gluttony_os import WisdomLayer
         storage = str(tmp_path / "wisdom.json")
         w = WisdomLayer(storage)
         
@@ -197,7 +197,7 @@ class TestWisdomLayer:
     
     def test_add_belief(self, tmp_path):
         """Test adding beliefs."""
-        from genesis_protocol.omega import WisdomLayer
+        from genesis_protocol.gluttony_os import WisdomLayer
         storage = str(tmp_path / "wisdom.json")
         w = WisdomLayer(storage)
         
@@ -207,7 +207,7 @@ class TestWisdomLayer:
     
     def test_add_unknown(self, tmp_path):
         """Test adding unknowns."""
-        from genesis_protocol.omega import WisdomLayer
+        from genesis_protocol.gluttony_os import WisdomLayer
         storage = str(tmp_path / "wisdom.json")
         w = WisdomLayer(storage)
         
@@ -217,7 +217,7 @@ class TestWisdomLayer:
     
     def test_get_wisdom_summary(self, tmp_path):
         """Test getting wisdom summary."""
-        from genesis_protocol.omega import WisdomLayer
+        from genesis_protocol.gluttony_os import WisdomLayer
         storage = str(tmp_path / "wisdom.json")
         w = WisdomLayer(storage)
         
@@ -234,14 +234,14 @@ class TestDreamMode:
     
     def test_create_dream_mode(self):
         """Test dream mode creation."""
-        from genesis_protocol.omega import DreamMode
+        from genesis_protocol.gluttony_os import DreamMode
         dm = DreamMode(idle_threshold_seconds=5)
         assert dm is not None
         assert dm.idle_threshold == 5
     
     def test_is_idle(self):
         """Test idle detection."""
-        from genesis_protocol.omega import DreamMode
+        from genesis_protocol.gluttony_os import DreamMode
         dm = DreamMode(idle_threshold_seconds=1)
         
         # Should not be idle immediately
@@ -253,7 +253,7 @@ class TestDreamMode:
     
     def test_record_activity(self):
         """Test recording activity."""
-        from genesis_protocol.omega import DreamMode
+        from genesis_protocol.gluttony_os import DreamMode
         dm = DreamMode(idle_threshold_seconds=10)
         
         dm.record_activity()
@@ -261,7 +261,7 @@ class TestDreamMode:
     
     def test_get_status(self):
         """Test getting status."""
-        from genesis_protocol.omega import DreamMode
+        from genesis_protocol.gluttony_os import DreamMode
         dm = DreamMode()
         
         status = dm.get_status()
@@ -275,18 +275,18 @@ class TestContinuityLayer:
     
     def test_create_continuity(self, tmp_path):
         """Test continuity layer creation."""
-        from genesis_protocol.omega import ContinuityLayer
+        from genesis_protocol.gluttony_os import ContinuityLayer
         storage = str(tmp_path / "continuity.json")
         cl = ContinuityLayer(storage)
         assert cl is not None
     
     def test_save_and_restore_identity(self, tmp_path):
         """Test saving and restoring identity."""
-        from genesis_protocol.omega import ContinuityLayer
+        from genesis_protocol.gluttony_os import ContinuityLayer
         storage = str(tmp_path / "continuity.json")
         cl = ContinuityLayer(storage)
         
-        identity_data = {'name': 'GLUTTONY', 'version': 'OMEGA'}
+        identity_data = {'name': 'GLUTTONY', 'version': 'OS'}
         cl.save_identity(identity_data)
         
         restored = cl.restore_identity()
@@ -294,7 +294,7 @@ class TestContinuityLayer:
     
     def test_save_and_restore_timeline(self, tmp_path):
         """Test saving and restoring timeline."""
-        from genesis_protocol.omega import ContinuityLayer
+        from genesis_protocol.gluttony_os import ContinuityLayer
         storage = str(tmp_path / "continuity.json")
         cl = ContinuityLayer(storage)
         
@@ -306,7 +306,7 @@ class TestContinuityLayer:
     
     def test_get_continuity_status(self, tmp_path):
         """Test getting continuity status."""
-        from genesis_protocol.omega import ContinuityLayer
+        from genesis_protocol.gluttony_os import ContinuityLayer
         storage = str(tmp_path / "continuity.json")
         cl = ContinuityLayer(storage)
         
@@ -318,7 +318,7 @@ class TestContinuityLayer:
     
     def test_simulate_uptime(self, tmp_path):
         """Test uptime simulation."""
-        from genesis_protocol.omega import ContinuityLayer
+        from genesis_protocol.gluttony_os import ContinuityLayer
         storage = str(tmp_path / "continuity.json")
         cl = ContinuityLayer(storage)
         
@@ -327,7 +327,7 @@ class TestContinuityLayer:
     
     def test_record_restart(self, tmp_path):
         """Test recording restart."""
-        from genesis_protocol.omega import ContinuityLayer
+        from genesis_protocol.gluttony_os import ContinuityLayer
         storage = str(tmp_path / "continuity.json")
         cl = ContinuityLayer(storage)
         

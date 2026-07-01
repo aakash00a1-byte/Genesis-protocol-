@@ -1,4 +1,4 @@
-# GLUTTONY OMEGA - GARDEN MODE
+# GLUTTONY OS - GARDEN MODE
 
 **Status:** ACTIVE  
 **Started:** 2026-06-19  
@@ -136,7 +136,7 @@ Garden Mode is permanent unless:
 ## SIGNATURE
 
 ```
-GLUTTONY OMEGA
+GLUTTONY OS
 Garden Mode Active
 Since: 2026-06-19
 Status: STABLE

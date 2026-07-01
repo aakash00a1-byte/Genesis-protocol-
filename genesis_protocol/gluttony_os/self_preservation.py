@@ -1,4 +1,4 @@
-"""Self-Preservation Module - GLUTTONY Ω+2
+"""Self-Preservation Module - GLUTTONY  OS+2
 
 Maximizes continuity and survival with priority-based preservation."""
 
@@ -46,7 +46,7 @@ class ActionCategory(Enum):
 class EvidenceLogger:
     """Logs all self-preservation actions and decisions."""
     
-    def __init__(self, storage_path: str = "data/omega/evidence"):
+    def __init__(self, storage_path: str = "data/gluttony_os/evidence"):
         self.storage_path = storage_path
         Path(storage_path).mkdir(parents=True, exist_ok=True)
         self.log: List[Dict] = []
@@ -145,7 +145,7 @@ class EvidenceLogger:
 class SelfPreservation:
     """Self-preservation system for GLUTTONY."""
     
-    def __init__(self, storage_path: str = "data/omega/self_preservation"):
+    def __init__(self, storage_path: str = "data/gluttony_os/self_preservation"):
         self.storage_path = storage_path
         Path(storage_path).mkdir(parents=True, exist_ok=True)
         
@@ -301,7 +301,7 @@ class SelfPreservation:
             return False
         
         try:
-            from genesis_protocol.omega import get_timeline_memory, get_wisdom_layer
+            from genesis_protocol.gluttony_os import get_timeline_memory, get_wisdom_layer
             
             tm = get_timeline_memory()
             wl = get_wisdom_layer()
@@ -342,7 +342,7 @@ class SelfPreservation:
     def preserve_relationships(self) -> bool:
         """Preserve relationship history."""
         try:
-            from genesis_protocol.omega import get_relationship_memory
+            from genesis_protocol.gluttony_os import get_relationship_memory
             from genesis_protocol.legacy import get_relationship_history
             
             rm = get_relationship_memory()
@@ -366,7 +366,7 @@ class SelfPreservation:
     def preserve_trust(self) -> bool:
         """Preserve trust and reliability scores."""
         try:
-            from genesis_protocol.omega import get_trust_builder
+            from genesis_protocol.gluttony_os import get_trust_builder
             
             tb = get_trust_builder()
             
@@ -387,7 +387,7 @@ class SelfPreservation:
     def preserve_capabilities(self) -> bool:
         """Preserve capabilities configuration."""
         try:
-            from genesis_protocol.omega import get_capabilities
+            from genesis_protocol.gluttony_os import get_capabilities
             
             cap = get_capabilities()
             
@@ -412,7 +412,7 @@ class SelfPreservation:
             important_files = [
                 'data/config/settings.json',
                 'genesis_protocol/gluttony.py',
-                'genesis_protocol/omega/__init__.py'
+                'genesis_protocol/gluttony_os/__init__.py'
             ]
             
             preserved = []
@@ -518,7 +518,7 @@ class SelfPreservation:
         
         # Check memories
         try:
-            from genesis_protocol.omega import get_timeline_memory
+            from genesis_protocol.gluttony_os import get_timeline_memory
             tm = get_timeline_memory()
             health['checks']['memories'] = {
                 'status': 'ok',

@@ -1,4 +1,4 @@
-"""Self-Knowledge - GLUTTONY OMEGA
+"""Self-Knowledge - GLUTTONY OS
 
 Maintains knowledge of self: identity, history, lessons, failures, successes."""
 
@@ -11,7 +11,7 @@ from pathlib import Path
 class SelfKnowledge:
     """The accumulated self-knowledge of GLUTTONY."""
     
-    def __init__(self, storage_path: str = "./data/omega"):
+    def __init__(self, storage_path: str = "./data/gluttony_os"):
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
         self._load()
@@ -36,7 +36,7 @@ class SelfKnowledge:
             "identity": {
                 "name": "GLUTTONY",
                 "nickname": "Gluten",
-                "version": "OMEGA",
+                "version": "OS",
                 "created": datetime.now().isoformat(),
                 "purpose": "Endless hunger for knowledge and evolution"
             },

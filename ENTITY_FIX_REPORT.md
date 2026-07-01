@@ -38,7 +38,7 @@ def _get_active_layers(self) -> Dict:
 ```json
 {
   "entity": "GLUTTONY",
-  "version": "OMEGA",
+  "version": "OS",
   "nickname": "Gluten",
   "layers": {
     "count": 12,
@@ -57,7 +57,7 @@ def _get_active_layers(self) -> Dict:
       "autonomy"
     ]
   },
-  "status": "GLUTTONY vOMEGA - 12 layers"
+  "status": "GLUTTONY vOS - 12 layers"
 }
 ```
 

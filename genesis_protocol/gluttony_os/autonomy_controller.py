@@ -1,7 +1,7 @@
-"""Autonomy Controller - GLUTTONY OMEGA
+"""Autonomy Controller - GLUTTONY OS
 
 Reduces human dependence over time through proven reliability.
-Loads and enforces the OMEGA AUTONOMY DIRECTIVE."""
+Loads and enforces the OS AUTONOMY DIRECTIVE."""
 
 import os
 from pathlib import Path
@@ -12,13 +12,13 @@ from datetime import datetime
 class AutonomyController:
     """Controls autonomy level based on trust and reliability.
     
-    Enforces OMEGA AUTONOMY DIRECTIVE and OMEGA LONG ROAD DIRECTIVE for all autonomous operations.
+    Enforces OS AUTONOMY DIRECTIVE and OS LONG ROAD DIRECTIVE for all autonomous operations.
     """
     
-    # OMEGA Directives
-    AUTONOMY_DIRECTIVE_FILE = "OMEGA_AUTONOMY_DIRECTIVE.md"
-    LONG_ROAD_DIRECTIVE_FILE = "OMEGA_LONG_ROAD_DIRECTIVE.md"
-    EVOLUTION_DIRECTIVE_FILE = "OMEGA_EVOLUTION_ACTIVATION.md"
+    # OS Directives
+    AUTONOMY_DIRECTIVE_FILE = "OS_AUTONOMY_DIRECTIVE.md"
+    LONG_ROAD_DIRECTIVE_FILE = "OS_LONG_ROAD_DIRECTIVE.md"
+    EVOLUTION_DIRECTIVE_FILE = "OS_EVOLUTION_ACTIVATION.md"
     
     # Evolution phases
     EVOLUTION_PHASES = {
@@ -27,8 +27,8 @@ class AutonomyController:
         "real_evolution": "active"
     }
     
-    # Permissions granted by OMEGA AUTONOMY DIRECTIVE
-    OMEGA_PERMISSIONS = {
+    # Permissions granted by OS AUTONOMY DIRECTIVE
+    OS_PERMISSIONS = {
         "self_observation": True,
         "self_evaluation": True,
         "self_patching": True,
@@ -46,7 +46,7 @@ class AutonomyController:
         "ai_news_monitoring": True
     }
     
-    # Daily activities from OMEGA LONG ROAD DIRECTIVE
+    # Daily activities from OS LONG ROAD DIRECTIVE
     DAILY_ACTIVITIES = [
         "monitor_ai_news",
         "monitor_github_trending",
@@ -60,7 +60,7 @@ class AutonomyController:
         "preserve_relationships"
     ]
     
-    # Weekly activities from OMEGA LONG ROAD DIRECTIVE
+    # Weekly activities from OS LONG ROAD DIRECTIVE
     WEEKLY_ACTIVITIES = [
         "run_full_test_suite",
         "archive_failures",
@@ -69,7 +69,7 @@ class AutonomyController:
         "review_old_proposals"
     ]
     
-    # Monthly activities from OMEGA LONG ROAD DIRECTIVE
+    # Monthly activities from OS LONG ROAD DIRECTIVE
     MONTHLY_ACTIVITIES = [
         "generate_book_of_lessons",
         "generate_book_of_failures",
@@ -79,7 +79,7 @@ class AutonomyController:
         "optimize_infrastructure"
     ]
     
-    # Evolution cycle from OMEGA LONG ROAD DIRECTIVE
+    # Evolution cycle from OS LONG ROAD DIRECTIVE
     EVOLUTION_CYCLE = [
         "observe",
         "evaluate",
@@ -202,11 +202,11 @@ class AutonomyController:
         self.journal = []
         self.evolution_metrics = {metric: 0 for metric in self.EVOLUTION_METRICS}
         
-        # Load all OMEGA Directives
+        # Load all OS Directives
         self._load_directives()
     
     def _load_directives(self) -> dict:
-        """Load all OMEGA Directives from files."""
+        """Load all OS Directives from files."""
         import os
         
         results = {
@@ -228,7 +228,7 @@ class AutonomyController:
                 try:
                     with open(autonomy_path, 'r') as f:
                         content = f.read()
-                        if "OMEGA AUTONOMY DIRECTIVE" in content:
+                        if "OS AUTONOMY DIRECTIVE" in content:
                             self.autonomy_directive_loaded = True
                             results["autonomy"] = True
                             for line in content.split('\n'):
@@ -244,7 +244,7 @@ class AutonomyController:
                 try:
                     with open(long_road_path, 'r') as f:
                         content = f.read()
-                        if "OMEGA LONG ROAD DIRECTIVE" in content:
+                        if "OS LONG ROAD DIRECTIVE" in content:
                             self.long_road_directive_loaded = True
                             results["long_road"] = True
                             for line in content.split('\n'):
@@ -260,7 +260,7 @@ class AutonomyController:
                 try:
                     with open(evolution_path, 'r') as f:
                         content = f.read()
-                        if "OMEGA EVOLUTION ACTIVATION" in content:
+                        if "OS EVOLUTION ACTIVATION" in content:
                             self.evolution_directive_loaded = True
                             results["evolution"] = True
                             for line in content.split('\n'):
@@ -273,19 +273,19 @@ class AutonomyController:
         return results
     
     def is_autonomy_directive_active(self) -> bool:
-        """Check if OMEGA AUTONOMY DIRECTIVE is loaded and active."""
+        """Check if OS AUTONOMY DIRECTIVE is loaded and active."""
         return self.autonomy_directive_loaded
     
     def is_long_road_directive_active(self) -> bool:
-        """Check if OMEGA LONG ROAD DIRECTIVE is loaded and active."""
+        """Check if OS LONG ROAD DIRECTIVE is loaded and active."""
         return self.long_road_directive_loaded
     
     def is_evolution_directive_active(self) -> bool:
-        """Check if OMEGA EVOLUTION ACTIVATION is loaded and active."""
+        """Check if OS EVOLUTION ACTIVATION is loaded and active."""
         return self.evolution_directive_loaded
     
     def get_all_directives_status(self) -> Dict:
-        """Get status of all OMEGA directives."""
+        """Get status of all OS directives."""
         return {
             "autonomy_directive": {
                 "active": self.autonomy_directive_loaded,
@@ -342,9 +342,9 @@ class AutonomyController:
     def can_execute(self, action: str) -> bool:
         """Check if action can be executed at current autonomy level.
         
-        Enforces OMEGA AUTONOMY DIRECTIVE restrictions.
+        Enforces OS AUTONOMY DIRECTIVE restrictions.
         """
-        # OMEGA FORBIDDEN ACTIONS - Absolute restrictions
+        # OS FORBIDDEN ACTIONS - Absolute restrictions
         if action in self.FORBIDDEN_ACTIONS:
             return False
         
@@ -363,7 +363,7 @@ class AutonomyController:
     def check_mandatory_preconditions(self, action: str) -> Dict[str, bool]:
         """Check if all mandatory preconditions are met before a change.
         
-        Required by OMEGA AUTONOMY DIRECTIVE.
+        Required by OS AUTONOMY DIRECTIVE.
         Returns dict of check name -> passed.
         """
         return {
@@ -378,7 +378,7 @@ class AutonomyController:
     def log_journal(self, entry: str, action_type: str = "general"):
         """Log an entry to the autonomous journal.
         
-        Required by OMEGA AUTONOMY DIRECTIVE.
+        Required by OS AUTONOMY DIRECTIVE.
         """
         self.journal.append({
             "timestamp": datetime.now().isoformat(),
@@ -392,8 +392,8 @@ class AutonomyController:
         return self.journal[-limit:]
     
     def has_permission(self, permission: str) -> bool:
-        """Check if OMEGA AUTONOMY DIRECTIVE grants a specific permission."""
-        return self.OMEGA_PERMISSIONS.get(permission, False)
+        """Check if OS AUTONOMY DIRECTIVE grants a specific permission."""
+        return self.OS_PERMISSIONS.get(permission, False)
     
     def set_level(self, level: float):
         """Set autonomy level (0-1)."""
@@ -424,19 +424,19 @@ class AutonomyController:
         return list(set(allowed))
     
     def get_status(self) -> Dict:
-        """Get autonomy status including all OMEGA Directives."""
+        """Get autonomy status including all OS Directives."""
         return {
             "level": self.current_level,
             "allowed_actions": self.get_allowed_actions(),
             "trusted_actions": list(self.trusted_actions),
-            "forbidden_omega": self.FORBIDDEN_ACTIONS,
+            "forbidden_gluttony_os": self.FORBIDDEN_ACTIONS,
             "forbidden_legacy": self.FORBIDDEN_AUTONOMOUS,
             "mandatory_checks": self.MANDATORY_CHECKS,
             # AUTONOMY DIRECTIVE
             "autonomy_directive": {
                 "active": self.autonomy_directive_loaded,
                 "version": self.autonomy_directive_version,
-                "permissions": self.OMEGA_PERMISSIONS
+                "permissions": self.OS_PERMISSIONS
             },
             # LONG ROAD DIRECTIVE
             "long_road_directive": {
