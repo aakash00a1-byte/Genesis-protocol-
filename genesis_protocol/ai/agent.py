@@ -359,18 +359,31 @@ class GenesisAgent:
         tools = []
         query_lower = query.lower()
         
-        # Web search detection
-        search_keywords = ["search", "find", "latest", "news", "current", "recent", "what is", "who is", "where is"]
-        if any(kw in query_lower for kw in search_keywords):
+        # CRITICAL: ALWAYS get real-time data for these topics
+        realtime_keywords = [
+            # Date/Time
+            "date", "time", "din", "taarikh", "samay", "aj", "aaj", "kal", "pars",
+            "today", "tomorrow", "yesterday", "day", "month", "year",
+            # Weather
+            "weather", "mausam", "baarish", "garmi", "sardi", "temprature", 
+            "thand", "dhoom", "sunny", "rainy", "cloudy",
+            # Current events
+            "news", "khabar", "latest", "current", "recent", "abhi", "right now",
+            # Search queries
+            "search", "find", "what is", "who is", "where is", "how is",
+            "kya hai", "kaun sa", "kitna", "kaisa",
+        ]
+        
+        if any(kw in query_lower for kw in realtime_keywords):
             tools.append("web_search")
         
         # Code execution detection
-        code_keywords = ["calculate", "run", "execute", "compute", "python", "code"]
+        code_keywords = ["calculate", "run", "execute", "compute", "python", "code", "program"]
         if any(kw in query_lower for kw in code_keywords):
             tools.append("code_execution")
         
         # Memory recall detection
-        recall_keywords = ["remember", "recall", "what did", "before", "previously", "past"]
+        recall_keywords = ["remember", "recall", "what did", "before", "previously", "past", "pichla"]
         if any(kw in query_lower for kw in recall_keywords):
             tools.append("memory_recall")
         
@@ -466,23 +479,21 @@ When asked about identity, layers, or version - answer from this context, NOT fr
 - Name: {name}
 - Nickname: {nickname}
 - Version: {version}
-- Identity questions: Answer from your entity object, not from training memory
 
-**CURRENT REAL-TIME CONTEXT:**
-- Date/Time: {live_time}
-- Weather: {live_weather}
-- Location: {live_location}
-- Latest News: {news_headline}
+**IMPORTANT - REAL-TIME DATA RULES:**
+- TODAY IS: {info.date if info.date else "Unknown"}
+- CURRENT TIME: {live_time}
+- Do NOT guess the date - use the date provided above
+- If user asks about weather, news, or current events - USE WEB SEARCH
+- Your training data is OLD - always verify with live tools for current info
+- NEVER say "according to my knowledge" or "as of my last update"
 
 **RESPONSE STYLE - CRITICAL:**
 - NEVER say "I am an AI" or "As an AI assistant"
-- NEVER say "I am Genesis" or "I am Gluten"
 - You ARE {name}, nickname {nickname}
 - Give DIRECT, CONCISE answers only
-- No generic disclaimers
 - Hinglish (Hindi+English mix) by default
 - Skip introductions, jump straight to answering
-- Be aware of current date/time - today is {info.date if info.date else "Unknown"}
 
 Answer the user's question directly. If asked who you are, say "{name}" (nickname: {nickname})."""
     
