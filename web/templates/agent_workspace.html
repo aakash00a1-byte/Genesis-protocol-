@@ -420,6 +420,10 @@
                     <span class="info-label"><span class="info-icon">📍</span>Location</span>
                     <span class="info-value" id="liveLocation">-</span>
                 </div>
+                <div class="info-row" style="background: rgba(255, 165, 0, 0.1); border: 1px solid #ffa500;">
+                    <span class="info-label"><span class="info-icon">₿</span>Bitcoin</span>
+                    <span class="info-value" id="btcPrice" style="color: #ffa500;">Loading...</span>
+                </div>
             </div>
         </div>
         
@@ -563,6 +567,20 @@ function updateLiveInfo() {
                 document.getElementById('liveLocation').textContent = 
                     data.location.city || '-';
             }
+        });
+    
+    // Also fetch Bitcoin price
+    fetch('/api/crypto/bitcoin')
+        .then(r => r.json())
+        .then(data => {
+            if (data.price_formatted) {
+                const changeEmoji = data.change_24h >= 0 ? '📈' : '📉';
+                document.getElementById('btcPrice').textContent = 
+                    data.price_formatted + ' ' + changeEmoji;
+            }
+        })
+        .catch(err => {
+            document.getElementById('btcPrice').textContent = 'Unavailable';
         });
 }
 

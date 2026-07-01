@@ -2056,3 +2056,99 @@ def api_live_display():
         return jsonify({'display': service.format_for_display()})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# CRYPTO PRICES - Bitcoin, Ethereum, etc.
+# ============================================================================
+
+@app.route('/api/crypto', methods=['GET'])
+@app.route('/api/crypto/<symbol>', methods=['GET'])
+def api_crypto(symbol=None):
+    """Get crypto prices."""
+    try:
+        from genesis_protocol.integrations.crypto_service import get_crypto_service
+        service = get_crypto_service()
+        
+        if symbol:
+            crypto = service.get_price(symbol)
+            if crypto:
+                return jsonify({
+                    'name': crypto.name,
+                    'symbol': crypto.symbol,
+                    'price': crypto.price,
+                    'price_formatted': crypto.format_price(),
+                    'change_24h': crypto.change_24h,
+                    'change_formatted': crypto.format_change(),
+                })
+            return jsonify({'error': 'Crypto not found'}), 404
+        else:
+            cryptos = service.get_top_cryptos(5)
+            return jsonify({
+                'cryptos': [
+                    {
+                        'name': c.name,
+                        'symbol': c.symbol,
+                        'price': c.price,
+                        'price_formatted': c.format_price(),
+                        'change_24h': c.change_24h,
+                    } for c in cryptos
+                ]
+            })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/crypto/bitcoin', methods=['GET'])
+def api_bitcoin():
+    """Get Bitcoin price specifically."""
+    try:
+        from genesis_protocol.integrations.crypto_service import get_crypto_service
+        service = get_crypto_service()
+        btc = service.get_bitcoin_price()
+        
+        if btc:
+            return jsonify({
+                'name': btc.name,
+                'price': btc.price,
+                'price_formatted': btc.format_price(),
+                'change_24h': btc.change_24h,
+                'formatted': service.format_crypto_display('bitcoin'),
+            })
+        return jsonify({'error': 'Bitcoin price unavailable'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/crypto/all', methods=['GET'])
+def api_crypto_all():
+    """Get all live info + crypto combined."""
+    try:
+        from genesis_protocol.integrations import get_live_info_service
+        from genesis_protocol.integrations.crypto_service import get_crypto_service
+        
+        live = get_live_info_service().get_all_info()
+        crypto = get_crypto_service()
+        btc = crypto.get_bitcoin_price()
+        
+        return jsonify({
+            'live': {
+                'date': live.date,
+                'time': live.time,
+                'weather': {
+                    'temp': live.weather.temp if live.weather else None,
+                    'condition': live.weather.condition if live.weather else None,
+                    'icon': live.weather.icon if live.weather else None,
+                } if live.weather else None,
+                'news': live.news[:3] if live.news else [],
+            },
+            'crypto': {
+                'bitcoin': {
+                    'price': btc.price if btc else None,
+                    'formatted': btc.format_price() if btc else None,
+                    'change_24h': btc.change_24h if btc else None,
+                } if btc else None
+            }
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
