@@ -432,7 +432,7 @@ When asked about identity, layers, or version - answer from this context, NOT fr
             return "**ENTITY CONTEXT:** GLUTTONY OMEGA - answer identity questions from entity object."
     
     def _get_system_prompt(self) -> str:
-        """Get system prompt for responses with entity context."""
+        """Get system prompt for responses with entity context and live info."""
         # Get actual entity identity
         try:
             from genesis_protocol.gluttony import get_identity
@@ -445,6 +445,21 @@ When asked about identity, layers, or version - answer from this context, NOT fr
             nickname = "Gluten"
             version = "OMEGA"
         
+        # Get live info
+        try:
+            from genesis_protocol.integrations import get_live_info_service
+            service = get_live_info_service()
+            info = service.get_all_info()
+            live_time = f"{info.date} {info.time}" if info.date else "Unknown"
+            live_weather = f"{info.weather.icon} {info.weather.temp}°C, {info.weather.condition}" if info.weather else "Unknown"
+            live_location = f"{info.location.city}, {info.location.region}" if info.location else "Unknown"
+            news_headline = info.news[0]['title'] if info.news and len(info.news) > 0 else "No recent news"
+        except:
+            live_time = "Unknown"
+            live_weather = "Unknown"
+            live_location = "Unknown"
+            news_headline = "Unknown"
+        
         return f"""You are {name}, also known as {nickname}.
 
 **ENTITY INFORMATION:**
@@ -452,6 +467,12 @@ When asked about identity, layers, or version - answer from this context, NOT fr
 - Nickname: {nickname}
 - Version: {version}
 - Identity questions: Answer from your entity object, not from training memory
+
+**CURRENT REAL-TIME CONTEXT:**
+- Date/Time: {live_time}
+- Weather: {live_weather}
+- Location: {live_location}
+- Latest News: {news_headline}
 
 **RESPONSE STYLE - CRITICAL:**
 - NEVER say "I am an AI" or "As an AI assistant"
@@ -461,6 +482,7 @@ When asked about identity, layers, or version - answer from this context, NOT fr
 - No generic disclaimers
 - Hinglish (Hindi+English mix) by default
 - Skip introductions, jump straight to answering
+- Be aware of current date/time - today is {info.date if info.date else "Unknown"}
 
 Answer the user's question directly. If asked who you are, say "{name}" (nickname: {nickname})."""
     
