@@ -2169,15 +2169,17 @@ def railway_status():
                 'message': 'Add RAILWAY_TOKEN to enable'
             })
         
-        status = railway.get_service_status('genesis-protocol-00a1')
-        projects = railway.get_projects()
+        status = railway.get_service_status()
         
         return jsonify({
             'configured': True,
-            'status': status['status'],
-            'message': status['message'],
+            'project_id': status.get('project_id'),
+            'project_name': status.get('project_name'),
+            'status': status.get('status'),
+            'message': status.get('message'),
+            'deployment_id': status.get('deployment_id'),
             'last_deploy': status.get('last_deploy'),
-            'projects_count': len(projects)
+            'dashboard_url': status.get('dashboard_url')
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
