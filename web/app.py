@@ -2152,3 +2152,32 @@ def api_crypto_all():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# Railway Status Endpoint
+@app.route('/api/railway/status')
+@limiter.limit("30/minute")
+def railway_status():
+    """Get Railway deployment status."""
+    try:
+        railway = get_railway_service()
+        
+        if not railway.is_configured():
+            return jsonify({
+                'configured': False,
+                'status': 'not_configured',
+                'message': 'Add RAILWAY_TOKEN to enable'
+            })
+        
+        status = railway.get_service_status('genesis-protocol-00a1')
+        projects = railway.get_projects()
+        
+        return jsonify({
+            'configured': True,
+            'status': status['status'],
+            'message': status['message'],
+            'last_deploy': status.get('last_deploy'),
+            'projects_count': len(projects)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
