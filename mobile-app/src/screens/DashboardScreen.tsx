@@ -147,7 +147,12 @@ const DashboardScreen = () => {
 
         {/* System Status Overview */}
         <View style={[styles.section, { backgroundColor: theme.surface }]}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>System Status</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>System Status</Text>
+            <TouchableOpacity onPress={onRefresh}>
+              <Text style={[styles.refreshButton, { color: theme.primary }]}>⟳ Refresh</Text>
+            </TouchableOpacity>
+          </View>
           <View style={styles.statusRow}>
             <View style={styles.statusIndicator}>
               <View style={[styles.statusDot, { backgroundColor: theme.success }]} />
@@ -265,6 +270,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 12,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  refreshButton: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   statusRow: {
     flexDirection: 'row',
