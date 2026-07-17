@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Genesis Protocol - AI Chat</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0f;
+            color: #00ff88;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            text-align: center;
+            padding: 20px 0;
+            border-bottom: 1px solid #1a1a1a;
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 2.5em;
+            color: #00ff88;
+            text-shadow: 0 0 10px #00ff8855;
+        }
+        .subtitle { color: #666; margin-top: 5px; }
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+        .status.online { background: #00ff8822; color: #00ff88; border: 1px solid #00ff88; }
+        .status.offline { background: #ff444422; color: #ff4444; border: 1px solid #ff4444; }
+        .chat-container {
+            flex: 1;
+            border: 1px solid #1a1a1a;
+            border-radius: 10px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .terminal-header {
+            background: #1a1a1a;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .dot { width: 12px; height: 12px; border-radius: 50%; }
+        .dot.red { background: #ff5f56; }
+        .dot.yellow { background: #ffbd2e; }
+        .dot.green { background: #27ca40; }
+        .terminal-title { color: #666; margin-left: 10px; font-size: 12px; }
+        .messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            max-height: 60vh;
+        }
+        .message {
+            margin-bottom: 15px;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .message.user { text-align: right; }
+        .message.user .content { background: #00ff8822; border: 1px solid #00ff88; }
+        .message.genesis .content { background: #1a1a1a; border: 1px solid #333; }
+        .message .content {
+            display: inline-block;
+            padding: 12px 16px;
+            border-radius: 8px;
+            max-width: 80%;
+            text-align: left;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .message .prefix { color: #00ff88; font-weight: bold; margin-right: 8px; }
+        .message.user .prefix { color: #00ff88; }
+        .typing { color: #666; font-style: italic; }
+        .input-container {
+            display: flex;
+            padding: 15px;
+            background: #0a0a0f;
+            border-top: 1px solid #1a1a1a;
+            gap: 10px;
+        }
+        input {
+            flex: 1;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: #fff;
+            font-family: inherit;
+            font-size: 14px;
+        }
+        input:focus { outline: none; border-color: #00ff88; }
+        button {
+            background: #00ff88;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 24px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+        button:hover { background: #00cc66; transform: scale(1.05); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .config-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: #111;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+        .config-section h3 { color: #00ff88; margin-bottom: 10px; }
+        .config-section input { width: 100%; margin-bottom: 10px; }
+        .info { color: #666; font-size: 12px; margin-top: 5px; }
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #333;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>GENESIS</h1>
+            <p class="subtitle">Autonomous AI Protocol v2.0</p>
+            <div class="status offline" id="status">INITIALIZING...</div>
+        </header>
+
+        <div class="chat-container">
+            <div class="terminal-header">
+                <div class="dot red"></div>
+                <div class="dot yellow"></div>
+                <div class="dot green"></div>
+                <span class="terminal-title">genesis@omega:~</span>
+            </div>
+            <div class="messages" id="messages">
+                <div class="message genesis">
+                    <span class="prefix">Ω</span>
+                    <span class="content">// Genesis Protocol v2.0 initialized
+// Configure API URL below to connect</span>
+                </div>
+            </div>
+            <div class="input-container">
+                <input type="text" id="input" placeholder="Enter your command..." autocomplete="off" />
+                <button id="send" onclick="sendMessage()">▶</button>
+            </div>
+        </div>
+
+        <div class="config-section">
+            <h3>⚙️ API Configuration</h3>
+            <input type="text" id="apiUrl" placeholder="Backend URL (e.g., https://your-app.railway.app)" />
+            <input type="text" id="apiKey" placeholder="API Key (optional)" />
+            <button onclick="saveConfig()">Save Configuration</button>
+            <p class="info">Enter your backend URL to connect. Without it, demo mode will be active.</p>
+        </div>
+
+        <footer>Genesis Protocol v1.2.0 | Built with Ω</footer>
+    </div>
+
+    <script>
+        let config = {
+            apiUrl: localStorage.getItem('genesis_api_url') || '',
+            apiKey: localStorage.getItem('genesis_api_key') || ''
+        };
+
+        document.getElementById('apiUrl').value = config.apiUrl;
+        document.getElementById('apiKey').value = config.apiKey;
+        updateStatus();
+
+        function updateStatus() {
+            const status = document.getElementById('status');
+            if (config.apiUrl) {
+                status.textContent = 'CONNECTED';
+                status.className = 'status online';
+            } else {
+                status.textContent = 'DEMO MODE';
+                status.className = 'status offline';
+            }
+        }
+
+        function saveConfig() {
+            config.apiUrl = document.getElementById('apiUrl').value.trim();
+            config.apiKey = document.getElementById('apiKey').value.trim();
+            localStorage.setItem('genesis_api_url', config.apiUrl);
+            localStorage.setItem('genesis_api_key', config.apiKey);
+            updateStatus();
+            addMessage('genesis', 'Configuration saved. Connecting to: ' + (config.apiUrl || 'Demo Mode'));
+        }
+
+        function addMessage(role, content) {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = 'message ' + role;
+            const prefix = role === 'user' ? '>' : 'Ω';
+            div.innerHTML = '<span class="prefix">' + prefix + '</span><span class="content"></span>';
+            div.querySelector('.content').textContent = content;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function addTyping() {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = 'message genesis';
+            div.id = 'typing';
+            div.innerHTML = '<span class="prefix">Ω</span><span class="content typing">Processing...</span>';
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function removeTyping() {
+            const typing = document.getElementById('typing');
+            if (typing) typing.remove();
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            addMessage('user', text);
+            input.value = '';
+            addTyping();
+
+            if (!config.apiUrl) {
+                setTimeout(() => {
+                    removeTyping();
+                    addMessage('genesis', 'Demo Mode Active\n\nBackend not configured.\n\nTo connect:\n1. Deploy Genesis on Railway/Render\n2. Enter URL in configuration');
+                }, 1500);
+                return;
+            }
+
+            try {
+                const response = await fetch(config.apiUrl + '/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(config.apiKey && { 'Authorization': 'Bearer ' + config.apiKey })
+                    },
+                    body: JSON.stringify({ message: text })
+                });
+
+                removeTyping();
+
+                if (!response.ok) throw new Error('API Error: ' + response.status);
+                const data = await response.json();
+                addMessage('genesis', data.response || data.message || 'Response received');
+            } catch (error) {
+                removeTyping();
+                addMessage('genesis', 'Connection Failed\n\nError: ' + error.message);
+            }
+        }
+
+        document.getElementById('input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+    </script>
+</body>
+</html>
