@@ -1,373 +1,267 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - Gluttony OS{% endblock %}
+{% block title %}Dashboard - Genesis Protocol{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .welcome-banner {
+        background: linear-gradient(135deg, rgba(0, 255, 136, 0.1), rgba(0, 212, 255, 0.1));
+        border: 1px solid var(--neon-green);
+        border-radius: 12px;
+        padding: 30px;
+        text-align: center;
+        margin-bottom: 25px;
+    }
+    
+    .welcome-title {
+        font-size: 24px;
+        color: var(--neon-green);
+        margin-bottom: 10px;
+    }
+    
+    .welcome-subtitle {
+        color: var(--text-secondary);
+        font-size: 13px;
+    }
+    
+    .quick-actions {
+        display: flex;
+        gap: 15px;
+        margin-top: 20px;
+        flex-wrap: wrap;
+    }
+    
+    .quick-btn {
+        flex: 1;
+        min-width: 150px;
+        padding: 20px;
+        background: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .quick-btn:hover {
+        border-color: var(--neon-green);
+        transform: translateY(-3px);
+    }
+    
+    .quick-btn-icon {
+        font-size: 30px;
+        margin-bottom: 10px;
+    }
+    
+    .quick-btn-text {
+        color: var(--text-primary);
+        font-size: 13px;
+    }
+    
+    .activity-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .activity-item {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 15px;
+        background: var(--dark-bg);
+        border-radius: 8px;
+        border-left: 3px solid var(--neon-green);
+    }
+    
+    .activity-icon {
+        font-size: 20px;
+    }
+    
+    .activity-content {
+        flex: 1;
+    }
+    
+    .activity-title {
+        font-size: 13px;
+        color: var(--text-primary);
+    }
+    
+    .activity-time {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+    
+    .provider-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+    }
+    
+    .provider-card {
+        padding: 20px;
+        background: var(--dark-bg);
+        border-radius: 10px;
+        border: 1px solid var(--border-color);
+    }
+    
+    .provider-name {
+        font-size: 14px;
+        color: var(--neon-cyan);
+        margin-bottom: 5px;
+    }
+    
+    .provider-status {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+    
+    .provider-status.active {
+        color: var(--neon-green);
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="dashboard">
-    <h1>📊 Dashboard</h1>
-    
-    <!-- Live Info Widget -->
-    <div class="live-info-card" id="liveInfoCard">
-        <div class="live-info-header">
-            <span class="live-badge">🔴 LIVE</span>
-            <span class="live-time" id="liveTime">Loading...</span>
-            <button class="live-refresh" onclick="refreshLiveInfo()">🔄</button>
-        </div>
-        <div class="live-info-grid">
-            <div class="live-item" id="weatherInfo">
-                <span class="live-icon" id="weatherIcon">🌤️</span>
-                <div class="live-details">
-                    <span class="live-value" id="weatherTemp">--°C</span>
-                    <span class="live-label" id="weatherCondition">Loading...</span>
-                    <span class="live-sublabel" id="weatherLocation">-</span>
-                </div>
-            </div>
-            <div class="live-item">
-                <span class="live-icon">📍</span>
-                <div class="live-details">
-                    <span class="live-value" id="locationCity">-</span>
-                    <span class="live-label" id="locationRegion">-</span>
-                    <span class="live-sublabel" id="locationIP">-</span>
-                </div>
-            </div>
-            <div class="live-item live-news">
-                <span class="live-icon">📰</span>
-                <div class="live-details">
-                    <span class="live-value">Latest News</span>
-                    <span class="live-label news-scroll" id="newsHeadline">Loading headlines...</span>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Stats Cards -->
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-icon">💬</div>
-            <div class="stat-value">{{ stats.total_chats or 0 }}</div>
-            <div class="stat-label">Total Chats</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon">🤖</div>
-            <div class="stat-value">{{ stats.providers_used or 0 }}</div>
-            <div class="stat-label">Providers Used</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon">⭐</div>
-            <div class="stat-value">{{ "%.1f"|format(stats.avg_quality or 0) }}</div>
-            <div class="stat-label">Avg Quality</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon">📅</div>
-            <div class="stat-value">{{ stats.first_chat[:10] if stats.first_chat else 'N/A' }}</div>
-            <div class="stat-label">First Chat</div>
-        </div>
-    </div>
-    
-    <div class="dashboard-grid">
-        <!-- Provider Usage -->
-        <div class="dashboard-section">
-            <h2>🤖 Provider Usage</h2>
-            {% if provider_usage %}
-            <div class="provider-list">
-                {% for p in provider_usage %}
-                <div class="provider-item">
-                    <span class="provider-name">{{ p.provider }}</span>
-                    <span class="provider-count">{{ p.count }}</span>
-                    <div class="provider-bar">
-                        <div class="provider-fill" style="width: {{ (p.count / stats.total_chats * 100)|round }}%"></div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <p class="empty-state">No usage data yet</p>
+<div class="app-layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-logo">Ω</div>
+        <nav class="sidebar-nav">
+            <a href="/chat" class="nav-link" title="Chat">
+                💬
+                <span class="tooltip">Chat</span>
+            </a>
+            <a href="/dashboard" class="nav-link active" title="Dashboard">
+                📊
+                <span class="tooltip">Dashboard</span>
+            </a>
+            <a href="/settings" class="nav-link" title="Settings">
+                ⚙️
+                <span class="tooltip">Settings</span>
+            </a>
+            {% if session.get('role') == 'admin' %}
+            <a href="/admin" class="nav-link" title="Admin">
+                🔐
+                <span class="tooltip">Admin</span>
+            </a>
             {% endif %}
+        </nav>
+        <div class="sidebar-footer">
+            <a href="/logout" class="nav-link" title="Logout">
+                🚪
+                <span class="tooltip">Logout</span>
+            </a>
+        </div>
+    </div>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="welcome-banner">
+            <div class="welcome-title">Welcome back, {{ session.get('username', 'User') }}</div>
+            <div class="welcome-subtitle">Genesis Protocol v2.0 | Status: Online</div>
+            <div class="quick-actions">
+                <a href="/chat" class="quick-btn">
+                    <div class="quick-btn-icon">💬</div>
+                    <div class="quick-btn-text">New Chat</div>
+                </a>
+                <a href="/settings" class="quick-btn">
+                    <div class="quick-btn-icon">⚙️</div>
+                    <div class="quick-btn-text">Settings</div>
+                </a>
+            </div>
         </div>
         
-        <!-- Recent Chats -->
-        <div class="dashboard-section full-width">
-            <h2>💬 Recent Chats</h2>
-            {% if recent_chats %}
-            <div class="chat-list">
-                {% for chat in recent_chats %}
-                <div class="chat-item" onclick="showChat({{ chat.id }})">
-                    <div class="chat-message">{{ chat.message[:100] }}{% if chat.message|length > 100 %}...{% endif %}</div>
-                    <div class="chat-meta">
-                        <span class="chat-provider">{{ chat.provider or 'unknown' }}</span>
-                        <span class="chat-date">{{ chat.created_at }}</span>
+        <div class="grid grid-4">
+            <div class="stat-card">
+                <div class="stat-value">0</div>
+                <div class="stat-label">Total Chats</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">0</div>
+                <div class="stat-label">Messages</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">0</div>
+                <div class="stat-label">API Calls</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">v2.0</div>
+                <div class="stat-label">Version</div>
+            </div>
+        </div>
+        
+        <div class="grid grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">// AI PROVIDERS</span>
+                </div>
+                <div class="provider-grid">
+                    <div class="provider-card">
+                        <div class="provider-name">Groq</div>
+                        <div class="provider-status active">● Active</div>
+                    </div>
+                    <div class="provider-card">
+                        <div class="provider-name">OpenAI</div>
+                        <div class="provider-status">○ Inactive</div>
+                    </div>
+                    <div class="provider-card">
+                        <div class="provider-name">Gemini</div>
+                        <div class="provider-status">○ Inactive</div>
+                    </div>
+                    <div class="provider-card">
+                        <div class="provider-name">HuggingFace</div>
+                        <div class="provider-status">○ Inactive</div>
                     </div>
                 </div>
-                {% endfor %}
             </div>
-            {% else %}
-            <p class="empty-state">No chats yet. Start chatting! 💬</p>
-            {% endif %}
+            
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">// RECENT ACTIVITY</span>
+                </div>
+                <div class="activity-list">
+                    <div class="activity-item">
+                        <span class="activity-icon">🟢</span>
+                        <div class="activity-content">
+                            <div class="activity-title">System Online</div>
+                            <div class="activity-time">Just now</div>
+                        </div>
+                    </div>
+                    <div class="activity-item">
+                        <span class="activity-icon">🔐</span>
+                        <div class="activity-content">
+                            <div class="activity-title">Logged in</div>
+                            <div class="activity-time">Today</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-    </div>
-    
-    <!-- Chat Detail Modal -->
-    <div id="chatModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeModal()">&times;</span>
-            <h2>Chat Details</h2>
-            <div id="chatDetail"></div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">// SYSTEM STATUS</span>
+            </div>
+            <div class="grid grid-3">
+                <div class="stat-card">
+                    <div class="stat-value" style="font-size: 20px;">●</div>
+                    <div class="stat-label">Web Server</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="font-size: 20px;">●</div>
+                    <div class="stat-label">Database</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="font-size: 20px;">●</div>
+                    <div class="stat-label">API Gateway</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            Genesis Protocol Ω | Built with Autonomous AI | v2.0
         </div>
     </div>
 </div>
-
-<script>
-// Live Info Functions
-let liveInfoInterval;
-
-function loadLiveInfo() {
-    fetch('/api/live-info')
-        .then(r => r.json())
-        .then(data => {
-            if (data.error) return;
-            
-            // Update time
-            document.getElementById('liveTime').textContent = data.time + ' | ' + data.date;
-            
-            // Update weather
-            if (data.weather) {
-                document.getElementById('weatherIcon').textContent = data.weather.icon || '🌤️';
-                document.getElementById('weatherTemp').textContent = data.weather.temp + '°C';
-                document.getElementById('weatherCondition').textContent = data.weather.condition || '-';
-                document.getElementById('weatherLocation').textContent = data.weather.city + ', ' + data.weather.country;
-            }
-            
-            // Update location
-            if (data.location) {
-                document.getElementById('locationCity').textContent = data.location.city || '-';
-                document.getElementById('locationRegion').textContent = data.location.region + ', ' + data.location.country;
-                document.getElementById('locationIP').textContent = 'IP: ' + (data.location.ip || '-');
-            }
-            
-            // Update news
-            if (data.news && data.news.length > 0) {
-                document.getElementById('newsHeadline').textContent = data.news[0].title;
-            }
-        })
-        .catch(err => console.log('Live info error:', err));
-}
-
-function refreshLiveInfo() {
-    loadLiveInfo();
-}
-
-// Auto-refresh every 60 seconds
-function startLiveUpdates() {
-    loadLiveInfo();
-    liveInfoInterval = setInterval(loadLiveInfo, 60000);
-}
-
-function stopLiveUpdates() {
-    if (liveInfoInterval) clearInterval(liveInfoInterval);
-}
-
-// Start on page load
-document.addEventListener('DOMContentLoaded', startLiveUpdates);
-document.addEventListener('beforeunload', stopLiveUpdates);
-
-// Chat Modal Functions
-function showChat(id) {
-    fetch(`/api/chat/${id}`)
-        .then(r => r.json())
-        .then(data => {
-            document.getElementById('chatDetail').innerHTML = `
-                <div class="chat-full">
-                    <div class="chat-q"><strong>Q:</strong> ${data.message}</div>
-                    <div class="chat-a"><strong>A:</strong> ${data.response}</div>
-                    <div class="chat-info">
-                        <span>Provider: ${data.provider}</span>
-                        <span>Model: ${data.model}</span>
-                        <span>Score: ${data.quality_score}</span>
-                        <span>${data.created_at}</span>
-                    </div>
-                </div>
-            `;
-            document.getElementById('chatModal').style.display = 'block';
-        });
-}
-
-function closeModal() {
-    document.getElementById('chatModal').style.display = 'none';
-}
-</script>
-
-<style>
-/* Live Info Card Styles */
-.live-info-card {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    border: 2px solid #00d4ff;
-    border-radius: 16px;
-    padding: 1rem;
-    margin-bottom: 2rem;
-    box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
-}
-
-.live-info-header {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    margin-bottom: 1rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-}
-
-.live-badge {
-    background: #ff4757;
-    color: white;
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: bold;
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-}
-
-.live-time {
-    flex: 1;
-    color: #00d4ff;
-    font-weight: bold;
-    font-size: 1.1rem;
-}
-
-.live-refresh {
-    background: transparent;
-    border: 1px solid #00d4ff;
-    color: #00d4ff;
-    padding: 0.25rem 0.5rem;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.3s;
-}
-
-.live-refresh:hover {
-    background: #00d4ff;
-    color: #1a1a2e;
-}
-
-.live-info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-}
-
-.live-item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem;
-    background: rgba(255,255,255,0.05);
-    border-radius: 10px;
-}
-
-.live-icon {
-    font-size: 2rem;
-    min-width: 50px;
-    text-align: center;
-}
-
-.live-details {
-    display: flex;
-    flex-direction: column;
-}
-
-.live-value {
-    font-size: 1.1rem;
-    font-weight: bold;
-    color: white;
-}
-
-.live-label {
-    font-size: 0.9rem;
-    color: #a0a0a0;
-}
-
-.live-sublabel {
-    font-size: 0.75rem;
-    color: #707070;
-}
-
-.news-scroll {
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.live-news .live-icon {
-    color: #ffa502;
-}
-
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 1rem;
-    margin-bottom: 2rem;
-}
-
-.stat-card {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding: 1.5rem;
-    border-radius: 12px;
-    text-align: center;
-    color: white;
-}
-
-.stat-icon { font-size: 2rem; margin-bottom: 0.5rem; }
-.stat-value { font-size: 2rem; font-weight: bold; }
-.stat-label { font-size: 0.9rem; opacity: 0.9; }
-
-.dashboard-grid {
-    display: grid;
-    grid-template-columns: 1fr 2fr;
-    gap: 1.5rem;
-}
-
-.dashboard-section {
-    background: var(--card-bg);
-    padding: 1.5rem;
-    border-radius: 12px;
-}
-
-.full-width { grid-column: 1 / -1; }
-
-.provider-list { display: flex; flex-direction: column; gap: 0.75rem; }
-.provider-item { display: flex; align-items: center; gap: 0.5rem; }
-.provider-name { width: 80px; font-size: 0.9rem; }
-.provider-count { width: 30px; text-align: right; }
-.provider-bar { flex: 1; height: 8px; background: var(--border); border-radius: 4px; }
-.provider-fill { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 4px; }
-
-.chat-list { display: flex; flex-direction: column; gap: 0.5rem; }
-.chat-item {
-    padding: 1rem;
-    background: var(--bg-secondary);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-.chat-item:hover { transform: translateX(5px); }
-.chat-message { margin-bottom: 0.5rem; }
-.chat-meta { display: flex; gap: 1rem; font-size: 0.8rem; opacity: 0.7; }
-.chat-q, .chat-a { padding: 1rem; margin: 0.5rem 0; border-radius: 8px; }
-.chat-q { background: var(--bg-secondary); }
-.chat-a { background: linear-gradient(135deg, #667eea22, #764ba222); }
-
-.modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; }
-.modal-content { background: var(--card-bg); margin: 5% auto; padding: 2rem; border-radius: 12px; width: 80%; max-width: 700px; }
-.close { float: right; font-size: 1.5rem; cursor: pointer; }
-.chat-info { display: flex; gap: 1rem; font-size: 0.8rem; opacity: 0.7; margin-top: 1rem; }
-
-@media (max-width: 768px) {
-    .dashboard-grid { grid-template-columns: 1fr; }
-}
-</style>
 {% endblock %}
