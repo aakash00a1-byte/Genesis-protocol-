@@ -339,31 +339,8 @@ def settings():
 @app.route('/admin')
 @admin_required
 def admin():
-    """Admin dashboard with real data."""
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    # Get system stats
-    cursor.execute('SELECT COUNT(*) as total_users, SUM(usage_count) as total_usage FROM users')
-    user_stats = dict(cursor.fetchone())
-    
-    cursor.execute('SELECT COUNT(*) as total_chats, AVG(quality_score) as avg_quality FROM chat_history')
-    chat_stats = dict(cursor.fetchone())
-    
-    cursor.execute('SELECT provider, model, COUNT(*) as count FROM chat_history WHERE created_at > datetime("now", "-24 hours") GROUP BY provider, model')
-    model_usage = [dict(row) for row in cursor.fetchall()]
-    
-    cursor.execute('SELECT id, username, email, role, created_at, last_login, usage_count, is_active FROM users ORDER BY created_at DESC')
-    users = [dict(row) for row in cursor.fetchall()]
-    
-    conn.close()
-    
-    return render_template('admin.html', 
-                          username=session.get('username'),
-                          user_stats=user_stats,
-                          chat_stats=chat_stats,
-                          model_usage=model_usage,
-                          users=users)
+    """Admin dashboard."""
+    return render_template('admin.html', username=session.get('username'))
 
 
 # API Routes
