@@ -7,7 +7,7 @@ services:
     name: genesis-protocol
     runtime: python
     buildCommand: cd web && pip install --no-cache-dir -r requirements.txt && pip install gunicorn
-    startCommand: cd web && gunicorn app_v3:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    startCommand: cd web && gunicorn server_simple:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
     healthCheckPath: /health
     autoDeploy: true
     region: singapore
