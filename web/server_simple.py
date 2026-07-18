@@ -12,6 +12,8 @@ import sqlite3
 import logging
 import time
 import threading
+import json
+import requests
 from datetime import datetime, timedelta
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -20,6 +22,65 @@ from flask import Flask, request, jsonify, session, render_template, redirect, u
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Groq API Configuration
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+def get_groq_response(message, chat_history=None):
+    """Get response from Groq API."""
+    api_key = os.environ.get('GROQ_API_KEY')
+    
+    if not api_key:
+        return None, "GROQ_API_KEY not configured", "none", 0.0
+    
+    # Get available models
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    # Try llama-3.1-8b-instant first (fastest, cheapest)
+    model = "llama-3.1-8b-instant"
+    
+    # Build messages
+    messages = []
+    
+    # System prompt
+    system_prompt = """You are Genesis AI, a helpful AI assistant. You are knowledgeable, friendly, and helpful.
+Provide accurate and concise responses. If you don't know something, say so honestly."""
+    
+    if chat_history:
+        # Include last 10 messages for context
+        for msg in chat_history[-10:]:
+            messages.append({"role": "user", "content": msg.get('message', '')})
+            messages.append({"role": "assistant", "content": msg.get('response', '')})
+    
+    messages.insert(0, {"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": message})
+    
+    data = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.7,
+        "max_tokens": 2048
+    }
+    
+    try:
+        response = requests.post(GROQ_API_URL, headers=headers, json=data, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            return result['choices'][0]['message']['content'], model, "groq", 1.0
+        elif response.status_code == 401:
+            return None, "Invalid Groq API key", "groq", 0.0
+        elif response.status_code == 429:
+            return None, "Groq rate limit exceeded", "groq", 0.0
+        else:
+            return None, f"Groq API error: {response.status_code}", "groq", 0.0
+    except requests.exceptions.Timeout:
+        return None, "Groq API timeout", "groq", 0.0
+    except Exception as e:
+        return None, f"Groq error: {str(e)}", "groq", 0.0
 
 # ============================================================================
 # VERSION & METRICS
@@ -278,8 +339,31 @@ def settings():
 @app.route('/admin')
 @admin_required
 def admin():
-    """Admin dashboard."""
-    return render_template('admin.html', username=session.get('username'))
+    """Admin dashboard with real data."""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Get system stats
+    cursor.execute('SELECT COUNT(*) as total_users, SUM(usage_count) as total_usage FROM users')
+    user_stats = dict(cursor.fetchone())
+    
+    cursor.execute('SELECT COUNT(*) as total_chats, AVG(quality_score) as avg_quality FROM chat_history')
+    chat_stats = dict(cursor.fetchone())
+    
+    cursor.execute('SELECT provider, model, COUNT(*) as count FROM chat_history WHERE created_at > datetime("now", "-24 hours") GROUP BY provider, model')
+    model_usage = [dict(row) for row in cursor.fetchall()]
+    
+    cursor.execute('SELECT id, username, email, role, created_at, last_login, usage_count, is_active FROM users ORDER BY created_at DESC')
+    users = [dict(row) for row in cursor.fetchall()]
+    
+    conn.close()
+    
+    return render_template('admin.html', 
+                          username=session.get('username'),
+                          user_stats=user_stats,
+                          chat_stats=chat_stats,
+                          model_usage=model_usage,
+                          users=users)
 
 
 # API Routes
@@ -306,45 +390,24 @@ def api_chat():
         if count >= 100:
             return jsonify({'error': 'Rate limit exceeded. Try again tomorrow.'}), 429
     
-    # Try to use Genesis AI if available
-    response_text = "Genesis AI is running in standalone mode. AI responses will be available when connected to the full AI backend."
+    # Chat with Groq AI
     
-    # Check if we have a real AI backend
-    try:
-        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        from genesis_protocol.ai.agent import get_genesis_agent
-        
-        import asyncio
-        async def get_response():
-            agent = get_genesis_agent()
-            result = await agent.process(message, chat_id=user_id, user_id=user_id)
-            return result
-        
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(get_response())
-        loop.close()
-        
-        if result.success and result.response:
-            response_text = result.response
-            model_used = result.model_used
-            provider = result.provider_used
-            quality = result.quality_score
-            mode = result.mode
-        else:
-            model_used = "fallback"
-            provider = "none"
-            quality = 0.0
-            mode = "normal"
-            
-    except Exception as e:
-        logger.warning(f"AI backend error: {e}")
-        model_used = "standalone"
-        provider = "none"
-        quality = 0.0
-        mode = "normal"
-        # Still return the response_text which has the fallback message
-    
+    # Get chat history for context
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT message, response FROM chat_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 10',
+                 (user_id,))
+    history = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    # Get response from Groq
+    response_text, model_used, provider, quality = get_groq_response(message, history)
+    mode = "normal"
+
+    if response_text is None:
+        response_text = "I apologize, but I am having trouble connecting to the AI service right now. Please try again in a few moments."
+        model_used = "error"
+
     # Store in database
     conn = get_db()
     cursor = conn.cursor()
