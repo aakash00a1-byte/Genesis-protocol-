@@ -468,7 +468,8 @@ def api_chat():
         'model': model_used,
         'provider': provider,
         'quality': quality,
-        'mode': mode
+        'mode': mode,
+        'tokens': len(message) // 4 + len(response_text) // 4
     })
 
 
@@ -487,6 +488,135 @@ def api_history():
     conn.close()
     
     return jsonify({'history': history})
+
+
+@app.route('/api/user', methods=['GET'])
+@login_required
+def api_user():
+    """Get current user info."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    conn = get_db()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, username, email, role, created_at, usage_count
+        FROM users WHERE id = ?
+    ''', (session['user_id'],))
+    user = cursor.fetchone()
+    conn.close()
+    
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    return jsonify({
+        'id': user['id'],
+        'username': user['username'],
+        'email': user['email'],
+        'role': user['role'],
+        'created_at': user['created_at'],
+        'usage_count': user['usage_count']
+    })
+
+
+@app.route('/api/chat/conversations', methods=['GET'])
+@login_required
+def api_chat_conversations():
+    """Get user's chat conversations for V5 UI."""
+    user_id = session['user_id']
+    limit = request.args.get('limit', 50, type=int)
+    
+    conn = get_db()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # Get conversations grouped by date and first message
+    cursor.execute('''
+        SELECT 
+            MIN(id) as id,
+            SUBSTR(message, 1, 50) as title,
+            message,
+            response,
+            model_used,
+            provider,
+            created_at
+        FROM chat_history 
+        WHERE user_id = ?
+        GROUP BY DATE(created_at), SUBSTR(message, 1, 30)
+        ORDER BY created_at DESC
+        LIMIT ?
+    ''', (user_id, limit))
+    
+    conversations = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    
+    return jsonify({'conversations': conversations})
+
+
+@app.route('/api/chat/history/<int:chat_id>', methods=['GET'])
+@login_required
+def api_chat_history_by_id(chat_id):
+    """Get a specific chat conversation by ID for V5 UI."""
+    user_id = session['user_id']
+    
+    conn = get_db()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT * FROM chat_history 
+        WHERE id = ? AND user_id = ?
+    ''', (chat_id, user_id))
+    
+    chat = cursor.fetchone()
+    
+    if not chat:
+        conn.close()
+        return jsonify({'error': 'Chat not found'}), 404
+    
+    conn.close()
+    
+    # Return as array of messages for compatibility
+    return jsonify({
+        'messages': [
+            {'role': 'user', 'content': chat['message'], 'created_at': chat['created_at']},
+            {'role': 'assistant', 'content': chat['response'], 'created_at': chat['created_at']}
+        ]
+    })
+
+
+@app.route('/api/stats', methods=['GET'])
+@login_required
+def api_stats():
+    """Get user statistics for V5 UI."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    user_id = session['user_id']
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Total messages
+    cursor.execute('SELECT COUNT(*) FROM chat_history WHERE user_id = ?', (user_id,))
+    total_messages = cursor.fetchone()[0]
+    
+    # Total conversations
+    cursor.execute('SELECT COUNT(DISTINCT DATE(created_at)) FROM chat_history WHERE user_id = ?', (user_id,))
+    conversations = cursor.fetchone()[0]
+    
+    # Total users
+    cursor.execute('SELECT COUNT(*) FROM users')
+    total_users = cursor.fetchone()[0]
+    
+    conn.close()
+    
+    return jsonify({
+        'total_messages': total_messages,
+        'conversations': conversations,
+        'total_users': total_users
+    })
 
 
 @app.route('/api/admin/stats', methods=['GET'])

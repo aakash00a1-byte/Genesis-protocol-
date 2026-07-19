@@ -352,6 +352,102 @@ def api_auth_me():
     })
 
 
+@app.route('/api/user', methods=['GET'])
+@login_required
+def api_user():
+    """Get current user info (alias for /api/auth/me)."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    conn = get_db()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, username, email, role, created_at, usage_count
+        FROM users WHERE id = ?
+    ''', (session['user_id'],))
+    user = cursor.fetchone()
+    conn.close()
+    
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    return jsonify({
+        'id': user['id'],
+        'username': user['username'],
+        'email': user['email'],
+        'role': user['role'],
+        'created_at': user['created_at'],
+        'usage_count': user['usage_count']
+    })
+
+
+@app.route('/api/chat/conversations', methods=['GET'])
+@login_required
+def api_chat_conversations():
+    """Get user's chat conversations."""
+    user_id = session['user_id']
+    limit = request.args.get('limit', 50, type=int)
+    
+    conn = get_db()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # Get conversations from chat_history
+    cursor.execute('''
+        SELECT 
+            MIN(id) as id,
+            SUBSTR(message, 1, 50) as title,
+            message,
+            response,
+            model_used,
+            provider,
+            created_at
+        FROM chat_history 
+        WHERE user_id = ?
+        GROUP BY DATE(created_at), SUBSTR(message, 1, 30)
+        ORDER BY created_at DESC
+        LIMIT ?
+    ''', (user_id, limit))
+    
+    conversations = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    
+    return jsonify({'conversations': conversations})
+
+
+@app.route('/api/chat/history/<int:chat_id>', methods=['GET'])
+@login_required
+def api_chat_history_by_id(chat_id):
+    """Get a specific chat conversation by ID."""
+    user_id = session['user_id']
+    
+    conn = get_db()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT * FROM chat_history 
+        WHERE id = ? AND user_id = ?
+    ''', (chat_id, user_id))
+    
+    chat = cursor.fetchone()
+    
+    if not chat:
+        conn.close()
+        return jsonify({'error': 'Chat not found'}), 404
+    
+    conn.close()
+    
+    # Return as array of messages for compatibility
+    return jsonify({
+        'messages': [
+            {'role': 'user', 'content': chat['message'], 'created_at': chat['created_at']},
+            {'role': 'assistant', 'content': chat['response'], 'created_at': chat['created_at']}
+        ]
+    })
+
+
 # Authentication routes
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -614,6 +710,10 @@ def api_chat():
         conn.commit()
         conn.close()
         
+        # Estimate tokens (rough estimate: ~4 chars per token)
+        response_text = result.response if result.response else ""
+        tokens_estimate = len(message) // 4 + len(response_text) // 4
+        
         return jsonify({
             'success': True,
             'response': result.response if result.response else "AI response unavailable",
@@ -622,7 +722,8 @@ def api_chat():
             'quality': result.quality_score,
             'mode': result.mode,
             'planning': result.planning_active,
-            'tools_used': result.tools_used
+            'tools_used': result.tools_used,
+            'tokens': tokens_estimate
         })
         
     except Exception as e:
