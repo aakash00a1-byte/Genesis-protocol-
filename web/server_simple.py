@@ -254,7 +254,7 @@ def admin_required(f):
         if 'user_id' not in session:
             return redirect(url_for('login'))
         if session.get('role') != 'admin':
-            return redirect(url_for('chat'))
+            return redirect(url_for('ultra'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -264,8 +264,26 @@ def admin_required(f):
 def index():
     """Homepage."""
     if 'user_id' in session:
-        return redirect(url_for('chat'))
-    return render_template('index.html')
+        return redirect(url_for('ultra'))
+    return render_template('genesis_ultra.html')
+
+
+@app.route('/gemini')
+@login_required
+def gemini():
+    """Advanced Gemini-style chat interface."""
+    return render_template('genesis_gemini.html', 
+                          username=session.get('username'),
+                          role=session.get('role'))
+
+
+@app.route('/ultra')
+@login_required
+def ultra():
+    """Ultra Advanced chat interface with all features."""
+    return render_template('genesis_ultra.html', 
+                          username=session.get('username'),
+                          role=session.get('role'))
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -304,14 +322,14 @@ def login():
             
             if request.is_json:
                 return jsonify({'success': True, 'redirect': '/chat', 'role': user['role']})
-            return redirect(url_for('chat'))
+            return redirect(url_for('ultra'))
         
         if request.is_json:
             return jsonify({'error': 'Invalid credentials'}), 401
         return render_template('login.html', error='Invalid credentials')
     
     if 'user_id' in session:
-        return redirect(url_for('chat'))
+        return redirect(url_for('ultra'))
     
     return render_template('login.html')
 
