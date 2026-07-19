@@ -254,7 +254,7 @@ def admin_required(f):
         if 'user_id' not in session:
             return redirect(url_for('login'))
         if session.get('role') != 'admin':
-            return redirect(url_for('ultra'))
+            return redirect(url_for('v5'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -264,8 +264,17 @@ def admin_required(f):
 def index():
     """Homepage."""
     if 'user_id' in session:
-        return redirect(url_for('ultra'))
-    return render_template('genesis_ultra.html')
+        return redirect(url_for('v5'))
+    return render_template('genesis_v5.html')
+
+
+@app.route('/v5')
+@login_required
+def v5():
+    """Genesis V5 Premium AI Interface."""
+    return render_template('genesis_v5.html', 
+                          username=session.get('username'),
+                          role=session.get('role'))
 
 
 @app.route('/gemini')
@@ -322,14 +331,14 @@ def login():
             
             if request.is_json:
                 return jsonify({'success': True, 'redirect': '/chat', 'role': user['role']})
-            return redirect(url_for('ultra'))
+            return redirect(url_for('v5'))
         
         if request.is_json:
             return jsonify({'error': 'Invalid credentials'}), 401
         return render_template('login.html', error='Invalid credentials')
     
     if 'user_id' in session:
-        return redirect(url_for('ultra'))
+        return redirect(url_for('v5'))
     
     return render_template('login.html')
 
