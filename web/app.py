@@ -456,8 +456,8 @@ def logout():
 def index():
     """Homepage."""
     if 'user_id' in session:
-        return redirect(url_for('gemini'))
-    return render_template('genesis_gemini.html')
+        return redirect(url_for('ultra'))
+    return render_template('genesis_ultra.html')
 
 
 @app.route('/chat')
@@ -474,6 +474,15 @@ def chat():
 def gemini():
     """Advanced Gemini-style chat interface."""
     return render_template('genesis_gemini.html', 
+                          username=session.get('username'),
+                          role=session.get('role'))
+
+
+@app.route('/ultra')
+@login_required
+def ultra():
+    """Ultra Advanced chat interface with all features."""
+    return render_template('genesis_ultra.html', 
                           username=session.get('username'),
                           role=session.get('role'))
 
