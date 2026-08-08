@@ -1,0 +1,459 @@
+{% extends "base_v4.html" %}
+
+{% block title %}Chat - Gluttony OS v4{% endblock %}
+
+{% block header_title %}AI Workspace{% endblock %}
+
+{% block content %}
+<div class="chat-area">
+    <!-- Voice Controls -->
+    <div class="voice-controls" style="padding: 12px 24px;">
+        <button id="voiceInputBtn" class="voice-btn" onclick="toggleVoiceInput()" title="Voice Input (STT)">
+            <span class="voice-icon">🎤</span>
+            <span id="voiceInputText">Start Voice</span>
+        </button>
+        <button id="voiceOutputBtn" class="voice-btn" onclick="toggleVoiceOutput()" title="Voice Output (TTS)">
+            <span class="voice-icon">🔊</span>
+            <span id="voiceOutputText">Speak Responses</span>
+        </button>
+        <div id="waveformContainer" class="waveform hidden" style="margin-left: auto;">
+            <div class="waveform-bar"></div>
+            <div class="waveform-bar"></div>
+            <div class="waveform-bar"></div>
+            <div class="waveform-bar"></div>
+            <div class="waveform-bar"></div>
+        </div>
+        <div id="voiceStatus" class="voice-status"></div>
+    </div>
+    
+    <!-- Chat Messages -->
+    <div class="chat-messages" id="chatMessages">
+        {% if not messages %}
+        <div class="empty-state" id="emptyState">
+            <div class="empty-icon">⚡</div>
+            <h2 class="empty-title">Genesis AI</h2>
+            <p class="empty-description">
+                Self-operating AI agent with multi-LLM intelligence, autonomous planning, and tool-using capabilities.
+            </p>
+            <div class="suggestions">
+                <button class="suggestion-btn" onclick="sendMessage('Build a python web app')">🤖 Build an app</button>
+                <button class="suggestion-btn" onclick="sendMessage('Explain quantum computing')">📚 Quantum physics</button>
+                <button class="suggestion-btn" onclick="sendMessage('Write a creative poem')">✍️ Creative writing</button>
+                <button class="suggestion-btn" onclick="sendMessage('Search for latest AI news')">🔍 Search news</button>
+            </div>
+        </div>
+        {% else %}
+        {% for msg in messages %}
+        <div class="message {% if msg.is_user %}user{% endif %}" data-id="{{ msg.id }}">
+            <div class="message-avatar">
+                {% if msg.is_user %}👤{% else %}⚡{% endif %}
+            </div>
+            <div class="message-content">
+                <div class="message-text">{{ msg.content|safe }}</div>
+                <div class="message-meta">
+                    <span class="model-badge">⚡ GENESIS</span>
+                    <span>{{ msg.created_at.strftime('%H:%M') if msg.created_at else '' }}</span>
+                    <div class="message-actions">
+                        <button class="message-action" onclick="copyMessage(this)" title="Copy">📋</button>
+                        {% if not msg.is_user %}
+                        <button class="message-action" onclick="regenerateMessage({{ msg.id }})" title="Regenerate">🔄</button>
+                        {% endif %}
+                        <button class="message-action" onclick="deleteMessage({{ msg.id }})" title="Delete">🗑️</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+    
+    <!-- Typing Indicator (Hidden by default) -->
+    <div id="typingIndicator" class="message bot hidden">
+        <div class="message-avatar">⚡</div>
+        <div class="message-content">
+            <div class="typing-indicator">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Composer -->
+    <div class="composer">
+        <div class="composer-inner">
+            <textarea 
+                class="composer-input" 
+                id="messageInput" 
+                placeholder="Message Genesis AI..."
+                rows="1"
+                onkeydown="handleKeyDown(event)"
+                oninput="autoResize(this)"
+            ></textarea>
+            <div class="composer-actions">
+                <button class="composer-btn" onclick="attachFile()" title="Attach File">📎</button>
+                <button class="composer-btn send-btn" id="sendBtn" onclick="sendMessage()">
+                    <span>➤</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Chat State
+let isLoading = false;
+let conversationId = null;
+
+// DOM Elements
+const chatMessages = document.getElementById('chatMessages');
+const messageInput = document.getElementById('messageInput');
+const sendBtn = document.getElementById('sendBtn');
+const emptyState = document.getElementById('emptyState');
+const typingIndicator = document.getElementById('typingIndicator');
+
+// Auto-resize textarea
+function autoResize(textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+}
+
+// Handle Enter key
+function handleKeyDown(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+    }
+}
+
+// Add message to chat
+function addMessage(content, isUser = false, meta = {}) {
+    // Remove empty state if exists
+    const emptyState = document.getElementById('emptyState');
+    if (emptyState) emptyState.remove();
+    
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `message ${isUser ? 'user' : 'bot'}`;
+    
+    const avatar = isUser ? '👤' : '⚡';
+    const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    
+    const modelBadge = !isUser ? '<span class="model-badge">⚡ GENESIS</span>' : '';
+    const actions = !isUser 
+        ? '<button class="message-action" onclick="copyMessage(this)" title="Copy">📋</button><button class="message-action" onclick="regenerateMessage(0)" title="Regenerate">🔄</button>'
+        : '';
+    
+    msgDiv.innerHTML = `
+        <div class="message-avatar">${avatar}</div>
+        <div class="message-content">
+            <div class="message-text">${formatContent(content)}</div>
+            <div class="message-meta">
+                ${modelBadge}
+                <span>${time}</span>
+                <div class="message-actions">
+                    ${actions}
+                    <button class="message-action" onclick="deleteMessage(0)" title="Delete">🗑️</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    chatMessages.appendChild(msgDiv);
+    // Use instant scroll for mobile UX
+    scrollToBottomInstant();
+    
+    // Speak if voice output is enabled
+    if (!isUser && voiceOutputEnabled) {
+        const plainText = stripHtml(content).substring(0, 500);
+        speakText(plainText);
+    }
+    
+    return msgDiv;
+}
+
+// Format markdown content
+function formatContent(content) {
+    if (!content) return '';
+    
+    // Escape HTML first
+    let formatted = content
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    
+    // Code blocks
+    formatted = formatted.replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+    // Inline code
+    formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Bold
+    formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    // Italic
+    formatted = formatted.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    // Links
+    formatted = formatted.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    // Line breaks
+    formatted = formatted.replace(/\n/g, '<br>');
+    
+    return formatted;
+}
+
+// Strip HTML for speech
+function stripHtml(html) {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    return div.textContent || div.innerText || '';
+}
+
+// Scroll to bottom with smooth behavior
+function scrollToBottom() {
+    requestAnimationFrame(() => {
+        chatMessages.scrollTo({
+            top: chatMessages.scrollHeight,
+            behavior: 'smooth'
+        });
+    });
+}
+
+// Instant scroll to bottom (for auto-scroll on new message)
+function scrollToBottomInstant() {
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Show typing indicator
+function showTyping() {
+    typingIndicator.classList.remove('hidden');
+    chatMessages.appendChild(typingIndicator);
+    scrollToBottom();
+}
+
+// Hide typing indicator
+function hideTyping() {
+    typingIndicator.classList.add('hidden');
+}
+
+// Send message
+async function sendMessage(preset = null) {
+    const message = preset || messageInput.value.trim();
+    if (!message || isLoading) return;
+    
+    isLoading = true;
+    sendBtn.disabled = true;
+    messageInput.value = '';
+    messageInput.style.height = 'auto';
+    
+    // Add user message
+    addMessage(message, true);
+    showTyping();
+    
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message})
+        });
+        
+        const result = await response.json();
+        hideTyping();
+        
+        if (result.success) {
+            addMessage(result.response, false, {model: result.model});
+        } else {
+            addMessage('⚠️ ' + (result.error || 'An error occurred. Please try again.'), false);
+        }
+    } catch (err) {
+        hideTyping();
+        addMessage('⚠️ Connection error. Please check your internet connection.', false);
+    } finally {
+        isLoading = false;
+        sendBtn.disabled = false;
+        messageInput.focus();
+    }
+}
+
+// Copy message
+function copyMessage(btn) {
+    const content = btn.closest('.message-content').querySelector('.message-text').innerText;
+    navigator.clipboard.writeText(content).then(() => {
+        btn.textContent = '✓';
+        setTimeout(() => btn.textContent = '📋', 1500);
+    });
+}
+
+// Delete message
+function deleteMessage(id) {
+    const msg = id === 0 
+        ? event.target.closest('.message')
+        : document.querySelector(`.message[data-id="${id}"]`);
+    if (msg) {
+        msg.style.animation = 'fadeOut 0.3s ease forwards';
+        setTimeout(() => msg.remove(), 300);
+    }
+}
+
+// Regenerate message
+async function regenerateMessage(id) {
+    // Find the last bot message and regenerate
+    const messages = document.querySelectorAll('.message.bot');
+    const lastBotMsg = messages[messages.length - 1];
+    if (lastBotMsg) {
+        lastBotMsg.style.animation = 'fadeOut 0.3s ease forwards';
+        setTimeout(() => {
+            lastBotMsg.remove();
+            showTyping();
+            // Trigger regeneration API call
+            fetch('/api/regenerate', {method: 'POST'}).then(r => r.json()).then(result => {
+                hideTyping();
+                if (result.success) addMessage(result.response, false);
+            });
+        }, 300);
+    }
+}
+
+// Attach file
+function attachFile() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.txt,.pdf,.doc,.docx,.py,.js,.html,.css,.json';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            messageInput.value = `📎 Attached: ${file.name}`;
+            messageInput.focus();
+        }
+    };
+    input.click();
+}
+
+// ============ Voice Features (Web Speech API) ============
+let recognition = null;
+let synthesis = window.speechSynthesis;
+let voiceInputEnabled = false;
+let voiceOutputEnabled = false;
+
+function toggleVoiceInput() {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        document.getElementById('voiceStatus').textContent = 'Speech not supported in this browser';
+        return;
+    }
+    
+    if (voiceInputEnabled) {
+        stopVoiceInput();
+    } else {
+        startVoiceInput();
+    }
+}
+
+function startVoiceInput() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    
+    recognition.onstart = () => {
+        voiceInputEnabled = true;
+        const btn = document.getElementById('voiceInputBtn');
+        const text = document.getElementById('voiceInputText');
+        const waveform = document.getElementById('waveformContainer');
+        
+        btn.classList.add('active', 'listening');
+        text.textContent = 'Listening...';
+        waveform.classList.remove('hidden');
+        document.getElementById('voiceStatus').textContent = 'Listening for speech...';
+    };
+    
+    recognition.onresult = (event) => {
+        const transcript = Array.from(event.results)
+            .map(result => result[0].transcript)
+            .join('');
+        messageInput.value = transcript;
+        
+        if (event.results[0].isFinal) {
+            document.getElementById('voiceStatus').textContent = 'Voice captured!';
+            setTimeout(() => sendMessage(), 500);
+        }
+    };
+    
+    recognition.onerror = (event) => {
+        document.getElementById('voiceStatus').textContent = 'Error: ' + event.error;
+        stopVoiceInput();
+    };
+    
+    recognition.onend = () => {
+        stopVoiceInput();
+    };
+    
+    recognition.start();
+}
+
+function stopVoiceInput() {
+    if (recognition) {
+        recognition.stop();
+        recognition = null;
+    }
+    
+    voiceInputEnabled = false;
+    const btn = document.getElementById('voiceInputBtn');
+    const text = document.getElementById('voiceInputText');
+    const waveform = document.getElementById('waveformContainer');
+    
+    btn.classList.remove('active', 'listening');
+    text.textContent = 'Start Voice';
+    waveform.classList.add('hidden');
+}
+
+function toggleVoiceOutput() {
+    if (!('speechSynthesis' in window)) {
+        document.getElementById('voiceStatus').textContent = 'Speech synthesis not supported';
+        return;
+    }
+    
+    voiceOutputEnabled = !voiceOutputEnabled;
+    const btn = document.getElementById('voiceOutputBtn');
+    const text = document.getElementById('voiceOutputText');
+    
+    if (voiceOutputEnabled) {
+        btn.classList.add('active');
+        text.textContent = 'Stop Speaking';
+        document.getElementById('voiceStatus').textContent = 'Voice output enabled';
+    } else {
+        btn.classList.remove('active');
+        text.textContent = 'Speak Responses';
+        synthesis.cancel();
+        document.getElementById('voiceStatus').textContent = 'Voice output disabled';
+    }
+}
+
+function speakText(text) {
+    if (!voiceOutputEnabled || !synthesis) return;
+    
+    synthesis.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+    
+    synthesis.speak(utterance);
+}
+
+// Load voices
+if ('speechSynthesis' in window) {
+    speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+}
+
+// Fade animation
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes fadeOut {
+        to { opacity: 0; transform: translateX(-20px); }
+    }
+`;
+document.head.appendChild(style);
+
+// Initialize
+messageInput.focus();
+</script>
+{% endblock %}

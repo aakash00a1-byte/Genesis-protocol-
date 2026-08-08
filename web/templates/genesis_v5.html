@@ -1,0 +1,2852 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Genesis Ω - Premium AI Assistant</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/javascript.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/python.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/bash.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/typescript.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/json.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/css.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --primary: #0A0A0A;
+            --secondary: #1A1A1A;
+            --tertiary: #252525;
+            --accent: #D90429;
+            --accent-glow: rgba(217, 4, 41, 0.3);
+            --accent-hover: #FF1A3C;
+            --surface: rgba(255, 255, 255, 0.03);
+            --surface-hover: rgba(255, 255, 255, 0.06);
+            --border: rgba(255, 255, 255, 0.08);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.5);
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --glass-bg: rgba(26, 26, 26, 0.85);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --radius: 16px;
+            --radius-sm: 8px;
+            --radius-xs: 4px;
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.5);
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        [data-theme="light"] {
+            --primary: #f8f8f8;
+            --secondary: #ffffff;
+            --tertiary: #e8e8e8;
+            --surface: rgba(0, 0, 0, 0.02);
+            --surface-hover: rgba(0, 0, 0, 0.04);
+            --border: rgba(0, 0, 0, 0.08);
+            --text-primary: #0a0a0a;
+            --text-secondary: rgba(10, 10, 10, 0.7);
+            --text-muted: rgba(10, 10, 10, 0.5);
+            --glass-bg: rgba(255, 255, 255, 0.95);
+            --glass-border: rgba(0, 0, 0, 0.1);
+            --accent: #D90429;
+            --accent-glow: rgba(217, 4, 41, 0.15);
+        }
+
+        html, body {
+            height: 100%;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--primary);
+            color: var(--text-primary);
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .app-container {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* LEFT SIDEBAR */
+        .sidebar {
+            width: 280px;
+            background: var(--secondary);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 100;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .sidebar.collapsed { width: 0; overflow: hidden; }
+
+        .sidebar-header { padding: 16px; border-bottom: 1px solid var(--border); }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .brand-logo {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--accent) 0%, #ff4d6a 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 700;
+            color: white;
+            box-shadow: 0 4px 16px var(--accent-glow);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .brand-logo::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.2) 50%, transparent 60%);
+            animation: shimmer 3s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) rotate(45deg); }
+        }
+
+        .brand-name {
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .new-chat-btn {
+            width: 100%;
+            padding: 12px 16px;
+            background: linear-gradient(135deg, var(--accent) 0%, #ff4d6a 100%);
+            border: none;
+            border-radius: var(--radius-sm);
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .new-chat-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .new-chat-btn:hover::before { left: 100%; }
+
+        .new-chat-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px var(--accent-glow);
+        }
+
+        .search-box { position: relative; margin: 12px 0; }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 12px 10px 40px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+            transition: var(--transition);
+        }
+
+        .search-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 18px;
+        }
+
+        .sidebar-nav { flex: 1; overflow-y: auto; padding: 8px; }
+
+        .sidebar-nav::-webkit-scrollbar { width: 4px; }
+        .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+        .nav-section { margin-bottom: 16px; }
+
+        .nav-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            padding: 8px 12px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            color: var(--text-secondary);
+            font-size: 14px;
+            cursor: pointer;
+            transition: var(--transition);
+            text-decoration: none;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .nav-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 3px;
+            background: var(--accent);
+            transform: scaleY(0);
+            transition: transform 0.2s;
+        }
+
+        .nav-item:hover { background: var(--surface-hover); color: var(--text-primary); }
+        .nav-item:hover::before { transform: scaleY(1); }
+        .nav-item.active { background: var(--surface); color: var(--accent); }
+        .nav-item.active::before { transform: scaleY(1); }
+        .nav-item .material-icons-round { font-size: 20px; }
+
+        .nav-badge {
+            margin-left: auto;
+            background: var(--accent);
+            color: white;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 10px;
+            animation: pulse-badge 2s infinite;
+        }
+
+        @keyframes pulse-badge {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .sidebar-footer { padding: 12px; border-top: 1px solid var(--border); }
+
+        .user-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--surface);
+            border-radius: var(--radius-sm);
+            transition: var(--transition);
+        }
+
+        .user-card:hover { background: var(--surface-hover); }
+
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--accent) 0%, #ff4d6a 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 600;
+            color: white;
+            box-shadow: 0 2px 8px var(--accent-glow);
+        }
+
+        .user-info { flex: 1; }
+        .user-name { font-size: 14px; font-weight: 500; }
+        .user-role { font-size: 12px; color: var(--text-muted); }
+
+        /* TOP NAVIGATION */
+        .top-nav {
+            position: fixed;
+            top: 0;
+            left: 280px;
+            right: 0;
+            height: 60px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 90;
+            transition: left 0.3s ease;
+        }
+
+        .sidebar.collapsed ~ .main-wrapper .top-nav { left: 0; }
+
+        .top-nav-left { display: flex; align-items: center; gap: 16px; }
+
+        .menu-toggle {
+            display: none;
+            width: 40px;
+            height: 40px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .menu-toggle:hover { background: var(--surface-hover); border-color: var(--accent); }
+
+        .model-selector {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .model-selector:hover {
+            background: var(--surface-hover);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .model-selector .material-icons-round { font-size: 18px; color: var(--accent); }
+
+        .top-nav-center { display: flex; align-items: center; gap: 8px; }
+
+        .nav-btn {
+            width: 40px;
+            height: 40px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+            position: relative;
+        }
+
+        .nav-btn:hover { background: var(--surface-hover); color: var(--text-primary); border-color: var(--accent); }
+
+        .nav-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+            box-shadow: 0 0 12px var(--accent-glow);
+        }
+
+        .nav-btn .material-icons-round { font-size: 20px; }
+
+        .notifications-btn { position: relative; }
+
+        .notification-dot {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 8px;
+            height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            border: 2px solid var(--secondary);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.7; }
+        }
+
+        .theme-toggle .sun { display: none; }
+        [data-theme="light"] .theme-toggle .moon { display: none; }
+        [data-theme="light"] .theme-toggle .sun { display: block; }
+
+        /* MAIN CONTENT */
+        .main-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            margin-left: 280px;
+            margin-top: 60px;
+            transition: margin-left 0.3s ease;
+            height: calc(100vh - 60px);
+        }
+
+        .sidebar.collapsed ~ .main-wrapper { margin-left: 0; }
+
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 0 24px;
+        }
+
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            scroll-behavior: smooth;
+        }
+
+        .messages-container::-webkit-scrollbar { width: 6px; }
+        .messages-container::-webkit-scrollbar-track { background: transparent; }
+        .messages-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        .messages-container::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* WELCOME SCREEN */
+        .welcome-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            text-align: center;
+            padding: 40px;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-15px) rotate(2deg); }
+        }
+
+        .welcome-logo {
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, var(--accent) 0%, #ff4d6a 50%, #ff6b7f 100%);
+            border-radius: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 32px;
+            box-shadow: 0 12px 40px var(--accent-glow);
+            animation: float 4s ease-in-out infinite;
+            position: relative;
+        }
+
+        .welcome-logo::before {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            background: linear-gradient(135deg, var(--accent), #ff4d6a, var(--accent));
+            border-radius: 30px;
+            z-index: -1;
+            animation: glow-pulse 2s infinite;
+        }
+
+        @keyframes glow-pulse {
+            0%, 100% { opacity: 0.5; filter: blur(8px); }
+            50% { opacity: 0.8; filter: blur(12px); }
+        }
+
+        .welcome-title {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .welcome-subtitle {
+            font-size: 16px;
+            color: var(--text-secondary);
+            margin-bottom: 40px;
+            max-width: 500px;
+            line-height: 1.6;
+        }
+
+        .suggestions-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            max-width: 1000px;
+            width: 100%;
+        }
+
+        .suggestion-card {
+            padding: 24px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: var(--transition);
+            text-align: left;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .suggestion-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--accent), transparent);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.3s;
+        }
+
+        .suggestion-card:hover::before { transform: scaleX(1); }
+
+        .suggestion-card:hover {
+            background: var(--surface-hover);
+            border-color: var(--accent);
+            transform: translateY(-6px);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .suggestion-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--accent) 0%, #ff4d6a 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 12px var(--accent-glow);
+        }
+
+        .suggestion-icon .material-icons-round { color: white; font-size: 24px; }
+
+        .suggestion-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+        .suggestion-desc { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+
+        /* MESSAGE BUBBLES */
+        .message {
+            display: flex;
+            gap: 16px;
+            max-width: 800px;
+            margin: 0 auto;
+            width: 100%;
+            animation: messageIn 0.4s ease;
+        }
+
+        @keyframes messageIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user { flex-direction: row-reverse; }
+
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: 600;
+            transition: var(--transition);
+        }
+
+        .message.genesis .message-avatar {
+            background: linear-gradient(135deg, var(--accent) 0%, #ff4d6a 100%);
+            color: white;
+            box-shadow: 0 4px 12px var(--accent-glow);
+        }
+
+        .message.user .message-avatar { background: var(--tertiary); color: var(--text-primary); }
+
+        .message-content { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+
+        .message-text {
+            padding: 16px 20px;
+            border-radius: var(--radius);
+            font-size: 14px;
+            line-height: 1.7;
+            word-wrap: break-word;
+        }
+
+        .message.genesis .message-text {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius) var(--radius) var(--radius) 4px;
+        }
+
+        .message.user .message-text {
+            background: linear-gradient(135deg, var(--accent) 0%, #ff4d6a 100%);
+            color: white;
+            border-radius: var(--radius) var(--radius) 4px var(--radius);
+        }
+
+        .message-text h1 { font-size: 1.5em; margin: 16px 0 8px; font-weight: 600; }
+        .message-text h2 { font-size: 1.3em; margin: 14px 0 6px; font-weight: 600; }
+        .message-text h3 { font-size: 1.1em; margin: 12px 0 4px; font-weight: 600; }
+        .message-text p { margin: 8px 0; }
+        .message-text p:last-child { margin-bottom: 0; }
+
+        .message-text code {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 2px 6px;
+            border-radius: var(--radius-xs);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9em;
+        }
+
+        .message-text pre {
+            background: #0d0d0d;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 16px;
+            overflow-x: auto;
+            margin: 12px 0;
+            position: relative;
+        }
+
+        .message-text pre code {
+            background: none;
+            padding: 0;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.05);
+            border-bottom: 1px solid var(--border);
+            margin: -16px -16px 12px -16px;
+            border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+        }
+
+        .code-lang { font-size: 12px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+
+        .code-copy {
+            padding: 4px 8px;
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xs);
+            color: var(--text-muted);
+            font-size: 11px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .code-copy:hover { background: var(--accent); border-color: var(--accent); color: white; }
+
+        .message-text ul, .message-text ol { margin: 8px 0; padding-left: 24px; }
+        .message-text li { margin: 6px 0; }
+
+        .message-text table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+        }
+
+        .message-text th, .message-text td {
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            text-align: left;
+        }
+
+        .message-text th { background: var(--surface); font-weight: 600; }
+
+        .message-text blockquote {
+            border-left: 3px solid var(--accent);
+            padding-left: 16px;
+            margin: 12px 0;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        .message-text a { color: var(--accent); text-decoration: none; transition: var(--transition); }
+        .message-text a:hover { text-decoration: underline; }
+        .message-text img { max-width: 100%; border-radius: var(--radius-sm); margin: 12px 0; }
+
+        .message-text .katex-display {
+            margin: 12px 0;
+            overflow-x: auto;
+            padding: 12px;
+            background: var(--surface);
+            border-radius: var(--radius-sm);
+        }
+
+        .message-actions {
+            display: flex;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .message:hover .message-actions { opacity: 1; }
+
+        .msg-action {
+            width: 32px;
+            height: 32px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+
+        .msg-action:hover { background: var(--surface-hover); color: var(--text-primary); border-color: var(--accent); }
+        .msg-action .material-icons-round { font-size: 18px; }
+
+        /* TYPING INDICATOR */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 16px 20px;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: typingBounce 1.4s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(1) { animation-delay: 0s; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typingBounce {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        .streaming-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 16px;
+            background: var(--accent);
+            margin-left: 2px;
+            animation: blink 0.8s infinite;
+            vertical-align: middle;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        /* COMPOSER */
+        .composer-area {
+            padding: 16px 0 24px;
+            max-width: 800px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .composer-container {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            transition: var(--transition);
+            position: relative;
+        }
+
+        .composer-container:focus-within {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .file-preview-container {
+            padding: 12px 16px 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .file-preview {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: var(--tertiary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+        }
+
+        .file-preview .file-icon { color: var(--accent); }
+
+        .file-preview .file-remove {
+            width: 20px;
+            height: 20px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+
+        .file-preview .file-remove:hover { background: var(--error); color: white; }
+
+        .composer-input-wrapper {
+            display: flex;
+            align-items: flex-end;
+            padding: 12px 16px;
+            gap: 12px;
+        }
+
+        .composer-tools { display: flex; gap: 4px; }
+
+        .tool-btn {
+            width: 40px;
+            height: 40px;
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+
+        .tool-btn:hover { background: var(--surface-hover); border-color: var(--accent); color: var(--accent); }
+        .tool-btn .material-icons-round { font-size: 20px; }
+
+        .composer-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-primary);
+            font-size: 14px;
+            line-height: 1.6;
+            resize: none;
+            max-height: 200px;
+            min-height: 24px;
+            font-family: inherit;
+        }
+
+        .composer-input::placeholder { color: var(--text-muted); }
+
+        .send-btn {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--accent) 0%, #ff4d6a 100%);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+            box-shadow: 0 4px 12px var(--accent-glow);
+        }
+
+        .send-btn:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px var(--accent-glow);
+        }
+
+        .send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .send-btn .material-icons-round { font-size: 22px; }
+
+        .composer-hint {
+            padding: 8px 16px;
+            font-size: 11px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 16px;
+        }
+
+        .composer-hint kbd {
+            background: var(--tertiary);
+            padding: 2px 6px;
+            border-radius: var(--radius-xs);
+            font-family: inherit;
+            font-size: 10px;
+        }
+
+        /* RIGHT PANEL */
+        .right-panel {
+            width: 320px;
+            background: var(--secondary);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            flex-shrink: 0;
+            transition: width 0.3s ease, transform 0.3s ease;
+        }
+
+        .right-panel.collapsed { width: 0; overflow: hidden; }
+
+        .panel-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .panel-title { font-size: 14px; font-weight: 600; }
+
+        .panel-content { flex: 1; overflow-y: auto; padding: 16px; }
+
+        .panel-content::-webkit-scrollbar { width: 4px; }
+        .panel-content::-webkit-scrollbar-track { background: transparent; }
+        .panel-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+        .panel-section { margin-bottom: 24px; }
+
+        .panel-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .info-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+        }
+
+        .info-row:not(:last-child) { border-bottom: 1px solid var(--border); }
+        .info-label { font-size: 12px; color: var(--text-muted); }
+        .info-value { font-size: 12px; font-weight: 500; }
+        .info-value.accent { color: var(--accent); }
+
+        .status-indicator { display: flex; align-items: center; gap: 6px; }
+
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .status-dot.online { background: var(--success); box-shadow: 0 0 8px var(--success); }
+        .status-dot.offline { background: var(--error); }
+        .status-dot.warning { background: var(--warning); }
+
+        .memory-bar {
+            height: 6px;
+            background: var(--tertiary);
+            border-radius: 3px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+
+        .memory-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent) 0%, #ff4d6a 100%);
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+
+        .tool-list { display: flex; flex-direction: column; gap: 8px; }
+
+        .tool-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            background: var(--surface);
+            border-radius: var(--radius-sm);
+            transition: var(--transition);
+        }
+
+        .tool-item:hover { background: var(--surface-hover); }
+
+        .tool-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--tertiary);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent);
+        }
+
+        .tool-icon .material-icons-round { font-size: 18px; }
+
+        .tool-name { flex: 1; font-size: 13px; font-weight: 500; }
+
+        .tool-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 6px var(--success);
+        }
+
+        /* STATUS BAR */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            padding: 10px 16px;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .status-item { display: flex; align-items: center; gap: 6px; }
+        .status-item .material-icons-round { font-size: 14px; }
+
+        /* ADMIN DASHBOARD */
+        .admin-panel {
+            display: none;
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .admin-panel.active { display: block; }
+
+        .admin-header { margin-bottom: 24px; }
+
+        .admin-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .admin-subtitle { font-size: 14px; color: var(--text-secondary); }
+
+        .admin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .admin-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            transition: var(--transition);
+        }
+
+        .admin-card:hover { border-color: var(--accent); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2); }
+
+        .admin-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .admin-card-title { font-size: 14px; font-weight: 600; }
+
+        .admin-card-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--accent) 0%, #ff4d6a 100%);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+
+        .admin-card-icon .material-icons-round { font-size: 20px; }
+
+        .log-container {
+            background: #0a0a0a;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 16px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+
+        .log-entry {
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            animation: logIn 0.3s ease;
+        }
+
+        @keyframes logIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .log-time { color: var(--text-muted); margin-right: 8px; }
+        .log-info { color: var(--success); }
+        .log-warning { color: var(--warning); }
+        .log-error { color: var(--error); }
+        .log-debug { color: var(--accent); }
+
+        /* VOICE OVERLAY */
+        .voice-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 10, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 40px;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+
+        .voice-overlay.active { opacity: 1; visibility: visible; }
+
+        .voice-rings { position: relative; width: 180px; height: 180px; }
+
+        .voice-ring {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border: 3px solid var(--accent);
+            border-radius: 50%;
+            animation: ringPulse 2s infinite;
+        }
+
+        .voice-ring:nth-child(2) { animation-delay: 0.5s; }
+        .voice-ring:nth-child(3) { animation-delay: 1s; }
+
+        @keyframes ringPulse {
+            0% { transform: scale(0.8); opacity: 1; }
+            100% { transform: scale(1.6); opacity: 0; }
+        }
+
+        .voice-icon-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, var(--accent) 0%, #ff4d6a 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 40px var(--accent-glow);
+        }
+
+        .voice-icon-center .material-icons-round { font-size: 48px; color: white; }
+
+        .voice-text { font-size: 20px; color: var(--text-secondary); min-height: 30px; }
+
+        .voice-stop-btn {
+            padding: 14px 40px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .voice-stop-btn:hover { background: var(--accent); border-color: var(--accent); color: white; }
+
+        /* TOAST */
+        .toast {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: var(--tertiary);
+            border: 1px solid var(--border);
+            padding: 14px 28px;
+            border-radius: var(--radius);
+            color: var(--text-primary);
+            font-size: 14px;
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1000;
+            pointer-events: none;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        /* MODAL */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal.active { opacity: 1; visibility: visible; }
+
+        .modal-content {
+            background: var(--secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            transform: scale(0.9);
+            transition: transform 0.3s;
+        }
+
+        .modal.active .modal-content { transform: scale(1); }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .modal-title { font-size: 18px; font-weight: 600; }
+
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            background: var(--surface);
+            border: none;
+            border-radius: 50%;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+
+        .modal-close:hover { background: var(--error); color: white; }
+
+        .model-list { display: flex; flex-direction: column; gap: 8px; }
+
+        .model-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .model-item:hover { background: var(--surface-hover); border-color: var(--accent); }
+        .model-item.active { background: var(--accent); border-color: var(--accent); }
+        .model-item.active .model-name { color: white; }
+        .model-item.active .model-desc { color: rgba(255,255,255,0.7); }
+
+        .model-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--tertiary);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent);
+        }
+
+        .model-item.active .model-icon { background: rgba(255,255,255,0.2); color: white; }
+        .model-icon .material-icons-round { font-size: 22px; }
+
+        .model-info { flex: 1; }
+        .model-name { font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+        .model-desc { font-size: 12px; color: var(--text-muted); }
+
+        /* SKELETON */
+        .skeleton {
+            background: linear-gradient(90deg, var(--surface) 25%, var(--surface-hover) 50%, var(--surface) 75%);
+            background-size: 200% 100%;
+            animation: skeleton 1.5s infinite;
+            border-radius: var(--radius-sm);
+        }
+
+        @keyframes skeleton {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* SIDEBAR OVERLAY */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 99;
+            backdrop-filter: blur(4px);
+        }
+
+        .sidebar-overlay.show { display: block; }
+
+        /* RESPONSIVE */
+        @media (max-width: 1200px) {
+            .right-panel {
+                position: fixed;
+                right: 0;
+                top: 0;
+                height: 100%;
+                transform: translateX(100%);
+                z-index: 100;
+            }
+
+            .right-panel.open { transform: translateX(0); }
+            .right-panel.collapsed { width: 320px; }
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100%;
+                transform: translateX(-100%);
+            }
+
+            .sidebar.open { transform: translateX(0); }
+            .sidebar.collapsed { width: 280px; }
+
+            .menu-toggle { display: flex; }
+
+            .top-nav { left: 0; }
+
+            .main-wrapper { margin-left: 0; }
+
+            .suggestions-grid { grid-template-columns: 1fr; }
+
+            .model-selector span:not(.material-icons-round) { display: none; }
+
+            .top-nav-center { display: none; }
+
+            .chat-area { padding: 0 16px; }
+
+            .message { gap: 10px; }
+
+            .message-avatar { width: 32px; height: 32px; font-size: 12px; }
+
+            .welcome-title { font-size: 28px; }
+            .welcome-logo { width: 80px; height: 80px; font-size: 36px; }
+
+            .suggestion-card { padding: 16px; }
+
+            .composer-hint { display: none; }
+        }
+
+        @media (max-width: 480px) {
+            .top-nav { padding: 0 12px; }
+            .chat-area { padding: 0 12px; }
+            .composer-tools { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+    <div class="app-container">
+        <!-- LEFT SIDEBAR -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="brand">
+                    <div class="brand-logo">Ω</div>
+                    <span class="brand-name">Genesis</span>
+                </div>
+                <button class="new-chat-btn" onclick="newChat()">
+                    <span class="material-icons-round">add</span>
+                    New Chat
+                </button>
+                <div class="search-box">
+                    <span class="material-icons-round search-icon">search</span>
+                    <input type="text" class="search-input" placeholder="Search conversations..." id="searchInput" oninput="searchChats()">
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Recent</div>
+                    <div class="nav-item active" onclick="loadChat('current')">
+                        <span class="material-icons-round">chat_bubble</span>
+                        <span>Current conversation</span>
+                    </div>
+                    <div class="nav-item" onclick="loadChat('1')">
+                        <span class="material-icons-round">chat_bubble</span>
+                        <span>Python coding help</span>
+                    </div>
+                    <div class="nav-item" onclick="loadChat('2')">
+                        <span class="material-icons-round">chat_bubble</span>
+                        <span>React components</span>
+                    </div>
+                    <div class="nav-item" onclick="loadChat('3')">
+                        <span class="material-icons-round">chat_bubble</span>
+                        <span>API design review</span>
+                    </div>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Pinned</div>
+                    <div class="nav-item" onclick="loadChat('pinned1')">
+                        <span class="material-icons-round">push_pin</span>
+                        <span>Important notes</span>
+                    </div>
+                    <div class="nav-item" onclick="loadChat('pinned2')">
+                        <span class="material-icons-round">push_pin</span>
+                        <span>Project specs</span>
+                    </div>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Workspace</div>
+                    <a href="#" class="nav-item" onclick="showSection('memory')">
+                        <span class="material-icons-round">psychology</span>
+                        <span>Memory</span>
+                        <span class="nav-badge">3</span>
+                    </a>
+                    <a href="#" class="nav-item" onclick="showSection('files')">
+                        <span class="material-icons-round">folder</span>
+                        <span>Files</span>
+                    </a>
+                    <a href="#" class="nav-item" onclick="showSection('tools')">
+                        <span class="material-icons-round">build</span>
+                        <span>Tools</span>
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">System</div>
+                    <a href="#" class="nav-item" onclick="showSection('settings')">
+                        <span class="material-icons-round">settings</span>
+                        <span>Settings</span>
+                    </a>
+                    <a href="#" class="nav-item" onclick="showSection('admin')" id="adminNavItem" style="display:none">
+                        <span class="material-icons-round">admin_panel_settings</span>
+                        <span>Admin</span>
+                    </a>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-card">
+                    <div class="user-avatar" id="userAvatar">U</div>
+                    <div class="user-info">
+                        <div class="user-name" id="userName">User</div>
+                        <div class="user-role" id="userRole">Free Plan</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <div class="main-wrapper">
+            <header class="top-nav">
+                <div class="top-nav-left">
+                    <button class="menu-toggle" onclick="toggleSidebar()">
+                        <span class="material-icons-round">menu</span>
+                    </button>
+                    <button class="model-selector" onclick="showModelSelector()">
+                        <span class="material-icons-round">smart_toy</span>
+                        <span id="currentModel">Groq LLama-3.1</span>
+                        <span class="material-icons-round">expand_more</span>
+                    </button>
+                </div>
+
+                <div class="top-nav-center">
+                    <button class="nav-btn" id="webSearchBtn" title="Web Search (Ctrl+W)" onclick="toggleWebSearch()">
+                        <span class="material-icons-round">public</span>
+                    </button>
+                    <button class="nav-btn" id="voiceModeBtn" title="Voice Mode (Ctrl+V)" onclick="toggleVoiceMode()">
+                        <span class="material-icons-round">mic</span>
+                    </button>
+                    <button class="nav-btn" id="panelToggleBtn" title="Toggle Panel (Ctrl+P)" onclick="toggleRightPanel()">
+                        <span class="material-icons-round">view_sidebar</span>
+                    </button>
+                </div>
+
+                <div class="top-nav-right">
+                    <button class="nav-btn theme-toggle" title="Toggle Theme" onclick="toggleTheme()">
+                        <span class="material-icons-round moon">dark_mode</span>
+                        <span class="material-icons-round sun">light_mode</span>
+                    </button>
+                    <button class="nav-btn notifications-btn" title="Notifications" onclick="showNotifications()">
+                        <span class="material-icons-round">notifications</span>
+                        <span class="notification-dot"></span>
+                    </button>
+                    <button class="nav-btn" title="Help" onclick="showHelp()">
+                        <span class="material-icons-round">help_outline</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Chat Area -->
+            <div class="chat-area" id="chatArea">
+                <div class="messages-container" id="messagesContainer">
+                    <div class="welcome-screen" id="welcomeScreen">
+                        <div class="welcome-logo">Ω</div>
+                        <h1 class="welcome-title">Genesis Ω</h1>
+                        <p class="welcome-subtitle">Your advanced AI assistant powered by autonomous intelligence. Ask me anything.</p>
+                        
+                        <div class="suggestions-grid">
+                            <div class="suggestion-card" onclick="sendSuggestion('Write a Python function to implement quicksort algorithm with detailed comments')">
+                                <div class="suggestion-icon">
+                                    <span class="material-icons-round">code</span>
+                                </div>
+                                <div class="suggestion-title">Code</div>
+                                <div class="suggestion-desc">Python quicksort with detailed comments</div>
+                            </div>
+                            <div class="suggestion-card" onclick="sendSuggestion('Explain quantum computing in simple terms with examples')">
+                                <div class="suggestion-icon">
+                                    <span class="material-icons-round">psychology</span>
+                                </div>
+                                <div class="suggestion-title">Learn</div>
+                                <div class="suggestion-desc">Quantum computing explained simply</div>
+                            </div>
+                            <div class="suggestion-card" onclick="sendSuggestion('Help me plan a 7-day trip to Tokyo, Japan with budget considerations')">
+                                <div class="suggestion-icon">
+                                    <span class="material-icons-round">flight</span>
+                                </div>
+                                <div class="suggestion-title">Travel</div>
+                                <div class="suggestion-desc">Plan your Tokyo adventure</div>
+                            </div>
+                            <div class="suggestion-card" onclick="sendSuggestion('Debug this code and explain what went wrong')">
+                                <div class="suggestion-icon">
+                                    <span class="material-icons-round">bug_report</span>
+                                </div>
+                                <div class="suggestion-title">Debug</div>
+                                <div class="suggestion-desc">Fix code issues quickly</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="composer-area">
+                    <div class="composer-container">
+                        <div class="file-preview-container" id="filePreviewContainer"></div>
+                        <div class="composer-input-wrapper">
+                            <div class="composer-tools">
+                                <button class="tool-btn" title="Attach File (Ctrl+O)" onclick="attachFile()">
+                                    <span class="material-icons-round">attach_file</span>
+                                </button>
+                                <button class="tool-btn" title="Take Photo" onclick="takePhoto()">
+                                    <span class="material-icons-round">photo_camera</span>
+                                </button>
+                                <button class="tool-btn" title="Insert Code" onclick="insertCode()">
+                                    <span class="material-icons-round">code</span>
+                                </button>
+                                <button class="tool-btn" title="Voice Input" onclick="toggleVoiceInput()">
+                                    <span class="material-icons-round">mic</span>
+                                </button>
+                            </div>
+                            <textarea class="composer-input" id="messageInput" placeholder="Message Genesis Ω..." rows="1" oninput="autoResize(this); checkInput()" onkeydown="handleKeyDown(event)"></textarea>
+                            <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>
+                                <span class="material-icons-round">send</span>
+                            </button>
+                        </div>
+                        <div class="composer-hint">
+                            <span><kbd>Enter</kbd> to send</span>
+                            <span><kbd>Shift</kbd>+<kbd>Enter</kbd> new line</span>
+                            <span><kbd>/</kbd> commands</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="status-bar">
+                    <div class="status-item">
+                        <span class="status-dot online"></span>
+                        <span>Connected</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="material-icons-round">smart_toy</span>
+                        <span id="statusModel">Groq LLama-3.1</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="material-icons-round">memory</span>
+                        <span id="tokenCount">0 tokens</span>
+                    </div>
+                    <div class="status-item" id="webSearchStatus" style="display: none;">
+                        <span class="material-icons-round">public</span>
+                        <span>Web Search</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Admin Dashboard -->
+            <div class="admin-panel" id="adminPanel">
+                <div class="admin-header">
+                    <h1 class="admin-title">Admin Dashboard</h1>
+                    <p class="admin-subtitle">System monitoring and analytics</p>
+                </div>
+
+                <div class="admin-grid">
+                    <div class="admin-card">
+                        <div class="admin-card-header">
+                            <div class="admin-card-title">API Keys</div>
+                            <div class="admin-card-icon">
+                                <span class="material-icons-round">vpn_key</span>
+                            </div>
+                        </div>
+                        <div class="info-card">
+                            <div class="info-row">
+                                <span class="info-label">Groq</span>
+                                <span class="info-value accent" id="groqStatus">Configured</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">OpenAI</span>
+                                <span class="info-value" id="openaiStatus">Not configured</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Gemini</span>
+                                <span class="info-value" id="geminiStatus">Not configured</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Anthropic</span>
+                                <span class="info-value" id="anthropicStatus">Not configured</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="admin-card">
+                        <div class="admin-card-header">
+                            <div class="admin-card-title">Model Health</div>
+                            <div class="admin-card-icon">
+                                <span class="material-icons-round">favorite</span>
+                            </div>
+                        </div>
+                        <div class="info-card">
+                            <div class="info-row">
+                                <span class="info-label">Groq LLama</span>
+                                <div class="status-indicator">
+                                    <span class="status-dot online"></span>
+                                    <span class="info-value">Healthy</span>
+                                </div>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Response Time</span>
+                                <span class="info-value" id="responseTime">--</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Requests Today</span>
+                                <span class="info-value" id="requestsToday">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="admin-card">
+                        <div class="admin-card-header">
+                            <div class="admin-card-title">User Analytics</div>
+                            <div class="admin-card-icon">
+                                <span class="material-icons-round">analytics</span>
+                            </div>
+                        </div>
+                        <div class="info-card">
+                            <div class="info-row">
+                                <span class="info-label">Total Users</span>
+                                <span class="info-value" id="totalUsers">1</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Active Sessions</span>
+                                <span class="info-value" id="activeSessions">1</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Total Messages</span>
+                                <span class="info-value" id="totalMessages">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="admin-card">
+                        <div class="admin-card-header">
+                            <div class="admin-card-title">Memory Database</div>
+                            <div class="admin-card-icon">
+                                <span class="material-icons-round">database</span>
+                            </div>
+                        </div>
+                        <div class="info-card">
+                            <div class="info-row">
+                                <span class="info-label">Short-term</span>
+                                <span class="info-value" id="shortTermMem">0 KB</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Long-term</span>
+                                <span class="info-value" id="longTermMem">0 KB</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Conversations</span>
+                                <span class="info-value" id="conversationCount">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="admin-card">
+                        <div class="admin-card-header">
+                            <div class="admin-card-title">System Status</div>
+                            <div class="admin-card-icon">
+                                <span class="material-icons-round">computer</span>
+                            </div>
+                        </div>
+                        <div class="info-card">
+                            <div class="info-row">
+                                <span class="info-label">Uptime</span>
+                                <span class="info-value" id="systemUptime">--</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">CPU Usage</span>
+                                <span class="info-value" id="cpuUsage">--</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Memory Usage</span>
+                                <span class="info-value" id="memUsage">--</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="admin-card">
+                        <div class="admin-card-header">
+                            <div class="admin-card-title">Deployment</div>
+                            <div class="admin-card-icon">
+                                <span class="material-icons-round">cloud</span>
+                            </div>
+                        </div>
+                        <div class="info-card">
+                            <div class="info-row">
+                                <span class="info-label">Railway</span>
+                                <div class="status-indicator">
+                                    <span class="status-dot online"></span>
+                                    <span class="info-value">Active</span>
+                                </div>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Region</span>
+                                <span class="info-value" id="deployRegion">US East</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="admin-card">
+                    <div class="admin-card-header">
+                        <div class="admin-card-title">Live Logs</div>
+                        <div class="admin-card-icon">
+                            <span class="material-icons-round">terminal</span>
+                        </div>
+                    </div>
+                    <div class="log-container" id="logContainer">
+                        <div class="log-entry">
+                            <span class="log-time">[--:--:--]</span>
+                            <span class="log-info">System initialized</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL -->
+        <aside class="right-panel collapsed" id="rightPanel">
+            <div class="panel-header">
+                <span class="panel-title">Information</span>
+                <button class="nav-btn" onclick="toggleRightPanel()">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+
+            <div class="panel-content">
+                <div class="panel-section">
+                    <div class="panel-section-title">AI Status</div>
+                    <div class="info-card">
+                        <div class="info-row">
+                            <span class="info-label">Status</span>
+                            <div class="status-indicator">
+                                <span class="status-dot online" id="aiStatusDot"></span>
+                                <span class="info-value" id="aiStatus">Online</span>
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Model</span>
+                            <span class="info-value accent" id="panelModel">LLama-3.1</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Provider</span>
+                            <span class="info-value" id="panelProvider">Groq</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <div class="panel-section-title">Memory Usage</div>
+                    <div class="info-card">
+                        <div class="info-row">
+                            <span class="info-label">Short-term</span>
+                            <span class="info-value" id="panelShortTerm">0 KB</span>
+                        </div>
+                        <div class="memory-bar">
+                            <div class="memory-bar-fill" id="shortTermBar" style="width: 0%"></div>
+                        </div>
+                        <div class="info-row" style="margin-top: 12px">
+                            <span class="info-label">Long-term</span>
+                            <span class="info-value" id="panelLongTerm">0 KB</span>
+                        </div>
+                        <div class="memory-bar">
+                            <div class="memory-bar-fill" id="longTermBar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <div class="panel-section-title">Active Tools</div>
+                    <div class="tool-list" id="toolList">
+                        <div class="tool-item">
+                            <div class="tool-icon">
+                                <span class="material-icons-round">code</span>
+                            </div>
+                            <span class="tool-name">Code Executor</span>
+                            <span class="tool-status"></span>
+                        </div>
+                        <div class="tool-item" id="webSearchTool">
+                            <div class="tool-icon">
+                                <span class="material-icons-round">search</span>
+                            </div>
+                            <span class="tool-name">Web Search</span>
+                            <span class="tool-status" id="webSearchToolStatus"></span>
+                        </div>
+                        <div class="tool-item">
+                            <div class="tool-icon">
+                                <span class="material-icons-round">image</span>
+                            </div>
+                            <span class="tool-name">Image Analysis</span>
+                            <span class="tool-status"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <div class="panel-section-title">Session Info</div>
+                    <div class="info-card">
+                        <div class="info-row">
+                            <span class="info-label">Session ID</span>
+                            <span class="info-value" id="sessionId">--</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Messages</span>
+                            <span class="info-value" id="messageCount">0</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Tokens Used</span>
+                            <span class="info-value" id="tokensUsed">0</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Latency</span>
+                            <span class="info-value" id="avgLatency">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Voice Overlay -->
+    <div class="voice-overlay" id="voiceOverlay">
+        <div class="voice-rings">
+            <div class="voice-ring"></div>
+            <div class="voice-ring"></div>
+            <div class="voice-ring"></div>
+            <div class="voice-icon-center">
+                <span class="material-icons-round">mic</span>
+            </div>
+        </div>
+        <p class="voice-text" id="voiceText">Listening...</p>
+        <button class="voice-stop-btn" onclick="stopVoice()">Stop</button>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- Model Selector Modal -->
+    <div class="modal" id="modelModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Select Model</h2>
+                <button class="modal-close" onclick="closeModelModal()">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div class="model-list">
+                <div class="model-item active" data-model="Groq LLama-3.1" data-provider="groq" onclick="selectModel(this, 'Groq LLama-3.1', 'groq')">
+                    <div class="model-icon">
+                        <span class="material-icons-round">smart_toy</span>
+                    </div>
+                    <div class="model-info">
+                        <div class="model-name">Groq LLama-3.1 8B</div>
+                        <div class="model-desc">Fast, efficient reasoning</div>
+                    </div>
+                </div>
+                <div class="model-item" data-model="Claude 3.5 Sonnet" data-provider="anthropic" onclick="selectModel(this, 'Claude 3.5 Sonnet', 'anthropic')">
+                    <div class="model-icon">
+                        <span class="material-icons-round">psychology</span>
+                    </div>
+                    <div class="model-info">
+                        <div class="model-name">Claude 3.5 Sonnet</div>
+                        <div class="model-desc">Balanced performance</div>
+                    </div>
+                </div>
+                <div class="model-item" data-model="GPT-4o" data-provider="openai" onclick="selectModel(this, 'GPT-4o', 'openai')">
+                    <div class="model-icon">
+                        <span class="material-icons-round">auto_awesome</span>
+                    </div>
+                    <div class="model-info">
+                        <div class="model-name">GPT-4o</div>
+                        <div class="model-desc">Most capable model</div>
+                    </div>
+                </div>
+                <div class="model-item" data-model="Gemini Pro" data-provider="gemini" onclick="selectModel(this, 'Gemini Pro', 'gemini')">
+                    <div class="model-icon">
+                        <span class="material-icons-round">brightness_7</span>
+                    </div>
+                    <div class="model-info">
+                        <div class="model-name">Gemini Pro</div>
+                        <div class="model-desc">Multimodal understanding</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // STATE
+        let isRecording = false;
+        let recognition = null;
+        let webSearchEnabled = false;
+        let voiceModeEnabled = false;
+        let attachedFiles = [];
+        let totalTokens = 0;
+        let currentModel = 'Groq LLama-3.1';
+        let currentProvider = 'groq';
+        let isGenerating = false;
+        let abortController = null;
+        let messageHistory = [];
+        let conversations = [];
+        let currentConversationId = null;
+
+        // Elements
+        const messagesContainer = document.getElementById('messagesContainer');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        const sidebar = document.getElementById('sidebar');
+        const rightPanel = document.getElementById('rightPanel');
+        const adminPanel = document.getElementById('adminPanel');
+        const chatArea = document.getElementById('chatArea');
+        const voiceOverlay = document.getElementById('voiceOverlay');
+
+        // INITIALIZATION
+        document.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            initMarkdown();
+            initKeyboardShortcuts();
+            updateSessionId();
+            fetchUserInfo();
+            fetchStats();
+            fetchConversations();
+            startAdminPolling();
+            addLog('Genesis V5 interface initialized', 'info');
+            addLog('All systems operational', 'success');
+        });
+
+        // THEME
+        function initTheme() {
+            const saved = localStorage.getItem('genesis-theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', saved);
+        }
+
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('genesis-theme', next);
+            showToast(`Switched to ${next} mode`);
+            addLog(`Theme changed to ${next}`, 'info');
+        }
+
+        // SIDEBAR
+        function toggleSidebar() {
+            sidebar.classList.toggle('open');
+            sidebar.classList.toggle('collapsed');
+            document.getElementById('sidebarOverlay').classList.toggle('show');
+        }
+
+        // RIGHT PANEL
+        function toggleRightPanel() {
+            rightPanel.classList.toggle('collapsed');
+            rightPanel.classList.toggle('open');
+        }
+
+        // VOICE RECOGNITION
+        function initVoiceRecognition() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = true;
+                recognition.lang = 'en-US';
+
+                recognition.onstart = () => {
+                    isRecording = true;
+                    voiceOverlay.classList.add('active');
+                    document.getElementById('voiceText').textContent = 'Listening...';
+                    addLog('Voice recognition started', 'info');
+                };
+
+                recognition.onresult = (event) => {
+                    const transcript = Array.from(event.results)
+                        .map(result => result[0].transcript)
+                        .join('');
+                    messageInput.value = transcript;
+                    messageInput.dispatchEvent(new Event('input'));
+                    
+                    if (event.results[0].isFinal) {
+                        document.getElementById('voiceText').textContent = 'Processing...';
+                    }
+                };
+
+                recognition.onend = () => {
+                    isRecording = false;
+                    voiceOverlay.classList.remove('active');
+                    
+                    if (messageInput.value.trim()) {
+                        sendMessage();
+                    }
+                    addLog('Voice recognition ended', 'info');
+                };
+
+                recognition.onerror = (event) => {
+                    console.error('Voice error:', event.error);
+                    isRecording = false;
+                    voiceOverlay.classList.remove('active');
+                    showToast('Voice recognition error: ' + event.error);
+                    addLog('Voice error: ' + event.error, 'error');
+                };
+            }
+        }
+
+        function toggleVoiceInput() {
+            if (!recognition) {
+                initVoiceRecognition();
+            }
+            
+            if (isRecording) {
+                recognition.stop();
+            } else {
+                recognition.start();
+            }
+        }
+
+        function stopVoice() {
+            if (recognition) {
+                recognition.stop();
+            }
+            voiceOverlay.classList.remove('active');
+        }
+
+        // MARKDOWN
+        function initMarkdown() {
+            if (typeof marked !== 'undefined') {
+                marked.setOptions({
+                    highlight: function(code, lang) {
+                        if (typeof hljs !== 'undefined' && lang && hljs.getLanguage(lang)) {
+                            try {
+                                return hljs.highlight(code, { language: lang }).value;
+                            } catch (e) {}
+                        }
+                        return code;
+                    },
+                    breaks: true,
+                    gfm: true
+                });
+            }
+        }
+
+        function renderMarkdown(text) {
+            if (typeof marked !== 'undefined') {
+                return marked.parse(text);
+            }
+            return escapeHtml(text).replace(/\n/g, '<br>');
+        }
+
+        // INPUT HANDLING
+        function autoResize(el) {
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+        }
+
+        function checkInput() {
+            sendBtn.disabled = !messageInput.value.trim();
+        }
+
+        function handleKeyDown(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+            
+            if (e.key === '/' && !messageInput.value.trim()) {
+                e.preventDefault();
+                showToast('Type a message or use / for commands');
+            }
+            
+            if (e.key === 'Escape') {
+                if (isGenerating) {
+                    stopGeneration();
+                }
+                closeAllModals();
+            }
+        }
+
+        // KEYBOARD SHORTCUTS
+        function initKeyboardShortcuts() {
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey || e.metaKey) {
+                    switch(e.key.toLowerCase()) {
+                        case 'w':
+                            e.preventDefault();
+                            toggleWebSearch();
+                            break;
+                        case 'v':
+                            e.preventDefault();
+                            toggleVoiceMode();
+                            if (voiceModeEnabled) toggleVoiceInput();
+                            break;
+                        case 'p':
+                            e.preventDefault();
+                            toggleRightPanel();
+                            break;
+                        case 'o':
+                            e.preventDefault();
+                            attachFile();
+                            break;
+                        case 'n':
+                            e.preventDefault();
+                            newChat();
+                            break;
+                    }
+                }
+            });
+        }
+
+        // SEND MESSAGE
+        async function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text || isGenerating) return;
+
+            isGenerating = true;
+            welcomeScreen.style.display = 'none';
+            adminPanel.classList.remove('active');
+            chatArea.style.display = 'flex';
+            
+            addMessage('user', text);
+            messageInput.value = '';
+            messageInput.style.height = 'auto';
+            checkInput();
+
+            const typingDiv = addTyping();
+            messageHistory.push({ role: 'user', content: text });
+
+            try {
+                abortController = new AbortController();
+                
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        message: text,
+                        model: currentModel,
+                        provider: currentProvider,
+                        web_search: webSearchEnabled,
+                        history: messageHistory.slice(-20)
+                    }),
+                    signal: abortController.signal
+                });
+
+                typingDiv.remove();
+
+                if (response.ok) {
+                    const data = await response.json();
+                    await addStreamingMessage('genesis', data.response || data.message);
+                    
+                    if (data.tokens) {
+                        updateStats(data.tokens);
+                    }
+                    
+                    messageHistory.push({ role: 'assistant', content: data.response || data.message });
+                    addLog(`Response generated: ${data.tokens || 0} tokens`, 'success');
+                } else if (response.status === 401) {
+                    addMessage('genesis', 'Please log in to continue.');
+                    showToast('Session expired. Please refresh the page.');
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    addMessage('genesis', `Error: ${errorData.error || 'Something went wrong. Please try again.'}`);
+                    addLog(`API error: ${errorData.error || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                typingDiv.remove();
+                if (error.name === 'AbortError') {
+                    addMessage('genesis', 'Generation stopped.');
+                    addLog('Generation stopped by user', 'warning');
+                } else {
+                    addMessage('genesis', 'Connection error. Please check your internet connection.');
+                    addLog('Connection error: ' + error.message, 'error');
+                }
+            } finally {
+                isGenerating = false;
+                abortController = null;
+            }
+        }
+
+        function stopGeneration() {
+            if (abortController) {
+                abortController.abort();
+            }
+            isGenerating = false;
+            const typing = document.querySelector('.typing-indicator');
+            if (typing) typing.remove();
+            showToast('Generation stopped');
+            addLog('Generation aborted', 'warning');
+        }
+
+        function regenerateMessage() {
+            if (messageHistory.length < 2) return;
+            
+            messageHistory.pop();
+            const lastUserMsg = messageHistory[messageHistory.length - 1];
+            
+            const messages = messagesContainer.querySelectorAll('.message');
+            if (messages.length >= 2) {
+                messages[messages.length - 1].remove();
+                messages[messages.length - 2].remove();
+            }
+            
+            if (lastUserMsg) {
+                sendMessage();
+            }
+        }
+
+        // MESSAGE FUNCTIONS
+        function addMessage(role, content) {
+            const message = document.createElement('div');
+            message.className = `message ${role}`;
+            
+            const avatar = role === 'genesis' ? 'Ω' : 'U';
+            const formattedContent = role === 'genesis' ? renderMarkdown(content) : escapeHtml(content);
+            
+            message.innerHTML = `
+                <div class="message-avatar">${avatar}</div>
+                <div class="message-content">
+                    <div class="message-text">${formattedContent}</div>
+                    <div class="message-actions">
+                        <button class="msg-action" title="Copy" onclick="copyMessage(this, '${role}')">
+                            <span class="material-icons-round">content_copy</span>
+                        </button>
+                        ${role === 'genesis' ? `
+                        <button class="msg-action" title="Regenerate" onclick="regenerateMessage()">
+                            <span class="material-icons-round">refresh</span>
+                        </button>
+                        ` : ''}
+                        <button class="msg-action" title="Speak" onclick="speakMessage(this)">
+                            <span class="material-icons-round">volume_up</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            messagesContainer.appendChild(message);
+            scrollToBottom();
+            updateMessageCount();
+            
+            message.querySelectorAll('pre code').forEach(block => {
+                hljs.highlightElement(block);
+            });
+            
+            return message;
+        }
+
+        async function addStreamingMessage(role, content) {
+            const message = addMessage(role, '');
+            const textDiv = message.querySelector('.message-text');
+            
+            const chunks = content.split(/(\s+)/);
+            let fullContent = '';
+            
+            for (const chunk of chunks) {
+                fullContent += chunk;
+                textDiv.innerHTML = renderMarkdown(fullContent) + '<span class="streaming-cursor"></span>';
+                scrollToBottom();
+                await new Promise(r => setTimeout(r, 10));
+            }
+            
+            textDiv.innerHTML = renderMarkdown(fullContent);
+            
+            message.querySelectorAll('pre').forEach(pre => {
+                const header = document.createElement('div');
+                header.className = 'code-header';
+                header.innerHTML = `
+                    <span class="code-lang">${getCodeLang(pre)}</span>
+                    <button class="code-copy" onclick="copyCode(this)">Copy</button>
+                `;
+                pre.insertBefore(header, pre.firstChild);
+            });
+            
+            message.querySelectorAll('pre code').forEach(block => {
+                hljs.highlightElement(block);
+            });
+        }
+
+        function addTyping() {
+            const typing = document.createElement('div');
+            typing.className = 'message genesis';
+            typing.innerHTML = `
+                <div class="message-avatar">Ω</div>
+                <div class="message-content">
+                    <div class="typing-indicator">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
+                </div>
+            `;
+            messagesContainer.appendChild(typing);
+            scrollToBottom();
+            return typing;
+        }
+
+        function copyMessage(btn, role) {
+            const messageEl = btn.closest('.message');
+            const text = messageEl.querySelector('.message-text').innerText;
+            navigator.clipboard.writeText(text);
+            showToast('Copied to clipboard');
+        }
+
+        function copyCode(btn) {
+            const pre = btn.closest('pre');
+            const code = pre.querySelector('code').innerText;
+            navigator.clipboard.writeText(code);
+            btn.textContent = 'Copied!';
+            setTimeout(() => btn.textContent = 'Copy', 2000);
+        }
+
+        function speakMessage(btn) {
+            const messageEl = btn.closest('.message');
+            const text = messageEl.querySelector('.message-text').innerText;
+            speakText(text);
+        }
+
+        function speakText(text) {
+            if ('speechSynthesis' in window) {
+                speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US';
+                utterance.rate = 1;
+                utterance.pitch = 1;
+                speechSynthesis.speak(utterance);
+            }
+        }
+
+        function scrollToBottom() {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function getCodeLang(pre) {
+            const code = pre.querySelector('code');
+            if (code && code.className) {
+                const match = code.className.match(/language-(\w+)/);
+                return match ? match[1] : 'code';
+            }
+            return 'code';
+        }
+
+        // CHAT ACTIONS
+        function newChat() {
+            messagesContainer.innerHTML = '';
+            messagesContainer.appendChild(welcomeScreen);
+            welcomeScreen.style.display = 'flex';
+            totalTokens = 0;
+            messageHistory = [];
+            currentConversationId = null;
+            updateStats(0);
+            toggleSidebar();
+            addLog('New conversation started', 'info');
+        }
+
+        function loadChat(chatId) {
+            if (chatId === 'current') {
+                toggleSidebar();
+                return;
+            }
+            
+            showToast('Loading conversation...');
+            
+            fetch(`/api/chat/history/${chatId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.messages) {
+                        messagesContainer.innerHTML = '';
+                        messageHistory = [];
+                        
+                        data.messages.forEach(msg => {
+                            addMessage(msg.role, msg.content);
+                            messageHistory.push({ role: msg.role, content: msg.content });
+                        });
+                        
+                        currentConversationId = chatId;
+                        welcomeScreen.style.display = 'none';
+                    }
+                })
+                .catch(err => {
+                    showToast('Failed to load conversation');
+                    addLog('Failed to load chat: ' + chatId, 'error');
+                });
+            
+            toggleSidebar();
+        }
+
+        function searchChats() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const items = document.querySelectorAll('.nav-item');
+            items.forEach(item => {
+                const text = item.textContent.toLowerCase();
+                item.style.display = text.includes(query) ? 'flex' : 'none';
+            });
+        }
+
+        // SECTIONS
+        function showSection(section) {
+            switch(section) {
+                case 'admin':
+                    adminPanel.classList.add('active');
+                    chatArea.style.display = 'none';
+                    addLog('Admin dashboard opened', 'info');
+                    fetchAdminData();
+                    break;
+                case 'memory':
+                    showToast('Memory panel: ' + (messageHistory.length * 0.5).toFixed(1) + ' KB used');
+                    break;
+                case 'files':
+                    showToast('Files panel coming soon');
+                    break;
+                case 'tools':
+                    showToast('Tools panel coming soon');
+                    break;
+                case 'settings':
+                    showToast('Settings panel coming soon');
+                    break;
+                default:
+                    showToast(`${section.charAt(0).toUpperCase() + section.slice(1)} panel coming soon`);
+            }
+            toggleSidebar();
+        }
+
+        // NAVIGATION
+        function toggleWebSearch() {
+            webSearchEnabled = !webSearchEnabled;
+            document.getElementById('webSearchBtn').classList.toggle('active', webSearchEnabled);
+            document.getElementById('webSearchStatus').style.display = webSearchEnabled ? 'flex' : 'none';
+            document.getElementById('webSearchToolStatus').style.background = webSearchEnabled ? 'var(--success)' : 'var(--error)';
+            
+            showToast(`Web search ${webSearchEnabled ? 'enabled' : 'disabled'}`);
+            addLog(`Web search ${webSearchEnabled ? 'enabled' : 'disabled'}`, 'info');
+        }
+
+        function toggleVoiceMode() {
+            voiceModeEnabled = !voiceModeEnabled;
+            document.getElementById('voiceModeBtn').classList.toggle('active', voiceModeEnabled);
+            showToast(`Voice mode ${voiceModeEnabled ? 'enabled' : 'disabled'}`);
+            addLog(`Voice mode ${voiceModeEnabled ? 'enabled' : 'disabled'}`, 'info');
+        }
+
+        function showModelSelector() {
+            document.getElementById('modelModal').classList.add('active');
+        }
+
+        function closeModelModal() {
+            document.getElementById('modelModal').classList.remove('active');
+        }
+
+        function selectModel(el, model, provider) {
+            document.querySelectorAll('.model-item').forEach(item => item.classList.remove('active'));
+            el.classList.add('active');
+            
+            currentModel = model;
+            currentProvider = provider;
+            
+            document.getElementById('currentModel').textContent = model;
+            document.getElementById('statusModel').textContent = model;
+            document.getElementById('panelModel').textContent = model.split(' ').pop();
+            document.getElementById('panelProvider').textContent = provider.charAt(0).toUpperCase() + provider.slice(1);
+            
+            closeModelModal();
+            showToast(`Switched to ${model}`);
+            addLog(`Model changed to ${model} (${provider})`, 'info');
+        }
+
+        function showNotifications() {
+            showToast('No new notifications');
+        }
+
+        function showHelp() {
+            showToast('Genesis Ω - Press Ctrl+? for shortcuts');
+        }
+
+        function closeAllModals() {
+            document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
+            voiceOverlay.classList.remove('active');
+        }
+
+        // FILE ATTACHMENTS
+        function attachFile() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true;
+            input.onchange = (e) => {
+                Array.from(e.target.files).forEach(file => {
+                    if (file.size <= 10 * 1024 * 1024) {
+                        attachedFiles.push(file);
+                        addFilePreview(file);
+                    } else {
+                        showToast('File too large (max 10MB)');
+                    }
+                });
+            };
+            input.click();
+        }
+
+        function takePhoto() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.capture = 'environment';
+            input.onchange = (e) => {
+                if (e.target.files[0]) {
+                    if (e.target.files[0].size <= 10 * 1024 * 1024) {
+                        attachedFiles.push(e.target.files[0]);
+                        addFilePreview(e.target.files[0]);
+                    } else {
+                        showToast('Image too large (max 10MB)');
+                    }
+                }
+            };
+            input.click();
+        }
+
+        function insertCode() {
+            messageInput.value += '\n```python\n# Your code here\n```\n';
+            messageInput.focus();
+        }
+
+        function addFilePreview(file) {
+            const container = document.getElementById('filePreviewContainer');
+            const div = document.createElement('div');
+            div.className = 'file-preview';
+            div.innerHTML = `
+                <span class="file-icon material-icons-round">insert_drive_file</span>
+                <span>${truncateFilename(file.name)}</span>
+                <button class="file-remove" onclick="removeFile(this, '${file.name}')">
+                    <span class="material-icons-round" style="font-size: 14px;">close</span>
+                </button>
+            `;
+            container.appendChild(div);
+        }
+
+        function removeFile(btn, fileName) {
+            btn.closest('.file-preview').remove();
+            attachedFiles = attachedFiles.filter(f => f.name !== fileName);
+        }
+
+        function truncateFilename(name, maxLen = 20) {
+            if (name.length <= maxLen) return name;
+            const ext = name.split('.').pop();
+            return name.slice(0, maxLen - ext.length - 4) + '...' + ext;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // SUGGESTIONS
+        function sendSuggestion(text) {
+            messageInput.value = text;
+            sendMessage();
+        }
+
+        // STATS & UPDATES
+        function updateStats(tokens) {
+            totalTokens += tokens || 0;
+            document.getElementById('tokenCount').textContent = `${totalTokens.toLocaleString()} tokens`;
+            document.getElementById('tokensUsed').textContent = totalTokens.toLocaleString();
+            document.getElementById('panelShortTerm').textContent = formatFileSize(messageHistory.length * 500);
+            document.getElementById('shortTermBar').style.width = Math.min(messageHistory.length * 2, 100) + '%';
+        }
+
+        function updateMessageCount() {
+            const count = messagesContainer.querySelectorAll('.message.user').length;
+            document.getElementById('messageCount').textContent = count;
+        }
+
+        function updateSessionId() {
+            const id = 'gen-' + Math.random().toString(36).substr(2, 9);
+            document.getElementById('sessionId').textContent = id;
+        }
+
+        // LOGS
+        function addLog(message, type = 'info') {
+            const container = document.getElementById('logContainer');
+            if (!container) return;
+            
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">[${time}]</span><span class="log-${type}">${message}</span>`;
+            container.insertBefore(entry, container.firstChild);
+            
+            while (container.children.length > 100) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        // API CALLS
+        function fetchUserInfo() {
+            fetch('/api/user')
+                .then(res => {
+                    if (res.ok) return res.json();
+                    throw new Error('Not authenticated');
+                })
+                .then(data => {
+                    document.getElementById('userName').textContent = data.username || 'User';
+                    document.getElementById('userAvatar').textContent = (data.username || 'U').charAt(0).toUpperCase();
+                    document.getElementById('userRole').textContent = data.role === 'admin' ? 'Admin' : 'Free Plan';
+                    
+                    if (data.role === 'admin') {
+                        document.getElementById('adminNavItem').style.display = 'flex';
+                    }
+                })
+                .catch(() => {});
+        }
+
+        function fetchStats() {
+            fetch('/api/stats')
+                .then(res => res.ok ? res.json() : Promise.reject())
+                .then(data => {
+                    document.getElementById('totalUsers').textContent = data.total_users || 1;
+                    document.getElementById('totalMessages').textContent = (data.total_messages || 0).toLocaleString();
+                    document.getElementById('conversationCount').textContent = data.conversations || 0;
+                })
+                .catch(() => {});
+        }
+
+        function fetchConversations() {
+            fetch('/api/chat/conversations')
+                .then(res => res.ok ? res.json() : Promise.reject())
+                .then(data => {
+                    if (data.conversations) {
+                        conversations = data.conversations;
+                        updateConversationsList();
+                    }
+                })
+                .catch(() => {});
+        }
+
+        function updateConversationsList() {
+            const recentSection = document.querySelector('.nav-section:nth-child(1)');
+            if (!recentSection) return;
+            
+            const existing = recentSection.querySelectorAll('.nav-item:not(:first-child)');
+            existing.forEach(el => el.remove());
+            
+            conversations.slice(0, 5).forEach(conv => {
+                const item = document.createElement('div');
+                item.className = 'nav-item';
+                item.onclick = () => loadChat(conv.id);
+                item.innerHTML = `
+                    <span class="material-icons-round">chat_bubble</span>
+                    <span>${truncateFilename(conv.title || 'Untitled', 25)}</span>
+                `;
+                recentSection.appendChild(item);
+            });
+        }
+
+        function fetchAdminData() {
+            fetch('/api/admin/stats')
+                .then(res => res.ok ? res.json() : Promise.reject())
+                .then(data => {
+                    document.getElementById('responseTime').textContent = data.avg_latency ? `${data.avg_latency.toFixed(0)}ms` : '--';
+                    document.getElementById('requestsToday').textContent = data.requests_today || 0;
+                    document.getElementById('activeSessions').textContent = data.active_sessions || 1;
+                    document.getElementById('systemUptime').textContent = formatUptime(data.uptime);
+                    document.getElementById('cpuUsage').textContent = data.cpu_usage ? `${data.cpu_usage.toFixed(1)}%` : '--';
+                    document.getElementById('memUsage').textContent = data.memory_usage ? `${data.memory_usage.toFixed(1)}%` : '--';
+                    document.getElementById('avgLatency').textContent = data.avg_latency ? `${data.avg_latency.toFixed(0)}ms` : '--';
+                })
+                .catch(() => {});
+        }
+
+        function startAdminPolling() {
+            setInterval(() => {
+                if (adminPanel.classList.contains('active')) {
+                    fetchAdminData();
+                }
+            }, 10000);
+        }
+
+        function formatUptime(seconds) {
+            if (!seconds) return '--';
+            const hours = Math.floor(seconds / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            return `${hours}h ${mins}m`;
+        }
+
+        // TOAST
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // UTILITIES
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // EVENT LISTENERS
+        document.getElementById('modelModal').addEventListener('click', (e) => {
+            if (e.target.id === 'modelModal') closeModelModal();
+        });
+
+        // Drop zone
+        const composerContainer = document.querySelector('.composer-container');
+        composerContainer.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            composerContainer.style.borderColor = 'var(--accent)';
+        });
+        composerContainer.addEventListener('dragleave', () => {
+            composerContainer.style.borderColor = '';
+        });
+        composerContainer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            composerContainer.style.borderColor = '';
+            Array.from(e.dataTransfer.files).forEach(file => {
+                if (file.size <= 10 * 1024 * 1024) {
+                    attachedFiles.push(file);
+                    addFilePreview(file);
+                } else {
+                    showToast('File too large (max 10MB)');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Genesis Protocol{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .welcome-banner {
+        background: linear-gradient(135deg, rgba(0, 255, 136, 0.1), rgba(0, 212, 255, 0.1));
+        border: 1px solid var(--neon-green);
+        border-radius: 12px;
+        padding: 30px;
+        text-align: center;
+        margin-bottom: 25px;
+    }
+    
+    .welcome-title {
+        font-size: 24px;
+        color: var(--neon-green);
+        margin-bottom: 10px;
+    }
+    
+    .welcome-subtitle {
+        color: var(--text-secondary);
+        font-size: 13px;
+    }
+    
+    .quick-actions {
+        display: flex;
+        gap: 15px;
+        margin-top: 20px;
+        flex-wrap: wrap;
+    }
+    
+    .quick-btn {
+        flex: 1;
+        min-width: 150px;
+        padding: 20px;
+        background: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .quick-btn:hover {
+        border-color: var(--neon-green);
+        transform: translateY(-3px);
+    }
+    
+    .quick-btn-icon {
+        font-size: 30px;
+        margin-bottom: 10px;
+    }
+    
+    .quick-btn-text {
+        color: var(--text-primary);
+        font-size: 13px;
+    }
+    
+    .activity-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .activity-item {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 15px;
+        background: var(--dark-bg);
+        border-radius: 8px;
+        border-left: 3px solid var(--neon-green);
+    }
+    
+    .activity-icon {
+        font-size: 20px;
+    }
+    
+    .activity-content {
+        flex: 1;
+    }
+    
+    .activity-title {
+        font-size: 13px;
+        color: var(--text-primary);
+    }
+    
+    .activity-time {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+    
+    .provider-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+    }
+    
+    .provider-card {
+        padding: 20px;
+        background: var(--dark-bg);
+        border-radius: 10px;
+        border: 1px solid var(--border-color);
+    }
+    
+    .provider-name {
+        font-size: 14px;
+        color: var(--neon-cyan);
+        margin-bottom: 5px;
+    }
+    
+    .provider-status {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+    
+    .provider-status.active {
+        color: var(--neon-green);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-logo">Ω</div>
+        <nav class="sidebar-nav">
+            <a href="/chat" class="nav-link" title="Chat">
+                💬
+                <span class="tooltip">Chat</span>
+            </a>
+            <a href="/dashboard" class="nav-link active" title="Dashboard">
+                📊
+                <span class="tooltip">Dashboard</span>
+            </a>
+            <a href="/settings" class="nav-link" title="Settings">
+                ⚙️
+                <span class="tooltip">Settings</span>
+            </a>
+            {% if session.get('role') == 'admin' %}
+            <a href="/admin" class="nav-link" title="Admin">
+                🔐
+                <span class="tooltip">Admin</span>
+            </a>
+            {% endif %}
+        </nav>
+        <div class="sidebar-footer">
+            <a href="/logout" class="nav-link" title="Logout">
+                🚪
+                <span class="tooltip">Logout</span>
+            </a>
+        </div>
+    </div>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="welcome-banner">
+            <div class="welcome-title">Welcome back, {{ session.get('username', 'User') }}</div>
+            <div class="welcome-subtitle">Genesis Protocol v2.0 | Status: Online</div>
+            <div class="quick-actions">
+                <a href="/chat" class="quick-btn">
+                    <div class="quick-btn-icon">💬</div>
+                    <div class="quick-btn-text">New Chat</div>
+                </a>
+                <a href="/settings" class="quick-btn">
+                    <div class="quick-btn-icon">⚙️</div>
+                    <div class="quick-btn-text">Settings</div>
+                </a>
+            </div>
+        </div>
+        
+        <div class="grid grid-4">
+            <div class="stat-card">
+                <div class="stat-value">0</div>
+                <div class="stat-label">Total Chats</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">0</div>
+                <div class="stat-label">Messages</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">0</div>
+                <div class="stat-label">API Calls</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">v2.0</div>
+                <div class="stat-label">Version</div>
+            </div>
+        </div>
+        
+        <div class="grid grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">// AI PROVIDERS</span>
+                </div>
+                <div class="provider-grid">
+                    <div class="provider-card">
+                        <div class="provider-name">Groq</div>
+                        <div class="provider-status active">● Active</div>
+                    </div>
+                    <div class="provider-card">
+                        <div class="provider-name">OpenAI</div>
+                        <div class="provider-status">○ Inactive</div>
+                    </div>
+                    <div class="provider-card">
+                        <div class="provider-name">Gemini</div>
+                        <div class="provider-status">○ Inactive</div>
+                    </div>
+                    <div class="provider-card">
+                        <div class="provider-name">HuggingFace</div>
+                        <div class="provider-status">○ Inactive</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">// RECENT ACTIVITY</span>
+                </div>
+                <div class="activity-list">
+                    <div class="activity-item">
+                        <span class="activity-icon">🟢</span>
+                        <div class="activity-content">
+                            <div class="activity-title">System Online</div>
+                            <div class="activity-time">Just now</div>
+                        </div>
+                    </div>
+                    <div class="activity-item">
+                        <span class="activity-icon">🔐</span>
+                        <div class="activity-content">
+                            <div class="activity-title">Logged in</div>
+                            <div class="activity-time">Today</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">// SYSTEM STATUS</span>
+            </div>
+            <div class="grid grid-3">
+                <div class="stat-card">
+                    <div class="stat-value" style="font-size: 20px;">●</div>
+                    <div class="stat-label">Web Server</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="font-size: 20px;">●</div>
+                    <div class="stat-label">Database</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="font-size: 20px;">●</div>
+                    <div class="stat-label">API Gateway</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            Genesis Protocol Ω | Built with Autonomous AI | v2.0
+        </div>
+    </div>
+</div>
+{% endblock %}

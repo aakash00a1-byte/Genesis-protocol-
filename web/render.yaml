@@ -1,0 +1,25 @@
+# Render Blueprint for Genesis Web Platform
+# Deploy to Render: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: genesis-protocol
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server_simple.py
+    healthCheckPath: /api/health
+    region: singapore
+    plan: free
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        value: genesis-admin-2024
+      - key: PORT
+        value: "10000"
+      - key: PYTHONUNBUFFERED
+        value: "true"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false

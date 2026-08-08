@@ -1,0 +1,13 @@
+# Genesis Protocol Web - Dependencies
+flask>=3.0.0
+werkzeug>=3.0.0
+gunicorn>=21.0.0
+python-dotenv>=1.0.0
+groq>=0.4.0
+chromadb>=0.4.0
+requests>=2.31.0
+Flask-Session>=0.5.0
+Pillow>=10.0.0
+flask-socketio>=5.3.0
+python-socketio>=5.11.0
+eventlet>=0.35.0

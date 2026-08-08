@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Genesis Protocol{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .settings-section {
+        margin-bottom: 30px;
+    }
+    
+    .settings-title {
+        font-size: 14px;
+        color: var(--neon-cyan);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border-color);
+    }
+    
+    .setting-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px 0;
+        border-bottom: 1px solid var(--border-color);
+    }
+    
+    .setting-info {
+        flex: 1;
+    }
+    
+    .setting-name {
+        font-size: 13px;
+        color: var(--text-primary);
+    }
+    
+    .setting-desc {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 3px;
+    }
+    
+    .toggle {
+        position: relative;
+        width: 50px;
+        height: 26px;
+        background: var(--dark-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 13px;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .toggle.active {
+        background: var(--neon-green);
+        border-color: var(--neon-green);
+    }
+    
+    .toggle::after {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 18px;
+        height: 18px;
+        background: #fff;
+        border-radius: 50%;
+        transition: all 0.3s;
+    }
+    
+    .toggle.active::after {
+        left: 27px;
+    }
+    
+    .select-field {
+        background: var(--dark-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 10px 15px;
+        color: #fff;
+        font-family: inherit;
+        font-size: 13px;
+        min-width: 150px;
+    }
+    
+    .theme-preview {
+        display: flex;
+        gap: 15px;
+        margin-top: 15px;
+    }
+    
+    .theme-option {
+        flex: 1;
+        padding: 20px;
+        background: var(--dark-bg);
+        border: 2px solid var(--border-color);
+        border-radius: 10px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .theme-option:hover, .theme-option.active {
+        border-color: var(--neon-green);
+    }
+    
+    .theme-option.active {
+        background: rgba(0, 255, 136, 0.1);
+    }
+    
+    .theme-icon {
+        font-size: 30px;
+        margin-bottom: 10px;
+    }
+    
+    .theme-name {
+        font-size: 12px;
+        color: var(--text-primary);
+    }
+    
+    .danger-zone {
+        border-color: var(--neon-red);
+        background: rgba(255, 68, 68, 0.05);
+    }
+    
+    .danger-zone .settings-title {
+        color: var(--neon-red);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-logo">Ω</div>
+        <nav class="sidebar-nav">
+            <a href="/chat" class="nav-link" title="Chat">
+                💬
+                <span class="tooltip">Chat</span>
+            </a>
+            <a href="/dashboard" class="nav-link" title="Dashboard">
+                📊
+                <span class="tooltip">Dashboard</span>
+            </a>
+            <a href="/settings" class="nav-link active" title="Settings">
+                ⚙️
+                <span class="tooltip">Settings</span>
+            </a>
+            {% if session.get('role') == 'admin' %}
+            <a href="/admin" class="nav-link" title="Admin">
+                🔐
+                <span class="tooltip">Admin</span>
+            </a>
+            {% endif %}
+        </nav>
+        <div class="sidebar-footer">
+            <a href="/logout" class="nav-link" title="Logout">
+                🚪
+                <span class="tooltip">Logout</span>
+            </a>
+        </div>
+    </div>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="page-header">
+            <div>
+                <div class="page-title">⚙️ Settings</div>
+                <div class="page-subtitle">Configure your Genesis Protocol experience</div>
+            </div>
+        </div>
+        
+        <div class="grid grid-2">
+            <div>
+                <div class="card settings-section">
+                    <div class="settings-title">// ACCOUNT</div>
+                    
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-name">Username</div>
+                            <div class="setting-desc">{{ session.get('username', 'User') }}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-name">Email</div>
+                            <div class="setting-desc">user@example.com</div>
+                        </div>
+                        <button class="btn btn-secondary">Change</button>
+                    </div>
+                    
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-name">Password</div>
+                            <div class="setting-desc">Last changed: Never</div>
+                        </div>
+                        <button class="btn btn-secondary">Update</button>
+                    </div>
+                </div>
+                
+                <div class="card settings-section">
+                    <div class="settings-title">// PREFERENCES</div>
+                    
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-name">Dark Mode</div>
+                            <div class="setting-desc">Always use dark theme</div>
+                        </div>
+                        <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+                    </div>
+                    
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-name">Notifications</div>
+                            <div class="setting-desc">Receive system notifications</div>
+                        </div>
+                        <div class="toggle" onclick="this.classList.toggle('active')"></div>
+                    </div>
+                    
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-name">Auto-save Chats</div>
+                            <div class="setting-desc">Save conversation history</div>
+                        </div>
+                        <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div>
+                <div class="card settings-section">
+                    <div class="settings-title">// AI SETTINGS</div>
+                    
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-name">Default Model</div>
+                            <div class="setting-desc">Preferred AI model</div>
+                        </div>
+                        <select class="select-field">
+                            <option>Groq LLama-3</option>
+                            <option>Groq Mixtral</option>
+                            <option>OpenAI GPT-4</option>
+                            <option>Gemini Pro</option>
+                        </select>
+                    </div>
+                    
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-name">Response Length</div>
+                            <div class="setting-desc">Max response size</div>
+                        </div>
+                        <select class="select-field">
+                            <option>Short</option>
+                            <option selected>Medium</option>
+                            <option>Long</option>
+                        </select>
+                    </div>
+                    
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-name">Temperature</div>
+                            <div class="setting-desc">Response creativity level</div>
+                        </div>
+                        <select class="select-field">
+                            <option>Precise</option>
+                            <option selected>Balanced</option>
+                            <option>Creative</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="card settings-section">
+                    <div class="settings-title">// APPEARANCE</div>
+                    
+                    <div class="theme-preview">
+                        <div class="theme-option active">
+                            <div class="theme-icon">🌙</div>
+                            <div class="theme-name">Dark</div>
+                        </div>
+                        <div class="theme-option">
+                            <div class="theme-icon">☀️</div>
+                            <div class="theme-name">Light</div>
+                        </div>
+                        <div class="theme-option">
+                            <div class="theme-icon">🎨</div>
+                            <div class="theme-name">Cyber</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card settings-section danger-zone">
+                    <div class="settings-title">// DANGER ZONE</div>
+                    
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-name">Export Data</div>
+                            <div class="setting-desc">Download all your data</div>
+                        </div>
+                        <button class="btn btn-secondary">Export</button>
+                    </div>
+                    
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-name">Delete Account</div>
+                            <div class="setting-desc">Permanently delete your account</div>
+                        </div>
+                        <button class="btn btn-danger">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            Genesis Protocol Ω | Settings | v2.0
+        </div>
+    </div>
+</div>
+{% endblock %}

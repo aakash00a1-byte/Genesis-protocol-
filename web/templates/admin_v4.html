@@ -1,0 +1,317 @@
+{% extends "base_v4.html" %}
+
+{% block title %}Admin Dashboard - Gluttony OS v4{% endblock %}
+
+{% block header_title %}⚙️ Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="admin-container">
+    <div class="admin-header">
+        <h1 class="admin-title">⚡ Gluttony OS v4</h1>
+        <div style="display: flex; gap: 12px;">
+            <button class="btn btn-secondary" onclick="refreshDashboard()">🔄 Refresh</button>
+            <button class="btn btn-primary" onclick="exportData()">📥 Export</button>
+        </div>
+    </div>
+    
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon">👥</div>
+            <div class="stat-value" id="statUsers">--</div>
+            <div class="stat-label">Active Users</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">💬</div>
+            <div class="stat-value" id="statRequests">--</div>
+            <div class="stat-label">Total Requests</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">🧠</div>
+            <div class="stat-value" id="statTokens">--</div>
+            <div class="stat-label">Tokens Used</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">⚡</div>
+            <div class="stat-value" id="statUptime">{{ uptime or '99.9' }}%</div>
+            <div class="stat-label">System Uptime</div>
+        </div>
+    </div>
+    
+    <!-- Charts Grid -->
+    <div class="charts-grid">
+        <!-- Model Usage Chart -->
+        <div class="chart-card">
+            <h3 class="chart-title">📊 Model Usage Distribution</h3>
+            <div id="modelChart" style="height: 250px; display: flex; align-items: flex-end; gap: 20px; padding: 20px;">
+                <div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
+                    <div style="background: linear-gradient(to top, var(--neon-red), var(--neon-purple)); width: 60px; border-radius: 8px 8px 0 0; height: 150px;"></div>
+                    <span style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">GPT-4</span>
+                    <span style="font-size: 14px; font-weight: 600;">45%</span>
+                </div>
+                <div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
+                    <div style="background: linear-gradient(to top, var(--neon-purple), var(--neon-purple-glow)); width: 60px; border-radius: 8px 8px 0 0; height: 120px;"></div>
+                    <span style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">Claude</span>
+                    <span style="font-size: 14px; font-weight: 600;">30%</span>
+                </div>
+                <div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
+                    <div style="background: linear-gradient(to top, var(--neon-red-dim), var(--neon-red)); width: 60px; border-radius: 8px 8px 0 0; height: 80px;"></div>
+                    <span style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">Gemini</span>
+                    <span style="font-size: 14px; font-weight: 600;">25%</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Request Timeline -->
+        <div class="chart-card">
+            <h3 class="chart-title">📈 Requests Over Time</h3>
+            <div style="height: 250px; padding: 20px; position: relative;">
+                <svg viewBox="0 0 400 150" style="width: 100%; height: 100%;">
+                    <!-- Grid lines -->
+                    <line x1="0" y1="150" x2="400" y2="150" stroke="var(--border-color)" stroke-width="1"/>
+                    <line x1="0" y1="100" x2="400" y2="100" stroke="var(--border-color)" stroke-width="0.5" stroke-dasharray="4"/>
+                    <line x1="0" y1="50" x2="400" y2="50" stroke="var(--border-color)" stroke-width="0.5" stroke-dasharray="4"/>
+                    <line x1="0" y1="0" x2="400" y2="0" stroke="var(--border-color)" stroke-width="0.5" stroke-dasharray="4"/>
+                    
+                    <!-- Graph line -->
+                    <path d="M0,130 Q50,100 100,110 T200,70 T300,90 T400,40" 
+                          fill="none" stroke="var(--neon-red)" stroke-width="2"/>
+                    <path d="M0,130 Q50,100 100,110 T200,70 T300,90 T400,40" 
+                          fill="url(#gradient)" stroke="none" opacity="0.3"/>
+                    
+                    <defs>
+                        <linearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="var(--neon-red)" stop-opacity="0.8"/>
+                            <stop offset="100%" stop-color="var(--neon-red)" stop-opacity="0"/>
+                        </linearGradient>
+                    </defs>
+                    
+                    <!-- Data points -->
+                    <circle cx="100" cy="110" r="4" fill="var(--neon-red)"/>
+                    <circle cx="200" cy="70" r="4" fill="var(--neon-red)"/>
+                    <circle cx="300" cy="90" r="4" fill="var(--neon-red)"/>
+                    <circle cx="400" cy="40" r="4" fill="var(--neon-red)"/>
+                </svg>
+                
+                <!-- Time labels -->
+                <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); margin-top: 8px;">
+                    <span>00:00</span>
+                    <span>06:00</span>
+                    <span>12:00</span>
+                    <span>18:00</span>
+                    <span>Now</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Provider Status -->
+        <div class="chart-card">
+            <h3 class="chart-title">🔌 API Provider Status</h3>
+            <div style="padding: 10px 0;">
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px; background: var(--bg-tertiary); border-radius: 10px; margin-bottom: 12px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-size: 20px;">🤖</span>
+                        <div>
+                            <div style="font-weight: 500;">OpenAI</div>
+                            <div style="font-size: 12px; color: var(--text-muted);">GPT-4, GPT-3.5</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="status-dot online"></span>
+                        <span style="color: #00FF88;">Active</span>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px; background: var(--bg-tertiary); border-radius: 10px; margin-bottom: 12px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-size: 20px;">🧠</span>
+                        <div>
+                            <div style="font-weight: 500;">Anthropic</div>
+                            <div style="font-size: 12px; color: var(--text-muted);">Claude 3</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="status-dot online"></span>
+                        <span style="color: #00FF88;">Active</span>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px; background: var(--bg-tertiary); border-radius: 10px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-size: 20px;">✨</span>
+                        <div>
+                            <div style="font-weight: 500;">Google</div>
+                            <div style="font-size: 12px; color: var(--text-muted);">Gemini Pro</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="status-dot online"></span>
+                        <span style="color: #00FF88;">Active</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Activity -->
+        <div class="chart-card">
+            <h3 class="chart-title">🕐 Recent Activity</h3>
+            <div id="activityList" style="max-height: 280px; overflow-y: auto;">
+                <div style="display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border-color);">
+                    <span style="font-size: 16px;">👤</span>
+                    <div style="flex: 1;">
+                        <div style="font-size: 13px;">aakadh00a1</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Chat request</div>
+                    </div>
+                    <span style="font-size: 11px; color: var(--text-muted);">2m ago</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border-color);">
+                    <span style="font-size: 16px;">⚡</span>
+                    <div style="flex: 1;">
+                        <div style="font-size: 13px;">System</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Health check passed</div>
+                    </div>
+                    <span style="font-size: 11px; color: var(--text-muted);">5m ago</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border-color);">
+                    <span style="font-size: 16px;">🔄</span>
+                    <div style="flex: 1;">
+                        <div style="font-size: 13px;">aakadh00a1</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Login successful</div>
+                    </div>
+                    <span style="font-size: 11px; color: var(--text-muted);">15m ago</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Health Status -->
+    <div class="settings-section" style="margin-top: 40px;">
+        <h2 class="settings-section-title">🔧 System Health</h2>
+        <div class="health-grid">
+            <div class="health-item">
+                <div class="health-icon healthy">🗄️</div>
+                <div class="health-info">
+                    <div class="health-name">Database</div>
+                    <div class="health-status" id="dbStatus">Connected</div>
+                </div>
+            </div>
+            <div class="health-item">
+                <div class="health-icon healthy">🤖</div>
+                <div class="health-info">
+                    <div class="health-name">AI Backend</div>
+                    <div class="health-status" id="aiStatus">Available</div>
+                </div>
+            </div>
+            <div class="health-item">
+                <div class="health-icon healthy">🔍</div>
+                <div class="health-info">
+                    <div class="health-name">Web Search</div>
+                    <div class="health-status" id="searchStatus">Active</div>
+                </div>
+            </div>
+            <div class="health-item">
+                <div class="health-icon healthy">💾</div>
+                <div class="health-info">
+                    <div class="health-name">Memory</div>
+                    <div class="health-status" id="memoryStatus">Operational</div>
+                </div>
+            </div>
+            <div class="health-item">
+                <div class="health-icon healthy">📧</div>
+                <div class="health-info">
+                    <div class="health-name">Email</div>
+                    <div class="health-status" id="emailStatus">Console Mode</div>
+                </div>
+            </div>
+            <div class="health-item">
+                <div class="health-icon healthy">🌐</div>
+                <div class="health-info">
+                    <div class="health-name">API Gateway</div>
+                    <div class="health-status" id="apiStatus">Operational</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Users Table -->
+    <div class="settings-section" style="margin-top: 40px;">
+        <h2 class="settings-section-title">👥 User Management</h2>
+        <div class="settings-card" style="padding: 0; overflow: hidden;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: var(--bg-tertiary);">
+                        <th style="padding: 16px; text-align: left; font-size: 12px; color: var(--text-secondary); border-bottom: 1px solid var(--border-color);">User</th>
+                        <th style="padding: 16px; text-align: left; font-size: 12px; color: var(--text-secondary); border-bottom: 1px solid var(--border-color);">Role</th>
+                        <th style="padding: 16px; text-align: left; font-size: 12px; color: var(--text-secondary); border-bottom: 1px solid var(--border-color);">Status</th>
+                        <th style="padding: 16px; text-align: left; font-size: 12px; color: var(--text-secondary); border-bottom: 1px solid var(--border-color);">Usage</th>
+                        <th style="padding: 16px; text-align: left; font-size: 12px; color: var(--text-secondary); border-bottom: 1px solid var(--border-color);">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTable">
+                    <tr style="border-bottom: 1px solid var(--border-color);">
+                        <td style="padding: 16px;">
+                            <div style="font-weight: 500;">aakadh00a1</div>
+                            <div style="font-size: 11px; color: var(--text-muted);">aakadh00a1@genesis.ai</div>
+                        </td>
+                        <td style="padding: 16px;"><span class="model-badge" style="background: rgba(255, 0, 60, 0.2); border-color: var(--neon-red); color: var(--neon-red);">Admin</span></td>
+                        <td style="padding: 16px;"><span style="color: #00FF88;">● Active</span></td>
+                        <td style="padding: 16px;">42 requests</td>
+                        <td style="padding: 16px;">
+                            <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">Edit</button>
+                        </td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid var(--border-color);">
+                        <td style="padding: 16px;">
+                            <div style="font-weight: 500;">admin</div>
+                            <div style="font-size: 11px; color: var(--text-muted);">admin@genesis.ai</div>
+                        </td>
+                        <td style="padding: 16px;"><span class="model-badge">User</span></td>
+                        <td style="padding: 16px;"><span style="color: #00FF88;">● Active</span></td>
+                        <td style="padding: 16px;">8 requests</td>
+                        <td style="padding: 16px;">
+                            <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">Edit</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+// Load dashboard data
+async function loadDashboardData() {
+    try {
+        const response = await fetch('/api/admin/stats');
+        const data = await response.json();
+        
+        document.getElementById('statUsers').textContent = data.users || '2';
+        document.getElementById('statRequests').textContent = data.requests || '50';
+        document.getElementById('statTokens').textContent = data.tokens || '12.5K';
+        
+        // Update health status
+        if (data.health) {
+            document.getElementById('dbStatus').textContent = data.health.database || 'OK';
+            document.getElementById('aiStatus').textContent = data.health.ai_backend || 'Available';
+        }
+    } catch (err) {
+        console.log('Could not load dashboard data');
+    }
+}
+
+function refreshDashboard() {
+    loadDashboardData();
+    // Visual feedback
+    const btn = event.target;
+    btn.textContent = '⏳ Refreshing...';
+    setTimeout(() => {
+        btn.textContent = '🔄 Refresh';
+    }, 1000);
+}
+
+function exportData() {
+    alert('Export functionality would download system data');
+}
+
+// Initial load
+loadDashboardData();
+</script>
+{% endblock %}
