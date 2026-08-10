@@ -6,8 +6,9 @@ name: HF Space Keep-Alive
 
 on:
   schedule:
-    # Every 10 minutes (cron is in UTC)
-    - cron: '*/10 * * * *'
+    # Every 30 minutes (cron is in UTC). Sleep happens after 48h of inactivity,
+    # so 30 min is more than enough while keeping a low, non-abusive footprint.
+    - cron: '*/30 * * * *'
   workflow_dispatch: # Allow manual trigger for testing
 
 jobs:
