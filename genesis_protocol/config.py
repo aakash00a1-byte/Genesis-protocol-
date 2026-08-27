@@ -35,7 +35,7 @@ class VectorDBType(Enum):
 class TelegramConfig:
     """Telegram bot configuration."""
     bot_token: str = ""
-    bot_username: str = "Genesis_autonomousbot"
+    bot_username: str = "Genesis_makebot"
     api_id: Optional[str] = None
     api_hash: Optional[str] = None
     session_name: str = "genesis_session"
@@ -380,7 +380,7 @@ class Config:
         
         # Telegram
         config.telegram.bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-        config.telegram.bot_username = os.getenv("TELEGRAM_BOT_USERNAME", "Genesis_autonomousbot")
+        config.telegram.bot_username = os.getenv("TELEGRAM_BOT_USERNAME", "Genesis_makebot")
         config.telegram.api_id = os.getenv("TELEGRAM_API_ID")
         config.telegram.api_hash = os.getenv("TELEGRAM_API_HASH")
         config.telegram.session_name = os.getenv("TELEGRAM_SESSION_NAME", "genesis_session")

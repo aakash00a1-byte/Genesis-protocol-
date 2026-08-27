@@ -53,11 +53,12 @@ class TelegramBot:
     def send(self, chat_id, text):
         """Send message to Telegram"""
         try:
-            httpx.post(f"{self.api}/sendMessage", json={
+            import requests
+            requests.post(f"{self.api}/sendMessage", json={
                 "chat_id": chat_id,
                 "text": text,
                 "parse_mode": "Markdown"
-            }, timeout=10)
+            }, timeout=15)
         except Exception as e:
             print(f"[{self.username}] Send error: {e}")
     
@@ -182,11 +183,15 @@ All bots are online! 💪
         print(f"[{self.username}] Starting polling...")
         self.running = True
         
+        # Wait a bit for network to be ready on cold start
+        time.sleep(3)
+        
         while self.running:
             try:
-                resp = httpx.get(f"{self.api}/getUpdates", 
+                import requests
+                resp = requests.get(f"{self.api}/getUpdates", 
                                params={"offset": self.offset, "timeout": 30}, 
-                               timeout=35).json()
+                               timeout=60).json()
                 
                 if not resp.get("ok"):
                     time.sleep(5)
@@ -281,61 +286,71 @@ def main():
     config = get_config()
     
     print("=" * 60)
-    print("🤖 GENESIS PROTOCOL - ALL TELEGRAM BOTS")
+    print("🤖 GENESIS PROTOCOL - TELEGRAM BOT (WEBHOOK MODE)")
     print("=" * 60)
-    print(f"Admins configured: {len(ADMIN_IDS)}")
-    print()
     
-    # Get all bots
-    bots = []
-    
-    # Main bot
-    if config.telegram.bot_token:
-        bots.append(TelegramBot(
-            config.telegram.bot_token,
-            config.telegram.bot_username,
-            ADMIN_IDS
-        ))
-        print(f"✅ Main bot: @{config.telegram.bot_username}")
-    
-    # Additional bots
-    if config.telegram.additional_bot_tokens:
-        tokens = [t.strip() for t in config.telegram.additional_bot_tokens.split(",") if t.strip()]
-        bot_names = ["@Gen_sisbot", "@Genesis_makebot"]  # Map to names
-        
-        for i, token in enumerate(tokens[:2]):  # Max 2 additional bots
-            username = bot_names[i] if i < len(bot_names) else f"bot_{i+2}"
-            bots.append(TelegramBot(token, username, ADMIN_IDS))
-            print(f"✅ Bot {i+2}: {username}")
-    
-    if not bots:
-        print("❌ No bots configured!")
-        print("Set TELEGRAM_BOT_TOKEN env var")
+    token = config.telegram.bot_token
+    if not token:
+        print("❌ No TELEGRAM_BOT_TOKEN set!")
         return
     
+    api = f"https://api.telegram.org/bot{token}"
+    admin_ids_str = os.environ.get("TELEGRAM_ADMIN_IDS", "")
+    print(f"Admin IDs: {admin_ids_str}")
+    print(f"Bot username: @{config.telegram.bot_username}")
+    
+    # Determine webhook URL from HF Space domain
+    space_url = os.environ.get("SPACE_URL", "https://genesisno-genesis-automaton.hf.space")
+    webhook_url = f"{space_url}/api/telegram/webhook"
+    print(f"Webhook URL: {webhook_url}")
+    
+    # Delete any existing webhook and set new one
+    import requests
+    try:
+        # First delete webhook (clear polling mode if active)
+        requests.post(f"{api}/deleteWebhook", timeout=10)
+        time.sleep(1)
+        
+        # Set new webhook
+        resp = requests.post(f"{api}/setWebhook", json={
+            "url": webhook_url,
+            "max_connections": 5,
+            "allowed_updates": ["message"]
+        }, timeout=10).json()
+        
+        if resp.get("ok"):
+            print(f"✅ Webhook set successfully!")
+            print(f"   Telegram will POST updates to: {webhook_url}")
+        else:
+            print(f"❌ Webhook setup failed: {resp.get('description')}")
+            return
+    except Exception as e:
+        print(f"❌ Network error setting webhook: {e}")
+        return
+    
+    # Send startup notification
+    admin_ids = [int(x) for x in admin_ids_str.split(",") if x.strip()]
+    for aid in admin_ids:
+        try:
+            requests.post(f"{api}/sendMessage", json={
+                "chat_id": aid,
+                "text": f"🤖 Genesis Protocol online! Webhook mode active.\nBot: @{config.telegram.bot_username}\nSend /start to begin."
+            }, timeout=10)
+        except Exception:
+            pass
+    
     print()
-    print(f"🚀 Starting {len(bots)} bot(s)...")
+    print("✅ Telegram bot running in webhook mode!")
+    print("   (Flask app at web/app.py handles /api/telegram/webhook)")
+    print("   This process just keeps the supervisord program alive.")
     print("=" * 60)
     
-    # Start all bots in threads
-    threads = []
-    for bot in bots:
-        t = threading.Thread(target=bot.run, daemon=True)
-        t.start()
-        threads.append(t)
-        time.sleep(0.5)  # Stagger startup
-    
-    print("✅ All bots started!")
-    print("Press Ctrl+C to stop")
-    print()
-    
+    # Keep process alive (webhook handled by Flask app)
     try:
         while True:
-            time.sleep(1)
+            time.sleep(3600)
     except KeyboardInterrupt:
-        print("\n🛑 Stopping all bots...")
-        for bot in bots:
-            bot.running = False
+        print("\n🛑 Stopping...")
 
 
 if __name__ == "__main__":

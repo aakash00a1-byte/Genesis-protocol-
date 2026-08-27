@@ -1,34 +1,65 @@
-name: HF Space Keep-Alive
+name: HF Space Keep-Alive + Telegram Relay
 
 # Pings the Hugging Face Space every 10 minutes to prevent it from sleeping
-# (HF free tier sleeps after 48h of inactivity). The Space runs an autonomous
-# self-evolving AI (Gluttony/Gluten) that must stay alive 24/7.
+# AND relays queued Telegram replies (HF free tier can't reach api.telegram.org).
+# The Space runs an autonomous self-evolving AI that must stay alive 24/7.
 
 on:
   schedule:
-    # Every 30 minutes (cron is in UTC). Sleep happens after 48h of inactivity,
-    # so 30 min is more than enough while keeping a low, non-abusive footprint.
-    - cron: '*/30 * * * *'
+    # Every 10 minutes. Balances: fast reply delivery + GitHub Actions free limit (2000 min/month).
+    # 144 runs/day × ~15 sec = ~36 min/day = ~1080 min/month (under 2000 limit).
+    - cron: '*/10 * * * *'
   workflow_dispatch: # Allow manual trigger for testing
 
 jobs:
-  ping:
+  ping-and-relay:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping HF Space
+      - name: Ping HF Space + Relay Telegram Replies
+        env:
+          HF_SPACE_URL: https://genesisno-genesis-automaton.hf.space
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: |
-          URL="https://genesisno-genesis-automaton.hf.space/"
-          echo "Pinging $URL at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          # First request wakes the Space if sleeping; retry until it responds
+          echo "=== Ping HF Space ==="
           for attempt in 1 2 3 4 5 6; do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 120 "$URL")
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 120 "$HF_SPACE_URL/")
             echo "Attempt $attempt: HTTP $HTTP_CODE"
             if [ "$HTTP_CODE" = "200" ]; then
-              echo "✅ Space is awake and running"
-              exit 0
+              echo "✅ Space is awake"
+              break
             fi
-            echo "Space not ready yet (sleeping/building), retrying in 30s..."
             sleep 30
           done
-          echo "⚠️ Space did not return 200 after $attempt attempts"
-          exit 1
+
+          echo ""
+          echo "=== Check Telegram Reply Queue ==="
+          QUEUE=$(curl -s --max-time 30 "$HF_SPACE_URL/api/telegram/queue")
+          echo "Queue response: $QUEUE"
+          COUNT=$(echo "$QUEUE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('count',0))" 2>/dev/null || echo "0")
+          echo "Pending replies: $COUNT"
+
+          if [ "$COUNT" -gt 0 ] 2>/dev/null; then
+            echo ""
+            echo "=== Sending queued replies to Telegram ==="
+            echo "$QUEUE" | python3 -c "
+          import sys, json, requests
+          data = json.load(sys.stdin)
+          token = '$TELEGRAM_BOT_TOKEN'
+          api = f'https://api.telegram.org/bot{token}'
+          for reply in data.get('replies', []):
+              chat_id = reply['chat_id']
+              text = reply['text']
+              try:
+                  r = requests.post(f'{api}/sendMessage', json={'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown'}, timeout=10)
+                  print(f'  Sent to {chat_id}: {r.json().get(\"ok\", False)}')
+              except Exception as e:
+                  print(f'  Failed to {chat_id}: {e}')
+          "
+            echo ""
+            echo "=== Clearing queue ==="
+            curl -s -X DELETE --max-time 15 "$HF_SPACE_URL/api/telegram/queue"
+            echo "Queue cleared"
+          else
+            echo "No pending replies."
+          fi
+

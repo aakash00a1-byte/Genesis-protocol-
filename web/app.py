@@ -1067,6 +1067,149 @@ def api_health():
     })
 
 
+@app.route('/api/debug/telegram', methods=['GET'])
+def api_debug_telegram():
+    """Debug endpoint: check if Telegram bot is running and what env vars are set."""
+    import subprocess
+    env_status = {
+        'TELEGRAM_BOT_TOKEN': bool(os.environ.get('TELEGRAM_BOT_TOKEN')),
+        'TELEGRAM_ADMIN_IDS': os.environ.get('TELEGRAM_ADMIN_IDS', ''),
+        'GROQ_API_KEY': bool(os.environ.get('GROQ_API_KEY')),
+    }
+    # Check if telegram process is running
+    try:
+        result = subprocess.run(['pgrep', '-af', 'start_all_telegram'], capture_output=True, text=True, timeout=5)
+        tg_procs = result.stdout.strip().split('\n') if result.stdout.strip() else []
+    except Exception:
+        tg_procs = []
+    # Read telegram error logs if they exist
+    logs = {}
+    for logfile in ['/tmp/telegram.err.log', '/tmp/telegram.out.log']:
+        try:
+            with open(logfile) as f:
+                logs[logfile] = f.read()[-3000:]
+        except Exception as e:
+            logs[logfile] = f'Cannot read: {e}'
+    
+    # Network egress test: can we reach telegram.org?
+    net_test = {}
+    import requests as req
+    for url, name in [('https://api.telegram.org/', 'telegram.org'), ('https://api.groq.com/', 'groq.com'), ('https://huggingface.co/', 'huggingface.co')]:
+        try:
+            r = req.get(url, timeout=15)
+            net_test[name] = f'OK (HTTP {r.status_code}, {r.elapsed.total_seconds()}s)'
+        except Exception as e:
+            net_test[name] = f'FAILED: {str(e)[:100]}'
+    
+    return jsonify({
+        'env': env_status,
+        'telegram_processes': tg_procs,
+        'logs': logs,
+        'network_egress_test': net_test,
+    })
+
+
+@app.route('/api/telegram/webhook', methods=['POST'])
+def telegram_webhook():
+    """Receive Telegram updates via webhook (inbound - works on HF Spaces).
+    Stores replies in a queue file since HF can't reach telegram.org outbound.
+    GitHub Actions sends queued replies to Telegram."""
+    update = request.get_json(force=True, silent=True) or {}
+    
+    if 'message' not in update:
+        return jsonify({'ok': True})
+    
+    msg = update['message']
+    chat_id = msg.get('chat', {}).get('id')
+    text = msg.get('text', '')
+    user = msg.get('from', {})
+    
+    # Build reply text
+    if text == '/start':
+        reply = "🤖 *Genesis Protocol* online!\n\nI'm your autonomous AI. Send me any message or question!\n\nCommands:\n/start - Welcome\n/status - Bot status\n/ask <question> - Ask AI"
+    elif text == '/status':
+        reply = "✅ Genesis bot running (webhook + relay mode)\n🚀 HF Space: LIVE\n🧠 AI: Groq-powered\n📡 Replies relayed via GitHub Actions"
+    elif text.startswith('/ask '):
+        question = text[5:].strip()
+        reply = None
+    elif text.startswith('/'):
+        reply = "Unknown command. Send /start for help."
+    else:
+        question = text
+        reply = None
+    
+    # If no immediate reply, process with AI
+    if reply is None:
+        if not question:
+            return jsonify({'ok': True})
+        try:
+            from genesis_protocol.ai.provider_chain import get_provider_chain
+            import asyncio
+            ai = get_provider_chain()
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(
+                ai.call(
+                    messages=[
+                        {"role": "system", "content": "You are Genesis, a helpful autonomous AI. Keep responses concise and helpful."},
+                        {"role": "user", "content": question}
+                    ],
+                    user_input=question
+                )
+            )
+            loop.close()
+            if result.success and result.response:
+                reply = f"🤖 *Genesis AI:*\n\n{result.response.content[:4000]}"
+            else:
+                err = result.error[:500] if result.error else "Unknown error"
+                reply = f"❌ Error: {err}"
+        except Exception as e:
+            reply = f"❌ Error: {str(e)[:500]}"
+    
+    # Store reply in queue (GitHub Actions will send it)
+    if reply:
+        try:
+            import threading
+            def store_reply():
+                queue_path = '/tmp/telegram_reply_queue.json'
+                try:
+                    with open(queue_path) as f:
+                        queue = json.load(f)
+                except Exception:
+                    queue = []
+                queue.append({'chat_id': chat_id, 'text': reply})
+                with open(queue_path, 'w') as f:
+                    json.dump(queue, f)
+            # Store synchronously to ensure it's saved before we return
+            store_reply()
+        except Exception as e:
+            print(f"Queue store error: {e}")
+    
+    return jsonify({'ok': True})
+
+
+@app.route('/api/telegram/queue', methods=['GET'])
+def telegram_queue_get():
+    """Return pending replies (called by GitHub Actions relay)."""
+    try:
+        with open('/tmp/telegram_reply_queue.json') as f:
+            queue = json.load(f)
+    except Exception:
+        queue = []
+    return jsonify({'replies': queue, 'count': len(queue)})
+
+
+@app.route('/api/telegram/queue', methods=['DELETE'])
+def telegram_queue_clear():
+    """Clear the reply queue (called by GitHub Actions after sending)."""
+    try:
+        with open('/tmp/telegram_reply_queue.json', 'w') as f:
+            json.dump([], f)
+        return jsonify({'ok': True, 'cleared': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @app.route('/api/status', methods=['GET'])
 def api_status():
     """Detailed status with metrics."""
