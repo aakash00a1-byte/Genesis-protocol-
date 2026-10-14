@@ -81,3 +81,49 @@ Readiness → offline E2E scenario.
 4. verify no secrets (`git diff | grep -i -E "api[_-]?key|token|secret="`)
 5. commit checkpoint
 6. continue only if safe and tests acceptable
+
+## Session recovery (read this first in a new session)
+
+Work is on branch `genesis-v5-recovered`, pushed to
+`https://github.com/aakash00a1-byte/Genesis-protocol-.git`. Recovery is from
+git: `git fetch origin && git checkout genesis-v5-recovered`. Do not rely on a
+previous chat transcript; the branch is the source of truth.
+
+### Runnable entry points
+
+```bash
+python3 genesis_test.py "<raw input>"   # proposals + the authority gate
+python3 genesis_quantum.py              # Grover, QFT, Deutsch-Jozsa, CHSH
+python3 genesis_chat.py                 # interactive thought-partner
+python3 genesis_serve.py 8000           # HTTP service (/v1/generate, /v1/submit)
+```
+
+### Layers added on top of phases 4-10
+
+- `genesis/transparency/` — decision + failure ledger; no hidden failures.
+- `genesis/resilience/` — learn from failure without blame.
+- `genesis/care/` — STEADY / REFRAME / crisis referral; wired into the kernel.
+- `genesis/quantum/` — pure-Python complex statevector simulator, honest
+  backend detection, optional Qiskit/PennyLane adapters, and real algorithms
+  (`algorithms.py`: Grover, QFT, Deutsch-Jozsa, CHSH).
+- `genesis/generation/` — parallel proposal generation; `quantum_rank.py` ranks
+  candidates by Grover amplitude amplification.
+- `genesis/pipeline/` — `AuthorityPipeline`: raw input -> policy -> action.
+- `genesis/service/` — zero-dependency HTTP service (stdlib `http.server`).
+- `genesis/reflection/partner.py` — thought-partner: offers options, the user
+  chooses; crisis turns offer none and refer to human help.
+
+### Invariants that must not be broken
+
+- Proposals never execute on their own. `bypass_available` is always false.
+- Every denial is recorded with a reason and surfaced, never dropped.
+- No hidden failures. No blame language in resilience or care output.
+- The thought-partner never decides for the user (`decided_for_user == 0`).
+- Quantum claims stay honest: a simulator is labelled a simulator; hardware
+  requires a credential. Grover ranking is not described as a speedup.
+
+### Pushing
+
+The default `GITHUB_TOKEN` is read-only (`contents=read`) and will 403 on push.
+A write-scoped token must be supplied explicitly for the push only. Never
+commit a token; never print one.
