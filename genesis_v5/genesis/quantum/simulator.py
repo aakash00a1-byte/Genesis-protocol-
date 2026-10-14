@@ -40,6 +40,24 @@ H: Gate2 = (
 S: Gate2 = (1, 0, 0, 1j)
 T: Gate2 = (1, 0, 0, cmath.exp(1j * math.pi / 4))
 
+
+def Rx(theta: float) -> Gate2:
+    """Rotation about x by ``theta`` radians."""
+    c, s = math.cos(theta / 2), math.sin(theta / 2)
+    return (c, -1j * s, -1j * s, c)
+
+
+def Ry(theta: float) -> Gate2:
+    """Rotation about y by ``theta`` radians."""
+    c, s = math.cos(theta / 2), math.sin(theta / 2)
+    return (c, -s, s, c)
+
+
+def Rz(theta: float) -> Gate2:
+    """Rotation about z by ``theta`` radians."""
+    return (cmath.exp(-1j * theta / 2), 0, 0, cmath.exp(1j * theta / 2))
+
+
 GATES: dict[str, Gate2] = {
     "I": I2,
     "X": X,
@@ -134,6 +152,32 @@ class QuantumRegister:
 
     def cnot(self, control: int, target: int) -> "QuantumRegister":
         return self.apply_controlled(X, control, target)
+
+    def phase_oracle(self, marked: list[int]) -> "QuantumRegister":
+        """Flip the sign of every basis state in ``marked``.
+
+        This is the standard oracle for Grover's algorithm: a phase kickback of
+        -1 on the marked outcomes, identity elsewhere.
+        """
+        marked_set = set(marked)
+        for index in marked_set:
+            if not 0 <= index < self.size:
+                raise ValueError(f"marked index {index} out of range")
+            self._state[index] = -self._state[index]
+        return self
+
+    def apply_diffusion(self) -> "QuantumRegister":
+        """The Grover diffusion operator: 2|s><s| - I.
+
+        Implemented as H on all qubits, a phase flip on |0...0>, then H again,
+        which equals reflection about the uniform superposition.
+        """
+        for qubit in range(self.num_qubits):
+            self.apply_gate(H, qubit)
+        self._state[0] = -self._state[0]
+        for qubit in range(self.num_qubits):
+            self.apply_gate(H, qubit)
+        return self
 
     def measure(self) -> Measurement:
         """Sample one outcome by Born's rule and collapse the state."""

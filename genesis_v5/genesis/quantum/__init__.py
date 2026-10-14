@@ -11,6 +11,14 @@ from genesis.quantum.adapters import (
     QiskitAdapter,
     available_adapters,
 )
+from genesis.quantum.algorithms import (
+    AlgorithmResult,
+    chsh_test,
+    deutsch_jozsa,
+    grover_search,
+    quantum_fourier_transform,
+    run_all,
+)
 from genesis.quantum.backends import (
     BackendInfo,
     detect_backends,
@@ -20,12 +28,16 @@ from genesis.quantum.simulator import (
     GATES,
     Measurement,
     QuantumRegister,
+    Rx,
+    Ry,
+    Rz,
     bell_state,
     hadamard_all,
     uniform_superposition,
 )
 
 __all__ = [
+    "AlgorithmResult",
     "BackendInfo",
     "CircuitResult",
     "GATES",
@@ -33,10 +45,18 @@ __all__ = [
     "PennyLaneAdapter",
     "QiskitAdapter",
     "QuantumRegister",
+    "Rx",
+    "Ry",
+    "Rz",
     "available_adapters",
     "bell_state",
+    "chsh_test",
     "detect_backends",
+    "deutsch_jozsa",
+    "grover_search",
     "hadamard_all",
     "has_real_hardware_access",
+    "quantum_fourier_transform",
+    "run_all",
     "uniform_superposition",
 ]
