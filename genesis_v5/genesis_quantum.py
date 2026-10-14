@@ -20,6 +20,8 @@ from genesis.quantum.algorithms import (
     grover_search,
     quantum_fourier_transform,
 )
+from genesis.generation.generator import ParallelGenerator
+from genesis.generation.quantum_rank import rank_candidates
 
 
 def _header(title: str) -> None:
@@ -59,6 +61,28 @@ def main() -> int:
     print(f"  measured S       : {c.measured_frequency:.4f}")
     print(f"  violates classical: {c.detail['violates_classical']}")
     print("  (this is real non-locality, computed from complex amplitudes)")
+
+    _header("GROVER RANKING - quantum amplitude amplification at work")
+    cands = [f"plan_{i}" for i in range(16)]
+    good = {"plan_3", "plan_12"}
+    r = rank_candidates(cands, lambda c: c in good, shots=4096, seed=2)
+    print(f"  16 candidates, 2 good; classical baseline P(good) = {2/16:.4f}")
+    print(f"  Grover iterations : {r.iterations}")
+    print(f"  theory P(good)    : {r.ideal_marked_probability:.4f}")
+    print(f"  measured P(good)  : {r.measured_marked_probability:.4f}")
+    print("  top 3 by amplified weight:")
+    for rc in r.ranked[:3]:
+        tag = "GOOD" if rc.marked else "    "
+        print(f"    [{rc.amplified_weight:.4f}] {tag} {rc.candidate}")
+
+    _header("GENERATION USING GROVER - a branch gets amplified")
+    gen = ParallelGenerator(seed=5)
+    res = gen.generate(
+        "design a cache", shots=256, quality=lambda p: "architecture" in p
+    )
+    print(f"  backend : {res.quantum_backend}")
+    for b in res.ranked():
+        print(f"    [{b.quantum_weight:.4f}] {b.name}")
 
     print("\n" + "=" * 68)
     print("All results computed from a genuine complex-amplitude statevector.")

@@ -112,23 +112,37 @@ class ParallelGenerator:
         self.num_qubits = max(1, num_qubits)
         self.seed = seed
 
-    def generate(self, raw_input: str, *, shots: int = 256) -> GenerationResult:
+    def generate(
+        self,
+        raw_input: str,
+        *,
+        shots: int = 256,
+        quality: Callable[[str], bool] | None = None,
+    ) -> GenerationResult:
         """Produce weighted proposals for ``raw_input``.
 
         The input is accepted exactly as given — no sanitisation, no filtering.
         Only the *use* of the proposals is governed, by the authority layer.
+
+        When ``quality`` is supplied, branch weights come from Grover amplitude
+        amplification over the proposals (see ``genesis.generation.quantum_rank``)
+        instead of plain uniform sampling.
         """
         shots = max(1, shots)
+        names = list(self.strategies.keys())
+        proposals = [self.strategies[name](raw_input) for name in names]
+
+        if quality is not None:
+            return self._generate_ranked(raw_input, names, proposals, quality, shots)
+
         register = uniform_superposition(self.num_qubits, seed=self.seed)
         outcomes = register.sample(shots=shots)
         counts: dict[int, int] = {}
         for outcome in outcomes:
             counts[outcome] = counts.get(outcome, 0) + 1
 
-        names = list(self.strategies.keys())
         branches: list[Branch] = []
         for index, name in enumerate(names):
-            proposal = self.strategies[name](raw_input)
             weight = counts.get(index % (1 << self.num_qubits), 0) / shots
             # Blend the quantum weight with a uniform prior so no branch is
             # starved to exactly zero by a short sampling run.
@@ -136,7 +150,7 @@ class ParallelGenerator:
             branches.append(
                 Branch(
                     name=name,
-                    proposal=proposal,
+                    proposal=proposals[index],
                     confidence=confidence,
                     quantum_weight=weight,
                 )
@@ -148,3 +162,33 @@ class ParallelGenerator:
             quantum_backend="builtin-statevector",
             shots=shots,
         )
+
+    def _generate_ranked(
+        self,
+        raw_input: str,
+        names: list[str],
+        proposals: list[str],
+        quality: Callable[[str], bool],
+        shots: int,
+    ) -> GenerationResult:
+        from genesis.generation.quantum_rank import rank_candidates
+
+        result = rank_candidates(proposals, quality, shots=shots, seed=self.seed)
+        by_index = {r.index: r for r in result.ranked}
+        branches = [
+            Branch(
+                name=names[i],
+                proposal=proposals[i],
+                confidence=by_index[i].amplified_weight,
+                quantum_weight=by_index[i].amplified_weight,
+                source="generator+grover",
+            )
+            for i in range(len(names))
+        ]
+        return GenerationResult(
+            raw_input=raw_input,
+            branches=branches,
+            quantum_backend="builtin-statevector+grover",
+            shots=shots,
+        )
+
