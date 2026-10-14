@@ -18,6 +18,7 @@ from genesis.models.registry import default_registry
 from genesis.planning.planner import Planner
 from genesis.providers.factory import get_factory
 from genesis.qa.verifier import IndependentVerifier, VerifierConfig
+from genesis.resilience.policy import ResiliencePolicy
 from genesis.router.router import ModelRouter
 from genesis.security.audit import AuditLogger
 from genesis.security.core import SecurityCore
@@ -45,6 +46,7 @@ def build(
     audit = AuditLogger(enabled=cfg.security.audit_enabled)
     policy_engine = PolicyEngine()
     transparency = TransparencyReport()
+    resilience = ResiliencePolicy(max_continuations=cfg.agents.max_retries)
     gateway = ToolGateway(tools, policy_engine=policy_engine, audit=audit)
     factory = get_factory()
     router = ModelRouter(
@@ -64,6 +66,7 @@ def build(
         audit=audit,
         policy_engine=policy_engine,
         transparency=transparency,
+        resilience=resilience,
     )
 
     if with_coordinator:

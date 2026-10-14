@@ -30,6 +30,7 @@ from genesis.memory.provider import MemoryProvider
 from genesis.models.registry import ModelRegistry
 from genesis.providers.base import ModelCapability, Provider
 from genesis.reflection.reflection import ReflectionEngine
+from genesis.resilience.policy import FailureEvent, FailureKind, ResiliencePolicy
 from genesis.router.router import ModelRouter
 from genesis.security.audit import AuditLogger
 from genesis.security.permissions import Permission, PolicyEngine
@@ -58,6 +59,7 @@ class KernelResponse:
     audit_ids: list[str] = field(default_factory=list)
     qa: dict[str, Any] | None = None
     reflection: dict[str, Any] | None = None
+    resilience: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return json_safe(self.__dict__)
@@ -77,6 +79,7 @@ class GenesisKernel:
         reflection: ReflectionEngine | None = None,
         policy_engine: PolicyEngine | None = None,
         transparency: TransparencyReport | None = None,
+        resilience: ResiliencePolicy | None = None,
     ) -> None:
         self.config = config or GenesisConfig()
         self.memory = memory or MemoryProvider(self.config.memory)
@@ -86,6 +89,7 @@ class GenesisKernel:
         self.reflection = reflection or ReflectionEngine()
         self.policy_engine = policy_engine or PolicyEngine()
         self.transparency = transparency or TransparencyReport()
+        self.resilience = resilience or ResiliencePolicy()
         self.gateway = gateway or ToolGateway(
             self.tools,
             policy_engine=self.policy_engine,
@@ -318,6 +322,19 @@ class GenesisKernel:
             ),
         )
 
+        # Resilient response: record the failure as an event, take the lesson,
+        # and decide whether to carry on — without assigning blame.
+        resilience_result = None
+        if errors:
+            response = self.resilience.respond(
+                FailureEvent(
+                    component="kernel.run",
+                    what="; ".join(errors),
+                    kind=FailureKind.UNKNOWN,
+                )
+            )
+            resilience_result = response.to_dict()
+
         return KernelResponse(
             ok=not errors,
             result=result,
@@ -326,6 +343,7 @@ class GenesisKernel:
             audit_ids=audit_ids,
             qa=qa_result.to_dict() if qa_result else None,
             reflection=reflection_result.to_dict() if reflection_result else None,
+            resilience=resilience_result,
         )
 
     # ------------------------------------------------------------------
