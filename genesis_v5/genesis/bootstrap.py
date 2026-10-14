@@ -25,6 +25,7 @@ from genesis.security.permissions import PolicyEngine
 from genesis.security.ratelimit import RateLimiter
 from genesis.tools.builtin import build_default_registry
 from genesis.tools.gateway import ToolGateway
+from genesis.transparency.ledger import TransparencyReport
 
 
 def build(
@@ -43,6 +44,7 @@ def build(
     tools = build_default_registry()
     audit = AuditLogger(enabled=cfg.security.audit_enabled)
     policy_engine = PolicyEngine()
+    transparency = TransparencyReport()
     gateway = ToolGateway(tools, policy_engine=policy_engine, audit=audit)
     factory = get_factory()
     router = ModelRouter(
@@ -61,6 +63,7 @@ def build(
         gateway=gateway,
         audit=audit,
         policy_engine=policy_engine,
+        transparency=transparency,
     )
 
     if with_coordinator:

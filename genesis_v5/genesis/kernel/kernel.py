@@ -35,6 +35,7 @@ from genesis.security.audit import AuditLogger
 from genesis.security.permissions import Permission, PolicyEngine
 from genesis.tools.gateway import ToolGateway, ToolRequest
 from genesis.tools.registry import ToolRegistry
+from genesis.transparency.ledger import TransparencyReport
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ class GenesisKernel:
         audit: AuditLogger | None = None,
         reflection: ReflectionEngine | None = None,
         policy_engine: PolicyEngine | None = None,
+        transparency: TransparencyReport | None = None,
     ) -> None:
         self.config = config or GenesisConfig()
         self.memory = memory or MemoryProvider(self.config.memory)
@@ -83,6 +85,7 @@ class GenesisKernel:
         self.audit = audit or AuditLogger(enabled=self.config.security.audit_enabled)
         self.reflection = reflection or ReflectionEngine()
         self.policy_engine = policy_engine or PolicyEngine()
+        self.transparency = transparency or TransparencyReport()
         self.gateway = gateway or ToolGateway(
             self.tools,
             policy_engine=self.policy_engine,
@@ -192,16 +195,31 @@ class GenesisKernel:
         errors: list[str] = []
         audit_ids: list[str] = []
 
+        # Transparency: record the routing decision and its expected benefit
+        # before doing the work, so it can be checked against the outcome.
+        decision = self.transparency.decisions.record(
+            actor=request.actor,
+            question=f"How should this task be handled? {request.task[:120]}",
+            options=["coordinator", "direct_completion"],
+            chosen="coordinator" if self.coordinator is not None else "direct_completion",
+            rationale=(
+                "agent coordinator available for dependency-aware multi-agent work"
+                if self.coordinator is not None
+                else "no coordinator wired; falling back to direct model completion"
+            ),
+            expected_benefit="produce a verified result for the task",
+        )
+
         # 1. Memory retrieval
         memory_hits = []
-        try:
+        with self.transparency.failures.capture(
+            component="kernel.memory_search",
+            what="memory retrieval failed",
+            impact="task runs without prior context",
+        ):
             memory_hits = self.memory_search(
                 request.task, scopes=[request.scope, MemoryScope.PROJECT]
             )
-        except Exception as exc:  # noqa: BLE001
-            if not self.config.memory.graceful_failure:
-                errors.append(f"memory: {exc}")
-            memory_hits = []
 
         # 2. Task classification -> capability
         capability = self._classify(request.task)
@@ -222,6 +240,12 @@ class GenesisKernel:
                 )
                 result = model_result.output
             except Exception as exc:  # noqa: BLE001
+                self.transparency.failures.record(
+                    component="kernel.model_completion",
+                    what="direct model completion failed",
+                    why=f"{type(exc).__name__}: {exc}",
+                    impact="no result produced for the task",
+                )
                 errors.append(f"model: {exc}")
                 result = None
 
@@ -246,9 +270,14 @@ class GenesisKernel:
             if not qa_result.passed:
                 # Failure escalation: surface the QA verdict rather than
                 # presenting an unverified success.
-                errors.append(
-                    "qa_failed: " + "; ".join(qa_result.issues or ["verification failed"])
+                issues = "; ".join(qa_result.issues or ["verification failed"])
+                self.transparency.failures.record(
+                    component="kernel.qa",
+                    what="independent QA did not pass",
+                    why=issues,
+                    impact="result is not presented as verified",
                 )
+                errors.append("qa_failed: " + issues)
 
         # 6. Memory write (policy-controlled)
         try:
@@ -278,6 +307,16 @@ class GenesisKernel:
             },
         )
         audit_ids.append(event.event_id)
+
+        # Close the transparency loop: what did the decision actually deliver?
+        self.transparency.decisions.resolve(
+            decision.decision_id,
+            outcome="success" if not errors else "failure",
+            actual_benefit=(
+                "task completed and verified" if not errors
+                else "task did not complete cleanly: " + "; ".join(errors)
+            ),
+        )
 
         return KernelResponse(
             ok=not errors,
