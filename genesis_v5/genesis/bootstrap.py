@@ -1,0 +1,95 @@
+"""Genesis V5 application wiring.
+
+Builds a fully-wired system from configuration:
+  config -> memory -> models -> tools -> gateway -> router -> kernel.
+
+Offline by default. No network access, no credentials required.
+"""
+from __future__ import annotations
+
+from genesis.adapters.registration import register_default_adapters
+from genesis.agents.builtin import register_builtin_agents
+from genesis.agents.registry import AgentRegistry
+from genesis.config.settings import GenesisConfig
+from genesis.coordinator.coordinator import AgentCoordinator, CoordinatorConfig
+from genesis.kernel.kernel import GenesisKernel
+from genesis.memory.provider import MemoryProvider
+from genesis.models.registry import default_registry
+from genesis.planning.planner import Planner
+from genesis.providers.factory import get_factory
+from genesis.qa.verifier import IndependentVerifier, VerifierConfig
+from genesis.router.router import ModelRouter
+from genesis.security.audit import AuditLogger
+from genesis.security.core import SecurityCore
+from genesis.security.permissions import PolicyEngine
+from genesis.security.ratelimit import RateLimiter
+from genesis.tools.builtin import build_default_registry
+from genesis.tools.gateway import ToolGateway
+
+
+def build(
+    config: GenesisConfig | None = None,
+    *,
+    register_adapters: bool = True,
+    with_coordinator: bool = True,
+    with_qa: bool = True,
+) -> GenesisKernel:
+    cfg = config or GenesisConfig()
+    if register_adapters:
+        register_default_adapters()
+
+    memory = MemoryProvider(cfg.memory)
+    registry = default_registry()
+    tools = build_default_registry()
+    audit = AuditLogger(enabled=cfg.security.audit_enabled)
+    policy_engine = PolicyEngine()
+    gateway = ToolGateway(tools, policy_engine=policy_engine, audit=audit)
+    factory = get_factory()
+    router = ModelRouter(
+        registry,
+        factory=lambda name: factory.create(name, cfg),
+        default_provider=cfg.router.default_provider,
+        max_fallback_depth=cfg.router.max_fallback_depth,
+    )
+
+    kernel = GenesisKernel(
+        config=cfg,
+        memory=memory,
+        registry=registry,
+        router=router,
+        tools=tools,
+        gateway=gateway,
+        audit=audit,
+        policy_engine=policy_engine,
+    )
+
+    if with_coordinator:
+        agent_registry = AgentRegistry()
+        register_builtin_agents(agent_registry)
+        planner = Planner()
+        coordinator = AgentCoordinator(
+            agent_registry,
+            planner,
+            CoordinatorConfig(
+                max_retries=cfg.agents.max_retries,
+                retry_backoff_base=cfg.agents.retry_backoff_base,
+            ),
+        )
+        kernel.coordinator = coordinator
+        kernel.agent_registry = agent_registry
+
+    if with_qa:
+        kernel.qa = IndependentVerifier(
+            VerifierConfig(
+                max_correction_iterations=cfg.agents.max_retries,
+                pass_threshold=0.6,
+            )
+        )
+
+    if cfg.security.zero_trust:
+        kernel.security = SecurityCore(
+            audit=AuditLogger(enabled=cfg.security.audit_enabled),
+            limiter=RateLimiter(limit_per_minute=cfg.security.rate_limit_per_minute),
+        )
+
+    return kernel

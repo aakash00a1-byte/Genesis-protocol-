@@ -1,0 +1,21 @@
+# Genesis V5 compose template — no credentials baked in.
+# Set real secrets via environment at deploy time.
+services:
+  genesis:
+    build: .
+    image: genesis-v5:local
+    environment:
+      GENESIS_ENV: production
+      GENESIS_OFFLINE: "true"
+      # Optional real integrations (leave unset to keep adapters DISABLED):
+      # OPENHANDS_API_KEY:
+      # NVIDIA_API_KEY:
+      # GENESIS_OPENAI_COMPAT_BASE_URL:
+      # GENESIS_OPENAI_COMPAT_API_KEY:
+    volumes:
+      - genesis-data:/data
+    ports:
+      - "8000:8000"
+
+volumes:
+  genesis-data:

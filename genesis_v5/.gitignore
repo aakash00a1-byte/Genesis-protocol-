@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Secrets — never commit
+*.pem
+*.key
+credentials.json
+service-account*.json
+
+# Tooling
+.vscode/
+.idea/
+.mypy_cache/
+.ruff_cache/
+
+# Logs / runtime
+logs/
+*.log
+.agent_tmp/
