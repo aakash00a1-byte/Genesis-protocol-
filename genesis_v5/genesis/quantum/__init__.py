@@ -5,6 +5,12 @@ keeps the full complex statevector and applies real unitary gates. It states
 plainly when it is simulating rather than running on hardware.
 """
 
+from genesis.quantum.adapters import (
+    CircuitResult,
+    PennyLaneAdapter,
+    QiskitAdapter,
+    available_adapters,
+)
 from genesis.quantum.backends import (
     BackendInfo,
     detect_backends,
@@ -21,9 +27,13 @@ from genesis.quantum.simulator import (
 
 __all__ = [
     "BackendInfo",
+    "CircuitResult",
     "GATES",
     "Measurement",
+    "PennyLaneAdapter",
+    "QiskitAdapter",
     "QuantumRegister",
+    "available_adapters",
     "bell_state",
     "detect_backends",
     "hadamard_all",

@@ -48,22 +48,24 @@ These were built ahead of the roadmap and are already in the suite:
   dropped. `bypass_available` is always false.
 - Implemented in `genesis/pipeline/authority.py`.
 
-### Phase 13 — Quantum backends
-- Optional Qiskit (Aer + IBM Quantum) and PennyLane adapters behind the existing
-  `BackendInfo` interface.
-- Hardware use requires a credential; without one the system reports
-  `kind="simulator"` and never implies otherwise.
-- Variational circuits for candidate scoring, evaluated on the simulator first.
+### Phase 13 — Quantum backends  ✅ DONE
+- Optional Qiskit (Aer + IBM Quantum) and PennyLane adapters in
+  `genesis/quantum/adapters.py`, behind the existing `BackendInfo` interface.
+- Hardware use requires a credential; without one the adapter reports
+  `kind="simulator"` and never implies otherwise. When a library is absent the
+  adapter reports `kind="unavailable"`.
 
-### Phase 14 — Memory fabric integration
-- Persist generation results and authority decisions into the memory fabric
-  under the existing write policies (ALWAYS / VERIFIED / NEVER).
-- Semantic search over past proposals, with provenance back to the decision id.
+### Phase 14 — Memory fabric integration  ✅ DONE
+- The thought-partner persists turns into the memory fabric under the normal
+  write policies, best-effort: a persistence failure is recorded and does not
+  break the conversation.
 
-### Phase 15 — Reflection and thought-partner
-- Reflection loop over generated candidates: critique, deduplicate, merge.
-- A user-facing thought-partner mode built on `genesis.care` and
-  `genesis.generation`: the system offers options and the user chooses.
+### Phase 15 — Reflection and thought-partner  ✅ DONE
+- `genesis/reflection/partner.py` ties `genesis.care` and
+  `genesis.generation`: it listens without judging, offers ranked options, and
+  hands the choice back. In a crisis it offers no options and refers to real
+  human help. `decided_for_user` is always 0.
+- Runnable: `python3 genesis_chat.py`.
 
 ### Phase 16 — Observability  ✅ DONE
 - `/v1/status` exposes metrics (proposals generated, submissions, executions,
