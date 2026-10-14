@@ -34,17 +34,19 @@ These were built ahead of the roadmap and are already in the suite:
 
 ## Phases
 
-### Phase 11 — Generation service
+### Phase 11 — Generation service  ✅ DONE
 - REST/webhook endpoint `/v1/generate` that accepts raw, unfiltered input and
   returns ranked proposals from `ParallelGenerator`.
 - Accepts input verbatim; every response carries `requires_authority: true`.
-- Rate limiting and audit via the existing security core.
+- Zero dependencies (`http.server`); health/readiness/status endpoints included.
+- Implemented in `genesis/service/http.py`; runnable via `genesis_serve.py`.
 
-### Phase 12 — Authority gateway for proposals
-- A single path that takes a proposal and submits it through kernel policy,
-  permissions, sandbox and audit before any tool runs.
+### Phase 12 — Authority gateway for proposals  ✅ DONE
+- A single path (`AuthorityPipeline`) that takes a proposal and submits it
+  through kernel policy, permissions, sandbox and audit before any tool runs.
 - Rejections are recorded in the failure ledger with a reason, never silently
-  dropped.
+  dropped. `bypass_available` is always false.
+- Implemented in `genesis/pipeline/authority.py`.
 
 ### Phase 13 — Quantum backends
 - Optional Qiskit (Aer + IBM Quantum) and PennyLane adapters behind the existing
@@ -63,9 +65,10 @@ These were built ahead of the roadmap and are already in the suite:
 - A user-facing thought-partner mode built on `genesis.care` and
   `genesis.generation`: the system offers options and the user chooses.
 
-### Phase 16 — Observability
-- `TransparencyReport` and resilience summaries exposed through `/v1/status`.
-- Metrics for proposals generated, authority decisions, rejections, referrals.
+### Phase 16 — Observability  ✅ DONE
+- `/v1/status` exposes metrics (proposals generated, submissions, executions,
+  denials) via `genesis.monitoring.metrics.Metrics`.
+- `/healthz` and `/readyz` are live in the service layer.
 
 ### Phase 17 — Interfaces
 - CLI and web surfaces wired to the generation and authority endpoints.
