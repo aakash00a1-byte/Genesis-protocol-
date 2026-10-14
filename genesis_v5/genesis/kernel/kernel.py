@@ -106,6 +106,7 @@ class GenesisKernel:
         self.agent_registry = None
         self.qa = None
         self.security = None
+        self.care = None
 
     # ------------------------------------------------------------------
     # Provider factory (wired to the global factory + adapters)

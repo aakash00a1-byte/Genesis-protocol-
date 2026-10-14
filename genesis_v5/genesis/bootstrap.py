@@ -10,6 +10,7 @@ from __future__ import annotations
 from genesis.adapters.registration import register_default_adapters
 from genesis.agents.builtin import register_builtin_agents
 from genesis.agents.registry import AgentRegistry
+from genesis.care.companion import CareCompanion
 from genesis.config.settings import GenesisConfig
 from genesis.coordinator.coordinator import AgentCoordinator, CoordinatorConfig
 from genesis.kernel.kernel import GenesisKernel
@@ -47,6 +48,7 @@ def build(
     policy_engine = PolicyEngine()
     transparency = TransparencyReport()
     resilience = ResiliencePolicy(max_continuations=cfg.agents.max_retries)
+    care = CareCompanion()
     gateway = ToolGateway(tools, policy_engine=policy_engine, audit=audit)
     factory = get_factory()
     router = ModelRouter(
@@ -68,6 +70,7 @@ def build(
         transparency=transparency,
         resilience=resilience,
     )
+    kernel.care = care
 
     if with_coordinator:
         agent_registry = AgentRegistry()
