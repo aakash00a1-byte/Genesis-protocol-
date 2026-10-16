@@ -83,6 +83,9 @@ def build(
                 max_retries=cfg.agents.max_retries,
                 retry_backoff_base=cfg.agents.retry_backoff_base,
             ),
+            # Agents can now *ask* for a tool; the request travels the Kernel's
+            # authority gate (policy, permission, sandbox, audit) like any other.
+            tool_request=kernel.agent_tool_request,
         )
         kernel.coordinator = coordinator
         kernel.agent_registry = agent_registry

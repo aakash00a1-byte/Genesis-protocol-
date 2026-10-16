@@ -13,6 +13,7 @@ Genesis Kernel
    ↓
 Memory Retrieval → Memory Fabric (scoped, policy-controlled, sanitized)
 Task Classification
+Risk Analysis (offline, advisory) -> level + recommendation (+ alert boundary)
    ↓
 Planner → Subtasks → Agent Registry → Dependency Graph → parallel execution
    ↓
@@ -64,6 +65,20 @@ Audit Event
 ### Agent layer (`genesis/agents/`)
 - `Agent`, `AgentTask`, `AgentResult`, `AgentRegistry`.
 - Phase 5 adds planner, coordinator, dependency DAG, and the seven agents.
+- Tool mediation: an agent never executes a tool. It asks
+  (`Agent.request_tool`); the coordinator binds a Kernel-mediated gateway
+  (`Kernel.agent_tool_request`) so the request travels the same authority
+  gate, with the run's actor/role and a bounded risk ceiling (MEDIUM default).
+  An agent with no gateway bound reports `no_gateway` instead of executing.
+
+### Risk (`genesis/risk/`)
+- `RiskAnalyzer` — scores a task's risk from explicit, weighted signals
+  (destructive, credential access, network, privilege, secret-like, size),
+  escalates one level for high-impact actions, and returns a recommendation.
+  Offline and advisory: it informs the Kernel, it never bypasses the gate.
+- `AlertNotifier` boundary — the default `NoAlertProvider` reports
+  `available=False` and never fabricates delivery; an undelivered alert at or
+  above threshold is recorded in the failure ledger.
 
 ### Tool Fabric (`genesis/tools/`)
 - `ToolRegistry` — every tool declares identity, capability, schema,

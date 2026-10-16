@@ -14,7 +14,15 @@ from genesis.agents.base import Agent, AgentResult, AgentState, AgentTask
 
 
 class _DeterministicAgent(Agent):
-    """Base for offline agents: produces deterministic outputs."""
+    """Base for offline agents: produces deterministic outputs.
+
+    An agent may also carry one explicit tool request in the task metadata
+    (``metadata={"tool": "file.list", "args": {...}}``). When a Kernel-mediated
+    gateway is bound, the agent routes that request through it — the full
+    policy/permission/sandbox/audit gate — and records the outcome. The agent
+    still never executes anything itself. When no gateway is bound, or no tool
+    was requested, behaviour is exactly as before.
+    """
 
     name = "generic"
     description = "A deterministic offline agent."
@@ -28,6 +36,7 @@ class _DeterministicAgent(Agent):
             output = self._produce(task)
             if self._fail_keyword in str(task.instruction):
                 output = f"{output}\nERROR: deliberate injected failure"
+            tool_outcome = self._maybe_request_tool(task)
         except Exception as exc:  # noqa: BLE001
             self.state = AgentState.FAILED
             return AgentResult(
@@ -37,14 +46,37 @@ class _DeterministicAgent(Agent):
                 error=str(exc),
             )
         self.state = AgentState.SUCCESS
+        metadata: dict[str, Any] = {"duration_ms": int((time.time() - start) * 1000)}
+        if tool_outcome is not None:
+            metadata["tool"] = tool_outcome
         return AgentResult(
             agent=self.name,
             task_id=task.id,
             status=AgentState.SUCCESS,
             output=output,
             confidence=0.9,
-            metadata={"duration_ms": int((time.time() - start) * 1000)},
+            metadata=metadata,
         )
+
+    def _maybe_request_tool(self, task: AgentTask) -> dict[str, Any] | None:
+        """Route a single, explicitly-declared tool request through the gate.
+
+        The request comes from the task metadata, never from agent invention.
+        With no gateway bound there is nothing to route through, so the agent
+        reports that rather than executing anything.
+        """
+        tool = task.metadata.get("tool")
+        if not tool:
+            return None
+        if self._tool_request is None:
+            return {"tool": str(tool), "status": "no_gateway", "executed": False}
+        result = self.request_tool(str(tool), dict(task.metadata.get("args", {})))
+        status = getattr(result, "status", None)
+        return {
+            "tool": str(tool),
+            "status": status.value if status is not None else None,
+            "executed": bool(getattr(result, "ok", False)),
+        }
 
     def _produce(self, task: AgentTask) -> Any:
         context = task.context.get("task", "")

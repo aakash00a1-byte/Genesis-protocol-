@@ -23,14 +23,18 @@ from genesis.core import (
     MemoryWritePolicy,
     RiskLevel,
     ToolResult,
+    ToolStatus,
     json_safe,
 )
 from genesis.exceptions import PermissionDenied
 from genesis.memory.provider import MemoryProvider
 from genesis.models.registry import ModelRegistry
+from genesis.monitoring.health import HealthRegistry, HealthStatus
+from genesis.monitoring.metrics import Metrics
 from genesis.providers.base import ModelCapability, Provider
 from genesis.reflection.reflection import ReflectionEngine
 from genesis.resilience.policy import FailureEvent, FailureKind, ResiliencePolicy
+from genesis.risk.analyzer import RiskAnalyzer
 from genesis.router.router import ModelRouter
 from genesis.security.audit import AuditLogger
 from genesis.security.permissions import Permission, PolicyEngine
@@ -60,6 +64,7 @@ class KernelResponse:
     qa: dict[str, Any] | None = None
     reflection: dict[str, Any] | None = None
     resilience: dict[str, Any] | None = None
+    risk: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return json_safe(self.__dict__)
@@ -80,6 +85,9 @@ class GenesisKernel:
         policy_engine: PolicyEngine | None = None,
         transparency: TransparencyReport | None = None,
         resilience: ResiliencePolicy | None = None,
+        metrics: Metrics | None = None,
+        health: HealthRegistry | None = None,
+        risk_analyzer: RiskAnalyzer | None = None,
     ) -> None:
         self.config = config or GenesisConfig()
         self.memory = memory or MemoryProvider(self.config.memory)
@@ -90,6 +98,9 @@ class GenesisKernel:
         self.policy_engine = policy_engine or PolicyEngine()
         self.transparency = transparency or TransparencyReport()
         self.resilience = resilience or ResiliencePolicy()
+        self.metrics = metrics or Metrics()
+        self.risk_analyzer = risk_analyzer or RiskAnalyzer()
+        self.health_registry = health or HealthRegistry()
         self.gateway = gateway or ToolGateway(
             self.tools,
             policy_engine=self.policy_engine,
@@ -162,6 +173,34 @@ class GenesisKernel:
             request, max_risk=max_risk, timeout_seconds=timeout_seconds
         )
 
+    def agent_tool_request(
+        self,
+        tool: str,
+        args: dict[str, Any],
+        actor: str,
+        role: str,
+        *,
+        cwd: str = "/workspace",
+        max_risk: RiskLevel = RiskLevel.MEDIUM,
+    ) -> ToolResult:
+        """Route an agent's tool request through the normal authority gate.
+
+        This is the *only* way an agent reaches a tool: it builds a ToolRequest
+        and hands it to the same gateway as everything else. The risk ceiling is
+        bounded (MEDIUM by default) so an agent cannot request a HIGH/CRITICAL
+        tool unless the caller raises the ceiling explicitly.
+        """
+        request = ToolRequest(
+            tool=tool, args=dict(args), actor=actor, role=role, cwd=cwd
+        )
+        result = self.execute_tool(request, max_risk=max_risk)
+        self.metrics.incr("kernel.agent_tool_requests")
+        if result.status is ToolStatus.SUCCESS:
+            self.metrics.incr("kernel.agent_tool_granted")
+        else:
+            self.metrics.incr("kernel.agent_tool_denied")
+        return result
+
     # ------------------------------------------------------------------
     # Model routing (Kernel is the only model authority)
     # ------------------------------------------------------------------
@@ -228,6 +267,25 @@ class GenesisKernel:
 
         # 2. Task classification -> capability
         capability = self._classify(request.task)
+
+        # 2b. Risk analysis (offline, advisory). The Kernel stays the authority:
+        # the assessment informs the decision, it does not bypass the gate.
+        risk_assessment = self.risk_analyzer.analyze_and_alert(
+            request.task, source="kernel.task"
+        )
+        self.metrics.incr("kernel.risk.assessments")
+        self.metrics.observe("kernel.risk.score", risk_assessment.score)
+        if risk_assessment.escalate:
+            self.metrics.incr("kernel.risk.escalations")
+        if risk_assessment.delivered is False:
+            # Threshold met but no verified alert provider is wired. Recorded,
+            # not hidden — the same honesty rule as the failure ledger.
+            self.transparency.failures.record(
+                component="kernel.risk_alert",
+                what="risk alert was not delivered",
+                why="no verified alert provider is configured",
+                impact=f"level={risk_assessment.level.value} was not broadcast",
+            )
 
         # 3. Planning + agent coordination (Phase 5) or direct completion
         result = None
@@ -312,6 +370,9 @@ class GenesisKernel:
             },
         )
         audit_ids.append(event.event_id)
+        self.metrics.incr("kernel.runs")
+        if errors:
+            self.metrics.incr("kernel.runs.failed")
 
         # Close the transparency loop: what did the decision actually deliver?
         self.transparency.decisions.resolve(
@@ -345,6 +406,7 @@ class GenesisKernel:
             qa=qa_result.to_dict() if qa_result else None,
             reflection=reflection_result.to_dict() if reflection_result else None,
             resilience=resilience_result,
+            risk=risk_assessment.to_dict(),
         )
 
     # ------------------------------------------------------------------
@@ -362,6 +424,31 @@ class GenesisKernel:
 
     # ------------------------------------------------------------------
     def health(self) -> dict[str, Any]:
+        checks = {
+            "memory": lambda: (
+                HealthStatus.OK,
+                f"provider={self.memory.name}",
+            ),
+            "tools": lambda: (
+                HealthStatus.OK if len(self.tools.all()) > 0 else HealthStatus.DEGRADED,
+                f"{len(self.tools.all())} tools registered",
+            ),
+            "audit": lambda: (
+                HealthStatus.OK if self.audit.enabled else HealthStatus.DEGRADED,
+                f"events={self.audit.count()}",
+            ),
+            "coordinator": lambda: (
+                HealthStatus.OK if self.coordinator is not None else HealthStatus.DEGRADED,
+                "wired" if self.coordinator is not None else "not wired",
+            ),
+            "qa": lambda: (
+                HealthStatus.OK if self.qa is not None else HealthStatus.DEGRADED,
+                "wired" if self.qa is not None else "not wired",
+            ),
+        }
+        for name, checker in checks.items():
+            self.health_registry.register(name, checker)
+        report = self.health_registry.to_dict()
         return {
             "app": self.config.app_name,
             "version": self.config.version,
@@ -370,4 +457,6 @@ class GenesisKernel:
             "memory_provider": self.memory.name,
             "tools": len(self.tools.all()),
             "audit_events": self.audit.count(),
+            "health": report,
+            "metrics": self.metrics.snapshot(),
         }

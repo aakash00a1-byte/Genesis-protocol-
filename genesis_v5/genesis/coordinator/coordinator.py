@@ -41,10 +41,13 @@ class AgentCoordinator:
         registry: AgentRegistry,
         planner: Planner,
         config: CoordinatorConfig | None = None,
+        *,
+        tool_request: Callable[[str, dict[str, Any]], Any] | None = None,
     ) -> None:
         self.registry = registry
         self.planner = planner
         self.config = config or CoordinatorConfig()
+        self._tool_request = tool_request
         self._state: dict[str, Any] = {}
 
     # ------------------------------------------------------------------
@@ -172,6 +175,14 @@ class AgentCoordinator:
                 agent = self.registry.get(step.agent)
                 if agent is None:
                     raise RetryLimitExceeded(f"unknown agent {step.agent!r}")
+                if self._tool_request is not None:
+                    # Bind the Kernel-mediated tool gateway so the agent's tool
+                    # requests travel the full authority gate. The agent still
+                    # cannot execute anything directly. The actor/role of this
+                    # run are captured so the gate sees the real requester.
+                    agent.bind_tool_request(
+                        lambda name, args: self._tool_request(name, args, actor, role)
+                    )
                 task = AgentTask(
                     agent=step.agent,
                     instruction=step.instruction,

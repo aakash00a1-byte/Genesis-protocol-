@@ -107,7 +107,18 @@ Status per phase. Only functionality that exists and is tested is marked done.
 
 ## Total test suite
 
-166 tests collected; all pass (`python -m pytest tests/ -tb=no -q`).
+248 tests collected; all pass (`python -m pytest tests/ -tb=no -q`).
+
+## V6 — agent audit, auto-implement & verification
+
+Post-V5 hardening, implemented only where a real gap was found in the code.
+
+| Item | Scope | Status | Evidence |
+|------|-------|--------|----------|
+| Risk analysis | `RiskAnalyzer`: weighted signal scoring, level, recommendation, bounded escalation; advisory only | ✅ Done | `tests/unit/test_risk.py` |
+| Alert boundary | `AlertNotifier` interface; default provider honest (`available=False`); undelivered alerts recorded | ✅ Done | `tests/unit/test_risk.py` |
+| Agent tool mediation | Agents request tools via `Kernel.agent_tool_request`; bounded risk ceiling; no direct execution | ✅ Done | `tests/unit/test_agent_authority.py` |
+| Kernel observability | Kernel wired to `Metrics` + `HealthRegistry`; `run()` records risk + counters; `health()` reports subsystems | ✅ Done | `tests/unit/test_agent_authority.py` |
 
 ## Not planned (out of scope for V5)
 

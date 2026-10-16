@@ -99,6 +99,15 @@ class Agent(ABC):
             )
         return self._tool_request(name, args)
 
+    def bind_tool_request(self, tool_request: ToolRequestFn) -> None:
+        """Attach a Kernel-mediated tool gateway to this agent.
+
+        Called by the coordinator so an agent's tool requests travel the same
+        gate (policy, permission, sandbox, audit) as everything else. An agent
+        still cannot execute anything itself — it can only ask.
+        """
+        self._tool_request = tool_request
+
     def reset(self) -> None:
         self.state = AgentState.IDLE
         self._metadata.clear()

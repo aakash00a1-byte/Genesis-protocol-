@@ -38,6 +38,8 @@ python -m pytest tests/unit/test_memory.py -q
   limit, validation.
 - `genesis/reflection/`, `genesis/qa/` — bounded reflection + independent
   verifier.
+- `genesis/risk/` — `RiskAnalyzer`: scores task risk (offline, advisory),
+  recommends a response, and holds the (opt-in) alert-notifier boundary.
 - `genesis/monitoring/` — Metrics, health/readiness, ErrorTracker.
 - `genesis/runtime/` — ApplicationRuntime, WorkerPool, graceful shutdown.
 - `genesis/logging/` — structured logging setup (text/JSON, redacting).
@@ -103,6 +105,11 @@ python3 genesis_serve.py 8000           # HTTP service (/v1/generate, /v1/submit
 - `genesis/transparency/` — decision + failure ledger; no hidden failures.
 - `genesis/resilience/` — learn from failure without blame.
 - `genesis/care/` — STEADY / REFRAME / crisis referral; wired into the kernel.
+- `genesis/risk/` — `RiskAnalyzer` scores task risk and recommends a response.
+  Advisory only: it informs the Kernel, it never bypasses the gate. The alert
+  notifier reports `available=False` until a verified provider is wired; an
+  undelivered alert at/above threshold is recorded in the failure ledger, not
+  hidden.
 - `genesis/quantum/` — pure-Python complex statevector simulator, honest
   backend detection, optional Qiskit/PennyLane adapters, and real algorithms
   (`algorithms.py`: Grover, QFT, Deutsch-Jozsa, CHSH).
@@ -116,6 +123,9 @@ python3 genesis_serve.py 8000           # HTTP service (/v1/generate, /v1/submit
 ### Invariants that must not be broken
 
 - Proposals never execute on their own. `bypass_available` is always false.
+- Agents never execute a tool directly. An agent *asks*; the request travels
+  the Kernel's authority gate (`Kernel.agent_tool_request`) with the run's
+  actor/role, under a bounded risk ceiling (MEDIUM by default).
 - Every denial is recorded with a reason and surfaced, never dropped.
 - No hidden failures. No blame language in resilience or care output.
 - The thought-partner never decides for the user (`decided_for_user == 0`).
