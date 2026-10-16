@@ -71,6 +71,28 @@ Audit Event
   gate, with the run's actor/role and a bounded risk ceiling (MEDIUM default).
   An agent with no gateway bound reports `no_gateway` instead of executing.
 
+#### Registered agents (8)
+
+All are offline `_DeterministicAgent` subclasses: they produce a deterministic
+`[verb] instruction` string and carry no provider dependency of their own.
+They reach tools only through the Kernel gateway, and only when the *task*
+declares one (`metadata={"tool": ..., "args": {...}}`); an agent cannot invent
+a tool call.
+
+| Agent | Verb | Selected for | Typical tools (via gate) |
+|-------|------|--------------|--------------------------|
+| `planning` | planned | `plan`/`design`/`architecture` | none by default |
+| `research` | researched | `research`/`search`/`investigate` | `search.web`, `file.read` |
+| `coding` | implemented | `code`/`implement`/`refactor` | `file.read`, `file.write`, `git.*` |
+| `qa` | verified | `test`/`verify`/`qa` | `file.read`, `python.run` |
+| `security` | security-reviewed | `security`/`audit`/`threat` | `file.read` |
+| `deployment` | prepared | `deploy`/`release`/`package` | none by default |
+| `memory` | memorized | always (final step) | none by default |
+| `generic` | processed | any unmapped label | none by default |
+
+Provider dependency: none. Real model providers stay disabled unless
+configured by environment variables (see `genesis/providers/`).
+
 ### Risk (`genesis/risk/`)
 - `RiskAnalyzer` — scores a task's risk from explicit, weighted signals
   (destructive, credential access, network, privilege, secret-like, size),
@@ -79,6 +101,10 @@ Audit Event
 - `AlertNotifier` boundary — the default `NoAlertProvider` reports
   `available=False` and never fabricates delivery; an undelivered alert at or
   above threshold is recorded in the failure ledger.
+- Scope honesty: this module scores the text it is given. It does not fetch
+  external disaster feeds and does not deliver notifications. Those require a
+  real, verified provider plugged into `AlertNotifier`, and that has not been
+  configured or tested here.
 
 ### Tool Fabric (`genesis/tools/`)
 - `ToolRegistry` — every tool declares identity, capability, schema,

@@ -65,6 +65,9 @@ class AgentCoordinator:
         Returns the aggregated summary text (string) so the Kernel can treat
         it uniformly with direct model completions.
         """
+        # Seed the run context so every agent receives the originating task,
+        # not an empty string. Without this, agents run context-free.
+        self.set_current_task(task)
         plan = self.planner.plan(task)
         plan_result = self.execute_plan(
             plan,
@@ -157,7 +160,9 @@ class AgentCoordinator:
             # Surface the first error deterministically (list order).
             first = min(errors, key=lambda sid: [s for s, _ in step_items].index(sid))
             raise errors[first]
-        return results
+        # Deterministic ordering: emit results in the plan's step order, not in
+        # the order the parallel workers happened to finish.
+        return {sid: results[sid] for sid, _ in step_items if sid in results}
 
     def _run_step(
         self,

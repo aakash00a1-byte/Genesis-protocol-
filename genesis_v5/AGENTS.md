@@ -40,6 +40,8 @@ python -m pytest tests/unit/test_memory.py -q
   verifier.
 - `genesis/risk/` — `RiskAnalyzer`: scores task risk (offline, advisory),
   recommends a response, and holds the (opt-in) alert-notifier boundary.
+  Scoring only — it does not fetch external disaster data and does not
+  deliver notifications (no verified provider is wired).
 - `genesis/monitoring/` — Metrics, health/readiness, ErrorTracker.
 - `genesis/runtime/` — ApplicationRuntime, WorkerPool, graceful shutdown.
 - `genesis/logging/` — structured logging setup (text/JSON, redacting).
@@ -105,6 +107,47 @@ python3 genesis_chat.py                 # interactive thought-partner
 python3 genesis_serve.py 8000           # HTTP service (/v1/generate, /v1/submit)
 ```
 
+### Agent inventory & verified workflows (V6 audit)
+
+Verified against the running code, not the roadmap.
+
+Agents (8, all offline, no provider dependency): `planning`, `research`,
+`coding`, `qa`, `security`, `deployment`, `memory`, `generic`. Each is a
+`_DeterministicAgent`; selection is keyword-based in `TaskDecomposer` ->
+`Planner`. `memory` is always the final step. See the architecture doc for the
+full table (verb, selection keywords, typical tools).
+
+Execution path (verified end to end in
+`tests/integration/test_multi_agent.py`):
+`Kernel.run` -> memory retrieval -> classification -> risk analysis ->
+`AgentCoordinator.run_task` (seeds the task context) -> `Planner.plan` ->
+per-level bounded-parallel `_run_step` -> agent -> `Kernel.agent_tool_request`
+-> ToolGateway (policy -> permission -> sandbox -> execute -> audit) ->
+reflection -> independent QA -> memory write (redacted) -> audit.
+
+Verified capabilities:
+- Role-based denial on the agent path (e.g. `researcher` cannot `file.write`).
+- Risk ceiling: the agent path defaults to MEDIUM; `terminal.run` (HIGH) is
+  denied even for `admin` unless the caller raises `max_risk` explicitly.
+- Tool failure and timeout are surfaced to the caller and audited
+  (`tool_failure` / `tool_timeout`), never hidden.
+- Bounded retries: `RetryLimitExceeded` after `max_retries`; no infinite loop.
+- Deterministic ordering: parallel-level results are emitted in plan order and
+  the first error is chosen deterministically.
+- QA rejection: failure markers / empty results fail verification and are
+  recorded in the failure ledger.
+- Memory isolation: scopes are isolated; secrets are redacted in strings
+  *and* structured (dict/list) values before persistence.
+
+Limitations (do not overstate):
+- The risk module scores risk only. It does not pull external disaster data
+  and does not deliver alerts; the default notifier reports
+  `available=False` and an undelivered alert at/above threshold is recorded,
+  not sent.
+- Agents are deterministic offline stubs. Real model providers are disabled
+  unless configured by environment variables.
+- No deployment. Push requires a write-scoped token that is not available here.
+
 ### Layers added on top of phases 4-10
 
 - `genesis/transparency/` — decision + failure ledger; no hidden failures.
@@ -131,6 +174,11 @@ python3 genesis_serve.py 8000           # HTTP service (/v1/generate, /v1/submit
 - Agents never execute a tool directly. An agent *asks*; the request travels
   the Kernel's authority gate (`Kernel.agent_tool_request`) with the run's
   actor/role, under a bounded risk ceiling (MEDIUM by default).
+- Every agent receives the originating task in `AgentTask.context` (seeded by
+  `AgentCoordinator.run_task`); agents never run context-free.
+- Parallel-level results are emitted deterministically in plan order.
+- Secrets are redacted in strings *and* inside structured memory values;
+  `secret_redacted` never claims a redaction that did not happen.
 - Every denial is recorded with a reason and surfaced, never dropped.
 - No hidden failures. No blame language in resilience or care output.
 - The thought-partner never decides for the user (`decided_for_user == 0`).

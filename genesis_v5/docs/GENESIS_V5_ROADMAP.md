@@ -107,7 +107,7 @@ Status per phase. Only functionality that exists and is tested is marked done.
 
 ## Total test suite
 
-248 tests collected; all pass (`python -m pytest tests/ -tb=no -q`).
+267 tests collected; all pass (`python -m pytest tests/ -tb=no -q`).
 
 ## V6 — agent audit, auto-implement & verification
 
@@ -119,6 +119,10 @@ Post-V5 hardening, implemented only where a real gap was found in the code.
 | Alert boundary | `AlertNotifier` interface; default provider honest (`available=False`); undelivered alerts recorded | ✅ Done | `tests/unit/test_risk.py` |
 | Agent tool mediation | Agents request tools via `Kernel.agent_tool_request`; bounded risk ceiling; no direct execution | ✅ Done | `tests/unit/test_agent_authority.py` |
 | Kernel observability | Kernel wired to `Metrics` + `HealthRegistry`; `run()` records risk + counters; `health()` reports subsystems | ✅ Done | `tests/unit/test_agent_authority.py` |
+| Multi-agent integration | Delegation, role denial, risk ceiling, tool failure/timeout, retries, QA rejection, deterministic ordering, memory isolation | ✅ Done | `tests/integration/test_multi_agent.py` |
+| Task-context propagation | Fix: `AgentCoordinator.run_task` seeds `AgentTask.context` with the originating task | ✅ Done | `tests/integration/test_multi_agent.py` |
+| Deterministic parallel ordering | Fix: parallel-level results emitted in plan order; first error chosen deterministically | ✅ Done | `tests/integration/test_multi_agent.py` |
+| Structured-value redaction | Fix: secrets in dict/list memory values are redacted (was a string-only gap) | ✅ Done | `tests/integration/test_multi_agent.py` |
 
 ## Not planned (out of scope for V5)
 

@@ -71,6 +71,34 @@ def sanitize_text(text: str, redact_secrets: bool = True) -> str:
     return result
 
 
+def redact_value(value: Any, redact_secrets: bool = True) -> Any:
+    """Redact secrets inside a value of any shape.
+
+    `sanitize_text` only sees strings; structured values (dicts, lists) would
+    otherwise pass through untouched while still being flagged as redacted.
+    This walks the structure and redacts every string leaf. Secret detection
+    needs the key/value pair (the pattern keys off ``token: <value>``), so a
+    secret-ish key with a scalar value redacts that value outright.
+    """
+    if not redact_secrets:
+        return value
+    if isinstance(value, str):
+        return sanitize_text(value)
+    if isinstance(value, dict):
+        redacted: dict[Any, Any] = {}
+        for key, item in value.items():
+            if isinstance(item, str):
+                pair = f"{key}: {item}"
+                if sanitize_text(pair) != pair:
+                    redacted[key] = "[REDACTED]"
+                    continue
+            redacted[key] = redact_value(item, redact_secrets)
+        return redacted
+    if isinstance(value, (list, tuple)):
+        return [redact_value(item, redact_secrets) for item in value]
+    return value
+
+
 def json_safe(value: Any) -> Any:
     """Best-effort conversion to JSON-serializable primitives."""
     if value is None or isinstance(value, (str, int, float, bool)):

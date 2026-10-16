@@ -21,7 +21,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from genesis.core import RiskLevel, now_ms, sanitize_text
+from genesis.core import RiskLevel, now_ms
 
 # Signal weights. Kept explicit so a reviewer can see exactly what moves the
 # score and by how much.
@@ -193,8 +193,9 @@ class RiskAnalyzer:
 
         The alert is only *delivered* if a verified notifier is available. The
         assessment is returned either way, so a missing provider degrades
-        gracefully instead of hiding the risk. Secrets in the text are redacted
-        before anything leaves this method.
+        gracefully instead of hiding the risk. The alert carries the level,
+        score, signals, and source only — never the raw task text — so no
+        secret from the input can leave this method.
         """
         assessment = self.analyze(text, source=source)
         if assessment.level.rank() >= self.alert_at.rank():

@@ -17,6 +17,7 @@ from genesis.core import (
     MemoryScope,
     MemoryWritePolicy,
     now_ms,
+    redact_value,
     sanitize_text,
 )
 from genesis.exceptions import MemoryError_
@@ -317,9 +318,13 @@ class MemoryProvider:
         return True
 
     def _cast(self, original: Any, text: str) -> Any:
-        if isinstance(original, (dict, list, tuple, int, float, bool)) or original is None:
-            if isinstance(original, tuple):
-                return list(original)
+        if isinstance(original, tuple):
+            original = list(original)
+        if isinstance(original, (dict, list)):
+            # Structured values must be redacted too, or secrets inside them
+            # slip through while `secret_redacted` still claims otherwise.
+            return redact_value(original, self.config.redact_secrets)
+        if isinstance(original, (int, float, bool)) or original is None:
             return original
         return text
 
