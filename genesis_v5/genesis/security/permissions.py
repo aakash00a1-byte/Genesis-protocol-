@@ -158,7 +158,7 @@ class RoleCatalog:
 class PolicyEngine:
     """Decides whether a request passes the permission gate."""
 
-    def __init__(self, catalog: RoleCatalog = RoleCatalog) -> None:
+    def __init__(self, catalog: type[RoleCatalog] = RoleCatalog) -> None:
         self._catalog = catalog
 
     def check(

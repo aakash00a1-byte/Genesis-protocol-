@@ -26,6 +26,9 @@ from .aggregator import AggregatedResult, aggregate
 
 logger = logging.getLogger(__name__)
 
+# A Kernel-mediated tool gateway: (tool, args, actor, role) -> ToolResult.
+ToolGatewayFn = Callable[[str, dict[str, Any], str, str], Any]
+
 
 @dataclass
 class CoordinatorConfig:
@@ -42,7 +45,7 @@ class AgentCoordinator:
         planner: Planner,
         config: CoordinatorConfig | None = None,
         *,
-        tool_request: Callable[[str, dict[str, Any]], Any] | None = None,
+        tool_request: ToolGatewayFn | None = None,
     ) -> None:
         self.registry = registry
         self.planner = planner
@@ -185,8 +188,9 @@ class AgentCoordinator:
                     # requests travel the full authority gate. The agent still
                     # cannot execute anything directly. The actor/role of this
                     # run are captured so the gate sees the real requester.
+                    gateway = self._tool_request
                     agent.bind_tool_request(
-                        lambda name, args: self._tool_request(name, args, actor, role)
+                        lambda name, args, _gw=gateway: _gw(name, args, actor, role)
                     )
                 task = AgentTask(
                     agent=step.agent,

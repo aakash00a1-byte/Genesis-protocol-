@@ -6,6 +6,7 @@ Kernel integration.
 """
 from __future__ import annotations
 
+import os
 import time
 
 import pytest
@@ -263,6 +264,42 @@ def test_sandbox_blocks_path_escape() -> None:
     sandbox = Sandbox(SandboxPolicy(allow_paths=["/workspace"]))
     with pytest.raises(SandboxViolation):
         sandbox.check("file.read", {"path": "/workspace/../../etc/passwd"})
+
+
+def test_sandbox_blocks_symlink_escape(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    # A symlink placed inside the allowed root must not become a back door to
+    # a path outside it. `abspath` would miss this; `realpath` catches it.
+    root = tmp_path / "root"
+    root.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("secret")
+    link = root / "escape"
+    link.symlink_to(outside)
+
+    sandbox = Sandbox(SandboxPolicy(allow_paths=[str(root)]))
+    with pytest.raises(SandboxViolation):
+        sandbox.check("file.read", {"path": str(link)})
+    # The real target is inside the root, so this one is allowed.
+    inside = root / "real.txt"
+    inside.write_text("ok")
+    sandbox.check("file.read", {"path": str(inside)})  # no raise
+
+
+def test_symlink_escape_is_blocked_end_to_end(gateway: ToolGateway, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    outside = tmp_path / "outside.txt"
+    outside.write_text("OUTSIDE-ROOT-SECRET")
+    link = "/workspace/link_escape_probe"
+    if os.path.islink(link) or os.path.exists(link):
+        os.unlink(link)
+    os.symlink(str(outside), link)
+    try:
+        result = gateway.execute(
+            ToolRequest(tool="file.read", args={"path": link}, role="admin")
+        )
+        assert result.status == ToolStatus.SANDBOX_VIOLATION
+        assert "OUTSIDE-ROOT-SECRET" not in str(result.result)
+    finally:
+        os.unlink(link)
 
 
 def test_sandbox_allows_inside_root() -> None:

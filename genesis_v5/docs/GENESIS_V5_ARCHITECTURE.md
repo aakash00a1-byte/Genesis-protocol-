@@ -110,7 +110,9 @@ configured by environment variables (see `genesis/providers/`).
 - `ToolRegistry` — every tool declares identity, capability, schema,
   permission, risk level, invocation policy, timeout.
 - `Sandbox` — blocks credential access, destructive ops, unauthorized
-  network access, persistence, and paths outside the sandbox root.
+  network access, persistence, and paths outside the sandbox root. Path
+  checks use `os.path.realpath`, so symlinks are resolved and cannot be used
+  to reach a target outside the allowed root.
 - `ToolGateway` — the only execution path: Policy Check → Permission Gate →
   Sandbox → Execute → Result → Audit. No model or agent calls tools directly.
 

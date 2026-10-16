@@ -138,6 +138,9 @@ Verified capabilities:
   recorded in the failure ledger.
 - Memory isolation: scopes are isolated; secrets are redacted in strings
   *and* structured (dict/list) values before persistence.
+- Sandbox path checks resolve symlinks (`os.path.realpath`), so a link placed
+  inside the allowed root cannot be used to read a target outside it
+  (`tests/unit/test_tools.py::test_sandbox_blocks_symlink_escape`).
 
 Limitations (do not overstate):
 - The risk module scores risk only. It does not pull external disaster data

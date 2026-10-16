@@ -202,10 +202,11 @@ def test_memory_backup_creates_timestamped_file(tmp_path) -> None:  # type: igno
     base = os.path.join(dirname, "memory.json")
     provider = MemoryProvider()
     provider.write(MemoryScope.PROJECT, "k", "v")
-    provider.backup(base)
+    count = provider.backup(base)
     files = os.listdir(dirname)
     assert files and "memory.json" not in files  # backup is re-stamped
     assert files[0].endswith(".json")
+    assert count == 1  # backup reports the number of entries persisted
 
 
 # ------------------------------------------------------------------

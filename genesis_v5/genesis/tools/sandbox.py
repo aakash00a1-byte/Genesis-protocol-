@@ -99,20 +99,27 @@ class Sandbox:
     def _check_path(self, path: str) -> None:
         if not path:
             return
-        resolved = os.path.abspath(os.path.expanduser(path))
-        allowed = [
-            os.path.abspath(os.path.expanduser(p))
-            for p in self.policy.allow_paths
-        ]
+        resolved = self._resolve(path)
+        allowed = [self._resolve(p) for p in self.policy.allow_paths]
         if not any(
             resolved == a or resolved.startswith(a.rstrip("/") + "/")
             for a in allowed
         ):
             raise SandboxViolation(f"path outside sandbox: {path}")
         for denied in self.policy.deny_paths:
-            d = os.path.abspath(os.path.expanduser(denied))
+            d = self._resolve(denied)
             if resolved == d or resolved.startswith(d.rstrip("/") + "/"):
                 raise SandboxViolation(f"path in denied zone: {path}")
+
+    @staticmethod
+    def _resolve(path: str) -> str:
+        """Fully resolve a path, following symlinks.
+
+        `abspath` only normalizes `..` lexically, so a symlink placed inside
+        the allowed root becomes a back door to a path outside it. `realpath`
+        resolves the link, so the boundary is checked against the real target.
+        """
+        return os.path.realpath(os.path.expanduser(path))
 
     @staticmethod
     def _extract_paths(args: dict) -> list[str]:

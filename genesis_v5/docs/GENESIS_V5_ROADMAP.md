@@ -107,7 +107,7 @@ Status per phase. Only functionality that exists and is tested is marked done.
 
 ## Total test suite
 
-267 tests collected; all pass (`python -m pytest tests/ -tb=no -q`).
+269 tests collected; all pass (`python -m pytest tests/ -tb=no -q`).
 
 ## V6 — agent audit, auto-implement & verification
 
@@ -123,6 +123,9 @@ Post-V5 hardening, implemented only where a real gap was found in the code.
 | Task-context propagation | Fix: `AgentCoordinator.run_task` seeds `AgentTask.context` with the originating task | ✅ Done | `tests/integration/test_multi_agent.py` |
 | Deterministic parallel ordering | Fix: parallel-level results emitted in plan order; first error chosen deterministically | ✅ Done | `tests/integration/test_multi_agent.py` |
 | Structured-value redaction | Fix: secrets in dict/list memory values are redacted (was a string-only gap) | ✅ Done | `tests/integration/test_multi_agent.py` |
+| Sandbox symlink escape | Fix: path checks resolve symlinks (`os.path.realpath`); a link inside the root can no longer reach outside it | ✅ Done | `tests/unit/test_tools.py` |
+| Security-core forward refs | Fix: `AuditEvent`/`ErrorTracker` annotations resolved at runtime (`get_type_hints` no longer raises `NameError`) | ✅ Done | `genesis/security/core.py` |
+| Memory backup contract | Fix: `save_to` returns the entry count it persists, matching `backup()`'s declared `int` | ✅ Done | `tests/unit/test_runtime.py` |
 
 ## Not planned (out of scope for V5)
 

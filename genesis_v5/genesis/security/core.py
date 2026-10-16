@@ -10,8 +10,9 @@ No model, agent, tool, or provider gets implicit authority.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from genesis.core import AuditEvent
 from genesis.exceptions import PermissionDenied, RateLimitExceeded, ValidationError
 from genesis.security.audit import AuditLogger
 from genesis.security.permissions import Permission, PolicyEngine, Role, RoleCatalog
@@ -22,6 +23,12 @@ from genesis.security.validation import (
     OutputValidator,
     ValidationResult,
 )
+
+if TYPE_CHECKING:
+    # Type-only: importing ErrorTracker at runtime here would create a cycle
+    # (security -> monitoring -> security.redaction). The runtime import is
+    # deferred inside SecurityCore.__init__.
+    from genesis.monitoring.errors import ErrorTracker
 
 
 @dataclass

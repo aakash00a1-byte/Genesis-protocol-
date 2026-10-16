@@ -250,8 +250,12 @@ class MemoryProvider:
             count += 1
         return count
 
-    def save_to(self, path: str) -> None:
-        """Persist a snapshot to disk (JSON, secrets redacted)."""
+    def save_to(self, path: str) -> int:
+        """Persist a snapshot to disk (JSON, secrets redacted).
+
+        Returns the number of entries written, so callers like ``backup`` can
+        report how much was persisted.
+        """
         import json
         import os
 
@@ -264,6 +268,7 @@ class MemoryProvider:
         serialized = sanitize_text(serialized)
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(serialized)
+        return len(payload["snapshot"].get("entries", []))
 
     def load_from(self, path: str) -> int:
         """Restore a snapshot from a JSON file. Returns entry count."""
