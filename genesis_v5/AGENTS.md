@@ -91,6 +91,11 @@ Work is on branch `genesis-v5-recovered`, pushed to
 git: `git fetch origin && git checkout genesis-v5-recovered`. Do not rely on a
 previous chat transcript; the branch is the source of truth.
 
+> V6 note: commit `feat(v6): risk analysis + agent tool mediation + kernel
+> observability` may exist **locally only** if the available token was
+> read-only. Check `git log origin/genesis-v5-recovered..HEAD` and push it
+> before continuing. Never commit or print a token.
+
 ### Runnable entry points
 
 ```bash
