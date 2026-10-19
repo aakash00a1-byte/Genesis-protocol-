@@ -71,7 +71,12 @@ def main() -> int:
     for cp in state.checkpoints:
         print(f"      iter {cp.iteration:<2} -> {cp.status}")
 
-    _line("3. REFUSED: FORBIDDEN ACTIONS (never reach an agent)")
+    _line("3. READ-ONLY RECON (auto-approved, still gated)")
+    for tool, outcome in result.recon.items():
+        print(f"  {tool:<12} granted={outcome['granted']!s:<5} status={outcome['status']}")
+    print("  each call still travelled the Tool Gateway (policy/sandbox/audit)")
+
+    _line("4. REFUSED: FORBIDDEN ACTIONS (never reach an agent)")
     for forbidden in [
         "git push origin main",
         "deploy this to production",
@@ -82,7 +87,7 @@ def main() -> int:
         print(f"  {blocked.status.value:<10} {forbidden!r}")
         print(f"             reason: {blocked.blocked_reason}")
 
-    _line("4. SUMMARY")
+    _line("5. SUMMARY")
     print("  the loop drives the existing Kernel; it adds no execution path")
     print("  every tool call still goes through the Tool Gateway")
     print("  forbidden actions are refused before any work starts")

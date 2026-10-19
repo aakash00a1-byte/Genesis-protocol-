@@ -201,6 +201,11 @@ Limitations (do not overstate):
   off, not waited on. The loop always terminates within its bounds.
 - Forbidden actions and injected instructions are refused *before* any agent
   sees the task, and the refusal is audited.
+- Read-only recon (a fixed `AutonomyConfig.read_only_permissions` set) is
+  driven by the loop through `Kernel.execute_tool`; when autonomy is enabled
+  those permissions are granted to the autonomy actor so recon needs no
+  per-call approval. The gateway's LOW ceiling still applies, so a write or
+  exec tool is never covered. A denied recon never fails the run.
 - Checkpoints are atomic and redacted; a secret in a task never reaches disk.
 
 ### Invariants that must not be broken

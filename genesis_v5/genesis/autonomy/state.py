@@ -87,6 +87,8 @@ class TaskState:
     checkpoints: list[Checkpoint] = field(default_factory=list)
     audit_ids: list[str] = field(default_factory=list)
     blocked_reason: str = ""
+    # Read-only reconnaissance outcomes (tool -> status), for transparency.
+    recon: dict[str, Any] = field(default_factory=dict)
 
     def add_checkpoint(
         self,
@@ -124,6 +126,7 @@ class TaskState:
             "checkpoints": [c.to_dict() for c in self.checkpoints],
             "audit_ids": list(self.audit_ids),
             "blocked_reason": self.blocked_reason,
+            "recon": dict(self.recon),
         }
 
     @classmethod
@@ -145,6 +148,7 @@ class TaskState:
             ],
             audit_ids=list(data.get("audit_ids", [])),
             blocked_reason=str(data.get("blocked_reason", "")),
+            recon=dict(data.get("recon", {})),
         )
 
     @property

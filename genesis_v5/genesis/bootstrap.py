@@ -57,12 +57,21 @@ def build(
     transparency = TransparencyReport()
     resilience = ResiliencePolicy(max_continuations=cfg.agents.max_retries)
     care = CareCompanion()
+    # Standing, bounded auto-grants. Off unless explicitly configured. When the
+    # autonomy loop is enabled, its read-only recon permissions are granted to
+    # the autonomy actor so recon needs no per-call approval — but the gateway
+    # still enforces the LOW risk ceiling, so writes/exec are never covered.
+    auto_grant_permissions = list(cfg.security.auto_grant_permissions)
+    if cfg.autonomy.enabled:
+        auto_grant_permissions = sorted(
+            set(auto_grant_permissions) | set(cfg.autonomy.read_only_permissions)
+        )
     gateway = ToolGateway(
         tools,
         policy_engine=policy_engine,
         audit=audit,
         auto_grant_actor=cfg.security.auto_grant_actor,
-        auto_grant_permissions=cfg.security.auto_grant_permissions,
+        auto_grant_permissions=auto_grant_permissions,
         auto_grant_max_risk=_risk_level(cfg.security.auto_grant_max_risk),
     )
     factory = get_factory()

@@ -139,6 +139,16 @@ class AutonomyConfig:
     max_risk: str = "medium"
     # Refuse to run a task whose text looks like a prompt-injection attempt.
     refuse_on_injection: bool = True
+    # Read-only reconnaissance tools the loop may run without a human in the
+    # loop. Each call still travels the full gate; the standing grant only
+    # removes a per-call approval. Writes and exec tools are never listed here.
+    read_only_permissions: list[str] = field(
+        default_factory=lambda: [
+            "file.read",
+            "file.list",
+            "git.read",
+        ]
+    )
 
 
 @dataclass
@@ -229,6 +239,14 @@ class GenesisConfig:
             refuse_on_injection=_env_bool(
                 "GENESIS_AUTONOMY_REFUSE_INJECTION", True
             ),
+            read_only_permissions=[
+                p.strip()
+                for p in os.getenv(
+                    "GENESIS_AUTONOMY_READ_ONLY_PERMISSIONS",
+                    "file.read,file.list,git.read",
+                ).split(",")
+                if p.strip()
+            ],
         )
         return cfg
 

@@ -25,8 +25,9 @@ from enum import Enum
 from typing import Any
 
 from genesis.config.settings import AutonomyConfig
-from genesis.core import MemoryScope, RiskLevel
+from genesis.core import MemoryScope, RiskLevel, ToolStatus
 from genesis.kernel.kernel import KernelRequest
+from genesis.tools.gateway import ToolRequest
 
 from .acceptance import AcceptanceGate
 from .guard import TaskGuard
@@ -56,6 +57,7 @@ class AutonomyRunResult:
     checkpoint_path: str = ""
     blocked_reason: str = ""
     elapsed_ms: int = 0
+    recon: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -70,6 +72,7 @@ class AutonomyRunResult:
             "checkpoint_path": self.checkpoint_path,
             "blocked_reason": self.blocked_reason,
             "elapsed_ms": self.elapsed_ms,
+            "recon": dict(self.recon),
         }
 
 
@@ -90,6 +93,7 @@ class AutonomousLoop:
         store: TaskStore | None = None,
         acceptance: AcceptanceGate | None = None,
         changes: dict[str, str] | None = None,
+        recon: list[ToolRequest] | None = None,
         sleep: Any = time.sleep,
         now: Any = time.monotonic,
     ) -> None:
@@ -103,8 +107,25 @@ class AutonomousLoop:
         # The proposed code changes a run wants accepted. When a gate is wired,
         # a run is only "succeeded" if the gate accepts these.
         self.changes = changes
+        # Optional read-only reconnaissance, driven by the loop. Each request
+        # still travels the full gate; the standing grant only removes a
+        # per-call approval. Defaults to a small, fixed read-only set.
+        self.recon = recon if recon is not None else self._default_recon()
         self._sleep = sleep
         self._now = now
+
+    def _default_recon(self) -> list[ToolRequest]:
+        """A minimal read-only reconnaissance set for the run's actor.
+
+        These are only attempted when the standing grant lists the matching
+        permission; otherwise the gate denies them and the run proceeds. They
+        never mutate anything — writes and exec tools are never included.
+        """
+        return [
+            ToolRequest(tool="file.list", args={}),
+            ToolRequest(tool="git.status", args={}),
+            ToolRequest(tool="git.log", args={}),
+        ]
 
     # ------------------------------------------------------------------
     @property
@@ -151,6 +172,43 @@ class AutonomousLoop:
         if "error" in box:
             raise box["error"]
         return box.get("response")
+
+    # ------------------------------------------------------------------
+    def _recon_once(self, state: TaskState) -> dict[str, Any]:
+        """Run the loop's read-only recon through the full authority gate.
+
+        Every request is executed via ``Kernel.execute_tool`` — policy,
+        permission, sandbox, and audit all still apply. A request is only
+        auto-approved when the gateway's standing grant covers it (matching
+        actor + listed permission + LOW ceiling); otherwise it is denied and
+        recorded. Nothing here is executed directly, and nothing here writes.
+        """
+        outcomes: dict[str, Any] = {}
+        for base in self.recon:
+            request = ToolRequest(
+                tool=base.tool,
+                args=dict(base.args),
+                actor=state.actor,
+                role=state.role,
+                cwd=base.cwd,
+            )
+            try:
+                result = self.kernel.execute_tool(request)
+                status = getattr(result, "status", None)
+                status_value = (
+                    status.value if isinstance(status, ToolStatus) else str(status)
+                )
+                outcomes[base.tool] = {
+                    "status": status_value,
+                    "granted": status is ToolStatus.SUCCESS,
+                }
+            except Exception as exc:  # noqa: BLE001
+                outcomes[base.tool] = {
+                    "status": "error",
+                    "granted": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+        return outcomes
 
     # ------------------------------------------------------------------
     def run(self, task: str, *, actor: str = "autonomy", role: str = "coder") -> AutonomyRunResult:
@@ -242,6 +300,20 @@ class AutonomousLoop:
                 "max_iterations": max_iterations,
             },
         )
+
+        # Read-only reconnaissance, driven by the loop through the full gate.
+        # Bounded (a fixed, small set) and side-effect free. A denied recon
+        # never fails the run; it is recorded and the run proceeds.
+        recon = self._recon_once(state)
+        state.recon = recon
+        if recon:
+            self.kernel.audit.record(
+                event_type="autonomy.recon",
+                actor=state.actor,
+                action="autonomy.recon",
+                status="success",
+                details={"run_id": state.run_id, "outcomes": recon},
+            )
 
         retries_used = 0
         status = RunStatus.FAILED
@@ -375,4 +447,5 @@ class AutonomousLoop:
             checkpoint_path=path or self.store.path_for(state.run_id),
             blocked_reason=state.blocked_reason,
             elapsed_ms=max(0, state.updated_ms - state.started_ms),
+            recon=dict(state.recon),
         )
