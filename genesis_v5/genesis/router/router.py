@@ -6,8 +6,8 @@ reliability -> best provider -> controlled fallback.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 from genesis.core import ModelResult
 from genesis.exceptions import ProviderError, RetryLimitExceeded
@@ -54,7 +54,7 @@ class ModelRouter:
         specs = [
             s
             for s in self.registry.find_by_capability(capability)
-            if s.enabled and (not offline or self._is_offline(s.provider))
+            if s.enabled and self._selectable(s.provider, offline)
         ]
         specs.sort(key=lambda s: (s.cost_per_1k_tokens, -s.reliability))
         for spec in specs:
@@ -96,7 +96,7 @@ class ModelRouter:
         specs = [
             s
             for s in self.registry.find_by_capability(capability)
-            if s.enabled and (not offline or self._is_offline(s.provider))
+            if s.enabled and self._selectable(s.provider, offline)
         ]
         specs.sort(key=lambda s: (s.cost_per_1k_tokens, -s.reliability))
 
@@ -143,6 +143,17 @@ class ModelRouter:
         raise RetryLimitExceeded(
             f"all fallbacks exhausted for {capability.value}: {decision_errors}"
         )
+
+    def _selectable(self, provider: str, offline: bool) -> bool:
+        """Whether a provider may be selected for this run.
+
+        Original contract, unchanged: an offline run selects only
+        offline-capable providers (the mock); an online run may select any
+        enabled provider. Live providers are only ever present in the registry
+        when they are configured, so an online run never picks an unconfigured
+        one.
+        """
+        return (not offline) or self._is_offline(provider)
 
     def _is_offline(self, provider: str) -> bool:
         try:

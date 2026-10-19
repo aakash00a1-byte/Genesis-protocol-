@@ -42,7 +42,7 @@ def build(
         register_default_adapters()
 
     memory = MemoryProvider(cfg.memory)
-    registry = default_registry()
+    registry = default_registry(cfg)
     tools = build_default_registry()
     audit = AuditLogger(enabled=cfg.security.audit_enabled)
     policy_engine = PolicyEngine()

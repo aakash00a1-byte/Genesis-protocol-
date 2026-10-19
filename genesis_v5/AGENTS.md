@@ -30,7 +30,10 @@ python -m pytest tests/unit/test_memory.py -q
 - `genesis/memory/` — Memory Fabric (`MemoryProvider`, `MemPalace*`) +
   snapshot/restore/backup persistence.
 - `genesis/providers/`, `genesis/adapters/` — Provider Fabric + adapters.
-- `genesis/models/`, `genesis/router/` — Model Registry + Router.
+- `genesis/models/`, `genesis/router/` — Model Registry + Router. A configured
+  provider is registered into the catalog by `default_registry(cfg)` only when
+  it reports healthy; an unconfigured adapter is absent (never fabricated).
+  The offline mock stays as the last-resort fallback (low reliability).
 - `genesis/agents/`, `genesis/coordinator/`, `genesis/planning/` — Agent
   base, registry, coordinator, planner, built-in agents.
 - `genesis/tools/` — Tool Registry, Sandbox, Tool Gateway.
@@ -149,7 +152,10 @@ Limitations (do not overstate):
   `available=False` and an undelivered alert at/above threshold is recorded,
   not sent.
 - Agents are deterministic offline stubs. Real model providers are disabled
-  unless configured by environment variables.
+  unless configured by environment variables. When configured (e.g.
+  `GENESIS_OPENAI_COMPAT_BASE_URL` + `GENESIS_OPENAI_COMPAT_API_KEY`), the
+  provider enters the catalog and an online run routes to it; the offline
+  default still resolves to the mock.
 - No deployment. Push requires a write-scoped token that is not available here.
 
 ### Layers added on top of phases 4-10

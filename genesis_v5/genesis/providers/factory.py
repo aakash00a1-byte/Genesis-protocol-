@@ -7,7 +7,7 @@ fabricate success.
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from genesis.config.settings import GenesisConfig
 
@@ -36,9 +36,11 @@ class ProviderFactory:
             raise KeyError(f"unknown provider {name!r}")
         kwargs = dict(self._kwargs.get(name, {}))
         timeout = kwargs.pop("timeout_seconds", None)
-        return self._builders[name](
-            timeout_seconds=timeout, **kwargs
-        )
+        if timeout is None:
+            # Do not override the adapter's own default with None; a None
+            # timeout reaches with_wall_clock_timeout and raises at call time.
+            return self._builders[name](**kwargs)
+        return self._builders[name](timeout_seconds=timeout, **kwargs)
 
     def health(self, name: str, cfg: GenesisConfig | None = None) -> ProviderHealth:
         provider = self.create(name, cfg)
