@@ -55,12 +55,20 @@ class ToolGateway:
         audit: AuditLogger | None = None,
         sandbox: Sandbox | None = None,
         validator: InputValidator | None = None,
+        auto_grant_actor: str | None = None,
+        auto_grant_permissions: list[str] | None = None,
+        auto_grant_max_risk: RiskLevel = RiskLevel.LOW,
     ) -> None:
         self.registry = registry
         self.policy_engine = policy_engine or PolicyEngine()
         self.audit = audit or AuditLogger()
         self.sandbox = sandbox or Sandbox()
         self.validator = validator or InputValidator()
+        self._auto_grant_actor = (auto_grant_actor or "").strip()
+        self._auto_grant = frozenset(
+            p.strip() for p in (auto_grant_permissions or []) if p.strip()
+        )
+        self._auto_grant_max_risk = auto_grant_max_risk
 
     # ------------------------------------------------------------------
     def execute(
@@ -278,12 +286,24 @@ class ToolGateway:
             # The Kernel is the orchestrator, not a free-air grant: it still
             # goes through the risk ceiling.
             return spec.risk_level.rank() <= max_risk.rank()
+        if self._is_auto_granted(request, spec):
+            return True
         return self.policy_engine.check(
             permission=spec.permission,
             role_name=request.role,
             max_risk=max_risk,
             risk=spec.risk_level,
         )
+
+    def _is_auto_granted(self, request: ToolRequest, spec: ToolSpec) -> bool:
+        """A narrow standing grant: same actor AND a pre-listed permission AND
+        the tool is at or below the LOW risk ceiling. All three must hold, so a
+        standing grant can never reach a write or a HIGH/CRITICAL tool."""
+        if not self._auto_grant or request.actor != self._auto_grant_actor:
+            return False
+        if spec.permission.value not in self._auto_grant:
+            return False
+        return spec.risk_level.rank() <= self._auto_grant_max_risk.rank()
 
     def _run_with_timeout(
         self,

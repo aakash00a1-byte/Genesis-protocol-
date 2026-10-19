@@ -208,6 +208,11 @@ Limitations (do not overstate):
 - The autonomy loop (V6) is bounded and off by default; see "Autonomous loop
   invariants" above.
 - Proposals never execute on their own. `bypass_available` is always false.
+- The gate is never removed. There is no `bypass_gatekeeper`. The only
+  relaxation is a bounded standing grant (`SecurityConfig.auto_grant_*`,
+  empty by default): it fires only when the actor AND a listed permission AND
+  the LOW risk ceiling all agree, so it can never reach a write or a
+  HIGH/CRITICAL tool. Denials are still audited.
 - Agents never execute a tool directly. An agent *asks*; the request travels
   the Kernel's authority gate (`Kernel.agent_tool_request`) with the run's
   actor/role, under a bounded risk ceiling (MEDIUM by default).

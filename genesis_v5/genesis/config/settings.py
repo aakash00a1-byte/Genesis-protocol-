@@ -78,6 +78,15 @@ class SecurityConfig:
     max_request_bytes: int = 1_000_000
     audit_enabled: bool = True
     zero_trust: bool = True
+    # Standing, bounded auto-grants. Empty by default: the gate is fully
+    # enforced. When set, only these permissions are auto-granted to the named
+    # actor, and only at LOW risk. This never disables the gate; it removes a
+    # per-call approval for a pre-authorised, low-risk, read-only capability.
+    auto_grant_actor: str = "autonomy"
+    auto_grant_permissions: list[str] = field(default_factory=list)
+    # Ceiling for auto-granted calls. Kept at LOW deliberately; a standing
+    # grant must not become a path to a HIGH/CRITICAL action.
+    auto_grant_max_risk: str = "low"
 
 
 @dataclass
@@ -189,6 +198,19 @@ class GenesisConfig:
                 ).split(",")
             ],
             max_fallback_depth=_env_int("GENESIS_ROUTER_MAX_FALLBACK", 3),
+        )
+        cfg.security = SecurityConfig(
+            rate_limit_per_minute=_env_int("GENESIS_RATE_LIMIT", 120),
+            max_request_bytes=_env_int("GENESIS_MAX_REQUEST_BYTES", 1_000_000),
+            audit_enabled=_env_bool("GENESIS_AUDIT_ENABLED", True),
+            zero_trust=_env_bool("GENESIS_ZERO_TRUST", True),
+            auto_grant_actor=os.getenv("GENESIS_AUTO_GRANT_ACTOR", "autonomy"),
+            auto_grant_permissions=[
+                p.strip()
+                for p in os.getenv("GENESIS_AUTO_GRANT_PERMISSIONS", "").split(",")
+                if p.strip()
+            ],
+            auto_grant_max_risk=os.getenv("GENESIS_AUTO_GRANT_MAX_RISK", "low"),
         )
         cfg.autonomy = AutonomyConfig(
             enabled=_env_bool("GENESIS_AUTONOMY_ENABLED", False),

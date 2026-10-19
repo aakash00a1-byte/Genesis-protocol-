@@ -12,6 +12,7 @@ from genesis.agents.builtin import register_builtin_agents
 from genesis.agents.registry import AgentRegistry
 from genesis.care.companion import CareCompanion
 from genesis.config.settings import GenesisConfig
+from genesis.core import RiskLevel
 from genesis.coordinator.coordinator import AgentCoordinator, CoordinatorConfig
 from genesis.kernel.kernel import GenesisKernel
 from genesis.memory.provider import MemoryProvider
@@ -28,6 +29,13 @@ from genesis.security.ratelimit import RateLimiter
 from genesis.tools.builtin import build_default_registry
 from genesis.tools.gateway import ToolGateway
 from genesis.transparency.ledger import TransparencyReport
+
+
+def _risk_level(name: str) -> RiskLevel:
+    try:
+        return RiskLevel(name.strip().lower())
+    except ValueError:
+        return RiskLevel.LOW
 
 
 def build(
@@ -49,7 +57,14 @@ def build(
     transparency = TransparencyReport()
     resilience = ResiliencePolicy(max_continuations=cfg.agents.max_retries)
     care = CareCompanion()
-    gateway = ToolGateway(tools, policy_engine=policy_engine, audit=audit)
+    gateway = ToolGateway(
+        tools,
+        policy_engine=policy_engine,
+        audit=audit,
+        auto_grant_actor=cfg.security.auto_grant_actor,
+        auto_grant_permissions=cfg.security.auto_grant_permissions,
+        auto_grant_max_risk=_risk_level(cfg.security.auto_grant_max_risk),
+    )
     factory = get_factory()
     router = ModelRouter(
         registry,
