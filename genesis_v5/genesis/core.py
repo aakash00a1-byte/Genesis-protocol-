@@ -11,6 +11,12 @@ SECRET_PATTERNS = [
     r"(?i)(api[_-]?key|token|secret|password|passwd|credential)\s*[=:]\s*['\"]?[A-Za-z0-9_\-\.]{6,}['\"]?",
     r"(?i)bearer\s+[A-Za-z0-9_\-\.]{8,}",
     r"gAAAA[A-Za-z0-9_\-\.]{20,}",
+    # Provider-prefixed keys that carry no key=value context (e.g. pasted into
+    # free text). Without these a bare `sk-...` or GitHub token survives
+    # sanitize_text and reaches memory/audit/checkpoints unredacted.
+    r"(?i)\bsk-[A-Za-z0-9_\-\.]{8,}",
+    r"\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b",
+    r"\bgithub_pat_[A-Za-z0-9_]{20,}\b",
 ]
 
 

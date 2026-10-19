@@ -105,6 +105,7 @@ python3 genesis_test.py "<raw input>"   # proposals + the authority gate
 python3 genesis_quantum.py              # Grover, QFT, Deutsch-Jozsa, CHSH
 python3 genesis_chat.py                 # interactive thought-partner
 python3 genesis_serve.py 8000           # HTTP service (/v1/generate, /v1/submit)
+python3 genesis_autonomy.py "<task>"    # bounded autonomous loop (V6)
 ```
 
 ### Agent inventory & verified workflows (V6 audit)
@@ -170,9 +171,36 @@ Limitations (do not overstate):
 - `genesis/service/` — zero-dependency HTTP service (stdlib `http.server`).
 - `genesis/reflection/partner.py` — thought-partner: offers options, the user
   chooses; crisis turns offer none and refer to human help.
+- `genesis/autonomy/` — **bounded autonomous engineering loop (V6)**. A
+  controller that drives the existing Kernel; it adds no new execution path.
+  Off by default (`AutonomyConfig.enabled`, env `GENESIS_AUTONOMY_ENABLED`).
+  Bounded by `max_iterations`, `max_retries_per_step`, `max_wall_clock_seconds`,
+  `step_timeout_seconds`. `guard.py` refuses forbidden actions (push, deploy,
+  publish, credential edits, disabling security) and prompt-injection markers
+  before any agent runs, and refuses unsafe tools (`docker.exec`,
+  `terminal.run`, `api.call`, `search.web`). `state.py` checkpoints each run
+  atomically to disk and redacts secrets on the way; `FAILED` runs stay
+  resumable, `SUCCEEDED`/`BLOCKED` are terminal. `acceptance.py` is a
+  tests+security gate: a change is only accepted once its secret scan and
+  (optionally injected) test run pass.
+
+### Autonomous loop invariants (V6)
+
+- The loop only calls `Kernel.run`; every tool call still travels the Tool
+  Gateway (policy -> permission -> sandbox -> execute -> audit).
+- A run is never reported as `ok` unless it produced a non-empty verified
+  result and (when a gate is wired) passed the acceptance gate. No false
+  success.
+- A single iteration is bounded by `step_timeout_seconds`; a hung step is cut
+  off, not waited on. The loop always terminates within its bounds.
+- Forbidden actions and injected instructions are refused *before* any agent
+  sees the task, and the refusal is audited.
+- Checkpoints are atomic and redacted; a secret in a task never reaches disk.
 
 ### Invariants that must not be broken
 
+- The autonomy loop (V6) is bounded and off by default; see "Autonomous loop
+  invariants" above.
 - Proposals never execute on their own. `bypass_available` is always false.
 - Agents never execute a tool directly. An agent *asks*; the request travels
   the Kernel's authority gate (`Kernel.agent_tool_request`) with the run's

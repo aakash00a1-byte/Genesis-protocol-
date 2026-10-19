@@ -158,6 +158,10 @@ class Planner:
 
         plan = Plan(steps=steps)
         for step in steps:
+            # Register every step as a node, even one with no dependencies.
+            # Otherwise a plan whose only step is `memory` produces an empty
+            # graph, executes nothing, and still reports success.
+            plan.graph.add_node(step.id)
             for dep in step.dependencies:
                 plan.graph.add_edge(dep, step.id)
         plan.graph.validate()

@@ -111,6 +111,28 @@ class RuntimeConfig:
 
 
 @dataclass
+class AutonomyConfig:
+    """Bounded autonomous task-execution loop.
+
+    Off by default: the loop only runs when explicitly enabled, and even then
+    it drives the existing Kernel (no new execution path). Every bound has a
+    finite default so a run always terminates.
+    """
+
+    enabled: bool = False
+    max_iterations: int = 5
+    max_retries_per_step: int = 2
+    max_wall_clock_seconds: float = 120.0
+    # Upper bound on a single iteration; a hung step is cut off, not waited on.
+    step_timeout_seconds: float = 30.0
+    checkpoint_dir: str = "./data/autonomy"
+    # An autonomous run never escalates risk above this, regardless of role.
+    max_risk: str = "medium"
+    # Refuse to run a task whose text looks like a prompt-injection attempt.
+    refuse_on_injection: bool = True
+
+
+@dataclass
 class GenesisConfig:
     env: Env = Env.DEVELOPMENT
     app_name: str = "genesis-v5"
@@ -124,6 +146,7 @@ class GenesisConfig:
     storage: StorageConfig = field(default_factory=StorageConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
+    autonomy: AutonomyConfig = field(default_factory=AutonomyConfig)
 
     @property
     def is_production(self) -> bool:
@@ -166,6 +189,24 @@ class GenesisConfig:
                 ).split(",")
             ],
             max_fallback_depth=_env_int("GENESIS_ROUTER_MAX_FALLBACK", 3),
+        )
+        cfg.autonomy = AutonomyConfig(
+            enabled=_env_bool("GENESIS_AUTONOMY_ENABLED", False),
+            max_iterations=_env_int("GENESIS_AUTONOMY_MAX_ITERATIONS", 5),
+            max_retries_per_step=_env_int("GENESIS_AUTONOMY_MAX_RETRIES", 2),
+            max_wall_clock_seconds=float(
+                _env_int("GENESIS_AUTONOMY_MAX_SECONDS", 120)
+            ),
+            step_timeout_seconds=float(
+                _env_int("GENESIS_AUTONOMY_STEP_SECONDS", 30)
+            ),
+            checkpoint_dir=os.getenv(
+                "GENESIS_AUTONOMY_CHECKPOINT_DIR", "./data/autonomy"
+            ),
+            max_risk=os.getenv("GENESIS_AUTONOMY_MAX_RISK", "medium"),
+            refuse_on_injection=_env_bool(
+                "GENESIS_AUTONOMY_REFUSE_INJECTION", True
+            ),
         )
         return cfg
 
