@@ -23,7 +23,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 HF_SPACE_URL = os.environ.get(
     "HF_SPACE_URL", "https://genesisno-genesis-automaton.hf.space"
@@ -36,7 +36,7 @@ RUN_SECONDS = int(os.environ.get("RELAY_RUN_SECONDS", str(5 * 3600 + 45 * 60)))
 
 
 def _log(msg: str) -> None:
-    print(f"[{datetime.now(timezone.utc).strftime('%H:%M:%S')}] {msg}", flush=True)
+    print(f"[{datetime.now(UTC).strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
 def _get(url: str, timeout: int = 30) -> bytes | None:
@@ -117,7 +117,7 @@ def heartbeat() -> None:
     text = (
         "🧬 Genesis heartbeat\n"
         f"HF Space: {state}\n"
-        f"Time (UTC): {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}\n"
+        f"Time (UTC): {datetime.now(UTC).strftime('%Y-%m-%d %H:%M')}\n"
         "Relay + keep-alive are running."
     )
     if _telegram_send(TELEGRAM_ADMIN_ID, text):
