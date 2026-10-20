@@ -81,16 +81,28 @@ def _urllib_request(method: str, url: str, **kwargs: Any) -> _UrllibResponse:
 def normalize_response(
     provider: str,
     model: str,
-    payload: dict[str, Any],
+    payload: Any,
     *,
     text_path: str | None = None,
 ) -> ModelResult:
     """Normalize provider payloads into a ModelResult.
 
-    `text_path` supports dotted paths like "choices.0.message.content".
+    `text_path` supports dotted paths like "choices.0.message.content". A
+    malformed payload (missing keys, wrong types) yields an empty output rather
+    than a raw KeyError/IndexError/TypeError.
     """
+    if not isinstance(payload, dict):
+        return ModelResult(
+            provider=provider,
+            model=model,
+            output="" if payload is None else str(payload),
+            usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            status="success",
+        )
     text = _extract_text(payload, text_path)
-    usage = payload.get("usage") or {}
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        usage = {}
     return ModelResult(
         provider=provider,
         model=model,
@@ -160,22 +172,80 @@ def with_wall_clock_timeout(fn: Any, seconds: float, provider: str) -> Any:
     return result_holder["value"]
 
 
-def _extract_text(payload: dict[str, Any], text_path: str | None) -> str:
-    if text_path:
-        node: Any = payload
-        for part in text_path.split("."):
-            if isinstance(node, list):
+def safe_json(resp: Any, provider: str) -> Any:
+    """Parse a response body, normalizing an invalid JSON body.
+
+    A provider that returns a non-JSON body must not surface a raw ValueError;
+    it is normalized into a ProviderUnavailable so the router can fall back.
+    """
+    try:
+        return resp.json()
+    except Exception as exc:  # noqa: BLE001 - normalize at the adapter boundary
+        raise ProviderUnavailable(
+            f"{provider}: malformed JSON response",
+            provider=provider,
+            retryable=True,
+            fallback=True,
+        ) from exc
+
+
+def error_for_status(provider: str, status: int) -> ProviderError:
+    """Map an HTTP status from a provider response to the right error type.
+
+    A 429 must be a rate-limit error (retryable) and a 5xx an unavailable
+    error; anything else is a generic provider error. Kept in one place so
+    every adapter classifies a non-200 the same way.
+    """
+    if status == 429:
+        return ProviderRateLimited(
+            f"{provider}: rate limited",
+            provider=provider,
+            status_code=429,
+            retryable=True,
+            fallback=True,
+        )
+    if status >= 500:
+        return ProviderUnavailable(
+            f"{provider}: server error {status}",
+            provider=provider,
+            status_code=status,
+            retryable=True,
+            fallback=True,
+        )
+    return ProviderError(
+        f"{provider}: HTTP {status}",
+        provider=provider,
+        status_code=status,
+        retryable=False,
+        fallback=True,
+    )
+
+
+def _extract_text(payload: Any, text_path: str | None) -> str:
+    if not text_path:
+        if isinstance(payload, dict) and "content" in payload:
+            return str(payload["content"])
+        return str(payload)
+    node: Any = payload
+    for part in text_path.split("."):
+        # A malformed provider response must not raise a bare KeyError or
+        # IndexError; treat any missing/invalid node as "no text".
+        if isinstance(node, list):
+            try:
                 node = node[int(part)]
-            else:
-                node = node[part]
-        if isinstance(node, str):
-            return node
-        if isinstance(node, dict) and "content" in node:
-            return str(node["content"])
-        return str(node)
-    if isinstance(payload, dict) and "content" in payload:
-        return str(payload["content"])
-    return str(payload)
+            except (ValueError, IndexError):
+                return ""
+        elif isinstance(node, dict):
+            if part not in node:
+                return ""
+            node = node[part]
+        else:
+            return ""
+    if isinstance(node, str):
+        return node
+    if isinstance(node, dict) and "content" in node:
+        return str(node["content"])
+    return str(node)
 
 
 def measure(fn: Callable[[], Any]) -> tuple[Any, int]:

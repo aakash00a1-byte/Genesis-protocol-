@@ -9,7 +9,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from .transport import HttpResponse, TransportError, default_get, default_post
+from .transport import (
+    HttpResponse,
+    TransportError,
+    default_get,
+    default_post,
+    redact,
+)
 
 
 class TelegramClient:
@@ -45,7 +51,13 @@ class TelegramClient:
         params: dict[str, Any] = {"timeout": timeout, "limit": limit}
         if offset is not None:
             params["offset"] = offset
-        resp = self._get(self._url("getUpdates"), params=params, timeout=self._timeout)
+        try:
+            resp = self._get(
+                self._url("getUpdates"), params=params, timeout=self._timeout
+            )
+        except TransportError as exc:
+            # The token lives in the URL; never let it escape in an error.
+            raise TransportError(redact(str(exc), self._token)) from exc
         body = resp.body if isinstance(resp.body, dict) else {}
         result = body.get("result", [])
         return result if isinstance(result, list) else []
@@ -53,8 +65,11 @@ class TelegramClient:
     def send_message(self, chat_id: str, text: str) -> HttpResponse:
         if not self.configured:
             raise TransportError("telegram: no bot token configured")
-        return self._post(
-            self._url("sendMessage"),
-            json={"chat_id": chat_id, "text": text[:4000]},
-            timeout=self._timeout,
-        )
+        try:
+            return self._post(
+                self._url("sendMessage"),
+                json={"chat_id": chat_id, "text": text[:4000]},
+                timeout=self._timeout,
+            )
+        except TransportError as exc:
+            raise TransportError(redact(str(exc), self._token)) from exc

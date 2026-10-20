@@ -17,6 +17,7 @@ from genesis.config.settings import IntegrationConfig
 from .discord import DiscordClient
 from .gateway import ChatGateway
 from .telegram import TelegramClient
+from .transport import redact
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,8 @@ class _PollRunner:
             try:
                 self.poll_once()
             except Exception as exc:  # noqa: BLE001 - a bad poll must not kill us
-                logger.warning("%s poll failed: %s", self.name, exc)
+                # Redact defensively: a transport error may carry a token URL.
+                logger.warning("%s poll failed: %s", self.name, redact(str(exc)))
             self._sleep(self.config.poll_interval_seconds)
 
     def poll_once(self) -> None:  # pragma: no cover - overridden

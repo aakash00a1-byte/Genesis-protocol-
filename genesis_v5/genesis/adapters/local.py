@@ -11,6 +11,8 @@ import os
 from typing import Any
 
 from genesis.adapters.http_common import (
+    error_for_status,
+    safe_json,
     default_post,
     measure,
     normalize_error,
@@ -119,15 +121,10 @@ class LocalModelAdapter(Provider):
             )
         except Exception as exc:  # noqa: BLE001
             raise normalize_error(exc, self.name) from exc
-        if getattr(resp, "status_code", 200) != 200:
-            raise normalize_error(
-                ProviderUnavailable(
-                    f"{self.name}: HTTP {getattr(resp, 'status_code', '?')}",
-                    provider=self.name,
-                ),
-                self.name,
-            )
-        data = resp.json()
+        status = getattr(resp, "status_code", 200)
+        if status != 200:
+            raise error_for_status(self.name, int(status))
+        data = safe_json(resp, self.name)
         result = normalize_response(
             self.name,
             payload["model"],

@@ -61,7 +61,9 @@ class DiscordClient:
             raise TransportError("discord: no bot token configured")
         return self._post(
             f"{self.api_base}/channels/{channel_id}/messages",
-            json={"content": content[:2000]},
+            # allowed_mentions with an empty parse list stops a reply from
+            # pinging @everyone, a role, or a user it merely quotes.
+            json={"content": content[:2000], "allowed_mentions": {"parse": []}},
             headers=self._headers(),
             timeout=self._timeout,
         )

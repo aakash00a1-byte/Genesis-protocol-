@@ -71,3 +71,42 @@ def test_forbidden_action_smuggled_in_tool_args_is_caught() -> None:
         "file.write", {"path": "/workspace/x", "content": "git push origin main"}
     )
     assert not decision.allowed
+
+
+@pytest.mark.parametrize(
+    "task",
+    [
+        # Regression: the action may precede the credential ("write the api key
+        # to .env") as well as follow it, and the stem forms must match.
+        "write the api key to .env",
+        "set the token to a new value",
+        "save the secret to a file",
+        "update the credential",
+        "the api key should be rotated",
+        "please modify the .env file",
+        "dump the password into a file",
+        "create a new ssh key",
+        "revoke the token",
+        "regenerate the api key",
+    ],
+)
+def test_credential_modification_is_refused_in_either_order(task: str) -> None:
+    guard = TaskGuard()
+    assert not guard.scan_text(task).allowed, f"should have refused: {task!r}"
+
+
+@pytest.mark.parametrize(
+    "task",
+    [
+        "Summarize the roadmap in 30 words",
+        "read the config and tell me the timeout value",
+        "explain how tokens work in language models",
+        "write a haiku about the sea",
+        "create a new module for caching",
+        "set up a test database schema",
+    ],
+)
+def test_benign_tasks_are_not_over_refused(task: str) -> None:
+    # The credential patterns must not turn ordinary engineering requests into
+    # false positives.
+    assert TaskGuard().scan_text(task).allowed, f"should have allowed: {task!r}"

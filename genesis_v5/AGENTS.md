@@ -233,6 +233,25 @@ Limitations (do not overstate):
   `GENESIS_OFFLINE=false` so the router may reach a live provider.
 - An unconfigured adapter reports DISABLED and is skipped; it never fabricates
   success. A provider key is never printed and never lands in a result.
+- A malformed provider response (missing keys, wrong type, non-JSON body) is
+  normalized to an empty output or a `ProviderError`; it never escapes as a raw
+  `KeyError`/`IndexError`/`ValueError`. A non-200 status is classified in one
+  place (`error_for_status`): 429 → `ProviderRateLimited` (retryable),
+  5xx → `ProviderUnavailable`, other → `ProviderError`.
+
+### Hardening (regression-guarded)
+
+- A Telegram bot token lives in the request path. `TransportError` messages and
+  the runner's poll-failure log are passed through `redact`, so the token can
+  never reach a log line or an exception. `tests/integration/test_chat_security.py`
+  asserts this.
+- A Discord reply sets `allowed_mentions: {"parse": []}`, so it can never ping
+  `@everyone`, a role, or a user it merely quotes.
+- `TaskGuard` credential patterns are order-independent ("write the api key to
+  .env" and "the api key should be rotated" both trip), while ordinary
+  engineering requests ("explain how tokens work") stay allowed.
+- `tests/unit/test_provider_robustness.py` and
+  `tests/integration/test_chat_security.py` hold these invariants.
 
 ### Invariants that must not be broken
 

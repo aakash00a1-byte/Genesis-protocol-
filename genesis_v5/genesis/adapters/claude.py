@@ -11,6 +11,8 @@ import os
 from typing import Any
 
 from genesis.adapters.http_common import (
+    error_for_status,
+    safe_json,
     default_post,
     measure,
     normalize_error,
@@ -119,21 +121,22 @@ class ClaudeAdapter(Provider):
             )
         except Exception as exc:  # noqa: BLE001
             raise normalize_error(exc, self.name) from exc
-        if getattr(resp, "status_code", 200) != 200:
-            raise normalize_error(
-                ProviderUnavailable(
-                    f"{self.name}: HTTP {getattr(resp, 'status_code', '?')}",
-                    provider=self.name,
-                ),
-                self.name,
-            )
-        data = resp.json()
-        content = data.get("content") or []
+        status = getattr(resp, "status_code", 200)
+        if status != 200:
+            raise error_for_status(self.name, int(status))
+        data = safe_json(resp, self.name)
+        if not isinstance(data, dict):
+            data = {}
+        content = data.get("content")
+        if not isinstance(content, list):
+            content = []
         text = ""
         for block in content:
             if isinstance(block, dict) and block.get("type") == "text":
-                text += block.get("text", "")
-        usage = data.get("usage") or {}
+                text += str(block.get("text", ""))
+        usage = data.get("usage")
+        if not isinstance(usage, dict):
+            usage = {}
         return ModelResult(
             provider=self.name,
             model=payload["model"],

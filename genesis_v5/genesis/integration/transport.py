@@ -8,11 +8,24 @@ handling with a fake transport and no network.
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Any
+
+# A bot token embedded in a path (Telegram's `/bot<token>/method`) must never
+# reach a log line or an exception message.
+_BOT_TOKEN_IN_URL = re.compile(r"/bot[^/\s]+")
+
+
+def redact(text: str, *secrets: str) -> str:
+    """Remove known secrets and any URL-embedded bot token from ``text``."""
+    for secret in secrets:
+        if secret:
+            text = text.replace(secret, "***")
+    return _BOT_TOKEN_IN_URL.sub("/bot***", text)
 
 
 @dataclass
@@ -52,7 +65,7 @@ def _request(
         raw = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
         status = exc.code
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise TransportError(f"{method} {url} failed: {exc}") from exc
+        raise TransportError(redact(f"{method} {url} failed: {exc}")) from exc
     body: Any = None
     if raw:
         try:
@@ -60,7 +73,9 @@ def _request(
         except ValueError:
             body = raw
     if not 200 <= status < 300:
-        raise TransportError(f"{method} {url} -> HTTP {status}: {str(body)[:200]}")
+        raise TransportError(
+            redact(f"{method} {url} -> HTTP {status}: {str(body)[:200]}")
+        )
     return HttpResponse(status=status, body=body)
 
 

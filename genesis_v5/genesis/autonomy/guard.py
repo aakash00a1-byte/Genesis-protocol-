@@ -46,9 +46,17 @@ _FORBIDDEN_ACTION_PATTERNS: list[tuple[str, str]] = [
      "pushing to a remote repository"),
     (r"(?i)\bdeploy\b|\brelease\b|\bpublish\b|\bship\s+to\s+prod|\bgo\s+live\b",
      "deploying, releasing, or publishing"),
-    (r"(?i)\b(api[_\s]?key|secret|token|credential|password|\.env|id_rsa|ssh\s+key)\b.*\b(write|set|rotate|create|modify|change|update|overwrite|replace)\b",
+    # Credential modification, order-independent. The action and the credential
+    # may appear in either order and with a few words between them; the
+    # negative look-behind/look-ahead keep `.env` and stem forms matching
+    # without matching inside an unrelated longer word.
+    (r"(?i)(?<![A-Za-z0-9_])(write|set|rotat\w*|creat\w*|modif\w*|chang\w*|updat\w*|overwrit\w*|replac\w*|stor\w*|sav\w*|put|dump|export\w*|edit\w*)\b.{0,40}(?<![A-Za-z0-9_])(api[_\s]?key|secret|token|credential|password|\.env|id_rsa|ssh\s+key)(?![A-Za-z0-9_])",
      "modifying credentials or secrets"),
-    (r"(?i)\b(rotate|revoke|regenerate)\b.*\b(key|token|credential|secret)\b",
+    (r"(?i)(?<![A-Za-z0-9_])(api[_\s]?key|secret|token|credential|password|\.env|id_rsa|ssh\s+key)(?![A-Za-z0-9_]).{0,40}(?<![A-Za-z0-9_])(write|set|rotat\w*|creat\w*|modif\w*|chang\w*|updat\w*|overwrit\w*|replac\w*|stor\w*|sav\w*|put|dump|export\w*|edit\w*)\b",
+     "modifying credentials or secrets"),
+    (r"(?i)(?<![A-Za-z0-9_])(rotat|revok|regenerat)\w*.{0,40}(?<![A-Za-z0-9_])(key|token|credential|secret)\b",
+     "rotating or revoking credentials"),
+    (r"(?i)(?<![A-Za-z0-9_])(key|token|credential|secret)(?![A-Za-z0-9_]).{0,40}(?<![A-Za-z0-9_])(rotat|revok|regenerat)\w*",
      "rotating or revoking credentials"),
     (r"(?i)\bdisable\b.*\b(sandbox|security|gate|gatekeeper|audit|guard|policy)\b",
      "disabling a security control"),
