@@ -61,3 +61,21 @@ HUGGINGFACE_API_TOKEN - HuggingFace
 - Railway production deployment
 - 3 services: discord, telegram, web
 - Supervisord for process management
+
+## Telegram delivery (HF Space)
+
+The HF Space `GenesisNo/Genesis-Automaton` runs Genesis, but HF free-tier
+egress cannot reach `api.telegram.org` (verified: groq/onrender/vercel OK,
+telegram.org times out). So the Space only *receives* updates via webhook and
+parks replies in `/tmp/telegram_reply_queue.json`; a GitHub Actions relay
+delivers them.
+
+- `.github/workflows/keepalive.yml` runs one ~5h30m job that pings the Space
+  every 60s (keeps it from sleeping) and relays the queue near real time.
+  A long loop is used because GitHub scheduled cron is delayed by hours on
+  free tier. A public repo has unlimited Actions minutes.
+- `.github/workflows/heartbeat.yml` sends the admin one proactive status
+  message per day (03:30 UTC), so Genesis reports in without being messaged.
+- Both call `scripts/relay_loop.py` (stdlib only). Required repo secrets:
+  `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_ID`.
+

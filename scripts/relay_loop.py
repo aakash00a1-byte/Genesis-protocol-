@@ -33,8 +33,6 @@ TELEGRAM_ADMIN_ID = os.environ.get("TELEGRAM_ADMIN_ID", "").strip()
 
 TICK_SECONDS = int(os.environ.get("RELAY_TICK_SECONDS", "60"))
 RUN_SECONDS = int(os.environ.get("RELAY_RUN_SECONDS", str(5 * 3600 + 45 * 60)))
-HEARTBEAT_HOURS = float(os.environ.get("RELAY_HEARTBEAT_HOURS", "24"))
-HEARTBEAT_ENABLED = os.environ.get("RELAY_HEARTBEAT_ENABLED", "true").lower() != "false"
 
 
 def _log(msg: str) -> None:
@@ -105,7 +103,9 @@ def relay_once() -> int:
 
 
 def heartbeat() -> None:
-    if not (HEARTBEAT_ENABLED and TELEGRAM_ADMIN_ID):
+    """Send one proactive status message to the admin (no message needed from them)."""
+    if not TELEGRAM_ADMIN_ID:
+        _log("heartbeat skipped: TELEGRAM_ADMIN_ID is not set")
         return
     status = _get(f"{HF_SPACE_URL}/api/status")
     state = "reachable"
@@ -132,21 +132,16 @@ def main() -> int:
         f"space={HF_SPACE_URL}"
     )
     started = time.monotonic()
-    last_heartbeat = 0.0
-    heartbeat_interval = HEARTBEAT_HOURS * 3600
-
-    # First tick: wake the Space and do an immediate heartbeat if due.
     while time.monotonic() - started < RUN_SECONDS:
         keep_awake()
         relay_once()
-        elapsed = time.monotonic() - started
-        if heartbeat_interval and elapsed - last_heartbeat >= heartbeat_interval:
-            heartbeat()
-            last_heartbeat = elapsed
         time.sleep(TICK_SECONDS)
     _log("relay loop finished; the next scheduled run takes over")
     return 0
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "heartbeat":
+        heartbeat()
+        sys.exit(0)
     sys.exit(main())

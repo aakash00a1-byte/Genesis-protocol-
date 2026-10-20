@@ -1,0 +1,26 @@
+name: Genesis Daily Heartbeat
+
+# Sends the admin one proactive status message per day, so Genesis reports in
+# on its own without the admin having to message it first. Delivery goes
+# through scripts/relay_loop.py's heartbeat mode (the HF Space itself cannot
+# reach api.telegram.org).
+
+on:
+  schedule:
+    # 03:30 UTC (~09:00 IST) daily.
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Send heartbeat
+        env:
+          HF_SPACE_URL: https://genesisno-genesis-automaton.hf.space
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ADMIN_ID: ${{ secrets.TELEGRAM_ADMIN_ID }}
+        run: python3 scripts/relay_loop.py heartbeat
