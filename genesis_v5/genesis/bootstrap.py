@@ -10,13 +10,17 @@ from __future__ import annotations
 from genesis.adapters.registration import register_default_adapters
 from genesis.agents.builtin import register_builtin_agents
 from genesis.agents.registry import AgentRegistry
+from genesis.autonomy.loop import AutonomousLoop
 from genesis.care.companion import CareCompanion
 from genesis.config.settings import GenesisConfig
-from genesis.core import RiskLevel
 from genesis.coordinator.coordinator import AgentCoordinator, CoordinatorConfig
+from genesis.core import RiskLevel
+from genesis.generation.generator import ParallelGenerator
+from genesis.integration.gateway import ChatGateway
 from genesis.kernel.kernel import GenesisKernel
 from genesis.memory.provider import MemoryProvider
 from genesis.models.registry import default_registry
+from genesis.pipeline.authority import AuthorityPipeline
 from genesis.planning.planner import Planner
 from genesis.providers.factory import get_factory
 from genesis.qa.verifier import IndependentVerifier, VerifierConfig
@@ -26,6 +30,7 @@ from genesis.security.audit import AuditLogger
 from genesis.security.core import SecurityCore
 from genesis.security.permissions import PolicyEngine
 from genesis.security.ratelimit import RateLimiter
+from genesis.service.http import GenesisService
 from genesis.tools.builtin import build_default_registry
 from genesis.tools.gateway import ToolGateway
 from genesis.transparency.ledger import TransparencyReport
@@ -129,3 +134,29 @@ def build(
         )
 
     return kernel
+
+
+def build_chat_gateway(
+    kernel: GenesisKernel,
+    *,
+    config: GenesisConfig | None = None,
+    generator: ParallelGenerator | None = None,
+    loop: AutonomousLoop | None = None,
+) -> ChatGateway:
+    """Wire the chat gateway onto an already-built kernel.
+
+    The gateway reuses the kernel's gateway/pipeline and the bounded autonomy
+    loop; it never bypasses either. When the autonomy loop is not supplied it
+    is built only if ``config.autonomy.enabled`` is set.
+    """
+    cfg = config or GenesisConfig()
+    gen = generator or ParallelGenerator(num_qubits=3)
+    pipeline = AuthorityPipeline(gen, kernel.gateway)
+    service = GenesisService(gen, pipeline)
+    active_loop = loop
+    if active_loop is None and cfg.autonomy.enabled:
+        active_loop = AutonomousLoop(kernel, cfg.autonomy)
+    return ChatGateway(config=cfg.integration, service=service, loop=active_loop)
+
+
+__all__ = ["build", "build_chat_gateway"]

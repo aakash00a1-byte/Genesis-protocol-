@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from genesis.core import ModelResult
 from genesis.exceptions import (
@@ -15,7 +16,6 @@ from genesis.exceptions import (
     ProviderRateLimited,
     ProviderTimeout,
     ProviderUnavailable,
-    ProviderError as _ProviderError,
 )
 
 HttpPost = Callable[..., Any]
@@ -23,15 +23,59 @@ HttpGet = Callable[..., Any]
 
 
 def default_post(url: str, **kwargs: Any) -> Any:
-    import requests  # type: ignore[import-not-found]
-
-    return requests.post(url, timeout=kwargs.pop("timeout", 30), **kwargs)
+    return _urllib_request("POST", url, **kwargs)
 
 
 def default_get(url: str, **kwargs: Any) -> Any:
-    import requests  # type: ignore[import-not-found]
+    return _urllib_request("GET", url, **kwargs)
 
-    return requests.get(url, timeout=kwargs.pop("timeout", 30), **kwargs)
+
+class _UrllibResponse:
+    """Minimal response object matching the ``requests`` surface the adapters
+    use (``status_code`` and ``json()``). Standard library only, so a live run
+    needs no third-party HTTP client."""
+
+    def __init__(self, status_code: int, text: str) -> None:
+        self.status_code = status_code
+        self.text = text
+
+    def json(self) -> Any:
+        import json
+
+        return json.loads(self.text) if self.text else {}
+
+
+def _urllib_request(method: str, url: str, **kwargs: Any) -> _UrllibResponse:
+    import json
+    import urllib.error
+    import urllib.request
+
+    timeout = kwargs.pop("timeout", 30) or 30
+    payload = kwargs.pop("json", None)
+    headers = dict(kwargs.pop("headers", {}) or {})
+    params = kwargs.pop("params", None)
+    if params:
+        import urllib.parse
+
+        url = f"{url}?{urllib.parse.urlencode(params)}"
+    data = None
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers.setdefault("Content-Type", "application/json")
+    headers.setdefault("Accept", "application/json")
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            body = resp.read().decode("utf-8", errors="replace")
+            status = getattr(resp, "status", 200)
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
+        status = exc.code
+    except Exception as exc:  # noqa: BLE001 - normalize at the adapter boundary
+        raise ProviderUnavailable(
+            f"transport error: {exc}", provider="http", retryable=True, fallback=True
+        ) from exc
+    return _UrllibResponse(status, body)
 
 
 def normalize_response(

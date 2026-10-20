@@ -208,6 +208,32 @@ Limitations (do not overstate):
   exec tool is never covered. A denied recon never fails the run.
 - Checkpoints are atomic and redacted; a secret in a task never reaches disk.
 
+### Chat integration (Discord/Telegram)
+
+- `genesis/integration/` connects a chat room to the Kernel. A message is
+  never executed raw: it is scanned by `TaskGuard`, parsed into a command
+  (`/generate`, `/task`, `/submit`), and routed through the same authority
+  gate and bounded autonomy loop as any other request.
+- The channel must be allow-listed (`IntegrationConfig.allowed_channels`);
+  an empty list refuses everything. Senders are rate-limited per identity.
+- `/task` runs only when the autonomy loop is wired (`autonomy.enabled`);
+  otherwise it says so. `/generate` has no side effects. `/submit` offers tool
+  requests to the authority gate; a chat message cannot smuggle its own.
+- Transports use `urllib` only (no third-party HTTP client). A missing token
+  disables its transport; nothing runs silently.
+- `build_chat_gateway(kernel, config=...)` wires the gateway onto a built
+  kernel. `genesis_integrations.py` runs the polling loop.
+
+### Live providers
+
+- Provider adapters reach the network through `genesis/adapters/http_common.py`,
+  which uses `urllib` only — a live run needs no third-party HTTP client.
+- `genesis_live.py` loads a local `.env` (without overriding real env vars),
+  prints each provider's health, and runs a real completion. Set
+  `GENESIS_OFFLINE=false` so the router may reach a live provider.
+- An unconfigured adapter reports DISABLED and is skipped; it never fabricates
+  success. A provider key is never printed and never lands in a result.
+
 ### Invariants that must not be broken
 
 - The autonomy loop (V6) is bounded and off by default; see "Autonomous loop

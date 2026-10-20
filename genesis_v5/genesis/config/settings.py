@@ -152,6 +152,40 @@ class AutonomyConfig:
 
 
 @dataclass
+class IntegrationConfig:
+    """Chat-platform integration (Discord/Telegram) into the Kernel.
+
+    Off by default. No transport is constructed unless its token is present,
+    and an inbound message is only accepted from an allow-listed channel. The
+    message is never executed directly: it is parsed into a command and routed
+    through the same governed paths as any other request (the authority
+    pipeline for tool requests, the bounded autonomy loop for tasks).
+    """
+
+    enabled: bool = False
+    # Proposals generated per /generate; small by default so a chat reply is
+    # fast. The generation path has no side effects regardless.
+    shots: int = 8
+    poll_interval_seconds: float = 2.0
+    rate_limit_per_minute: int = 30
+    # Allow-listed channels/chats. Empty means "refuse everything" — a chat
+    # integration must be told explicitly which rooms it may answer.
+    allowed_channels: list[str] = field(default_factory=list)
+    # The role a chat request runs as. Defaults to the zero-trust role, so a
+    # chat message cannot reach a tool unless a standing grant or the role
+    # explicitly allows it.
+    default_role: str = "none"
+
+    discord_enabled: bool = False
+    discord_bot_token: str = ""
+    discord_api_base: str = "https://discord.com/api/v10"
+
+    telegram_enabled: bool = False
+    telegram_bot_token: str = ""
+    telegram_api_base: str = "https://api.telegram.org"
+
+
+@dataclass
 class GenesisConfig:
     env: Env = Env.DEVELOPMENT
     app_name: str = "genesis-v5"
@@ -166,6 +200,7 @@ class GenesisConfig:
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     autonomy: AutonomyConfig = field(default_factory=AutonomyConfig)
+    integration: IntegrationConfig = field(default_factory=IntegrationConfig)
 
     @property
     def is_production(self) -> bool:
@@ -247,6 +282,34 @@ class GenesisConfig:
                 ).split(",")
                 if p.strip()
             ],
+        )
+        cfg.integration = IntegrationConfig(
+            enabled=_env_bool("GENESIS_INTEGRATION_ENABLED", False),
+            shots=_env_int("GENESIS_INTEGRATION_SHOTS", 8),
+            poll_interval_seconds=float(
+                _env_int("GENESIS_INTEGRATION_POLL_SECONDS", 2)
+            ),
+            rate_limit_per_minute=_env_int(
+                "GENESIS_INTEGRATION_RATE_LIMIT", 30
+            ),
+            allowed_channels=[
+                c.strip()
+                for c in os.getenv(
+                    "GENESIS_INTEGRATION_ALLOWED_CHANNELS", ""
+                ).split(",")
+                if c.strip()
+            ],
+            default_role=os.getenv("GENESIS_INTEGRATION_DEFAULT_ROLE", "none"),
+            discord_enabled=_env_bool("GENESIS_DISCORD_ENABLED", False),
+            discord_bot_token=os.getenv("DISCORD_BOT_TOKEN", ""),
+            discord_api_base=os.getenv(
+                "GENESIS_DISCORD_API_BASE", "https://discord.com/api/v10"
+            ),
+            telegram_enabled=_env_bool("GENESIS_TELEGRAM_ENABLED", False),
+            telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
+            telegram_api_base=os.getenv(
+                "GENESIS_TELEGRAM_API_BASE", "https://api.telegram.org"
+            ),
         )
         return cfg
 
