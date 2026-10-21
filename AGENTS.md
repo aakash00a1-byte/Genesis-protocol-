@@ -114,6 +114,13 @@ delivers them.
 - **web/app.py must import.** It once used `@limiter.limit` with no `limiter`
   defined -> `NameError` on import -> any redeploy crash. Keep the optional
   flask-limiter setup (no-op fallback) intact.
+- **News digest runs in the relay, not the Space.** `scripts/relay_loop.py`
+  builds a tech/sports/markets digest from public RSS feeds (BBC Tech, The
+  Verge, BBC Sport, BBC Business, CNBC) and sends it to TELEGRAM_ADMIN_ID every
+  `NEWS_INTERVAL_SECONDS` (default 300s). Tune via `NEWS_ENABLED`,
+  `NEWS_INTERVAL_SECONDS`, `NEWS_MAX_PER_CATEGORY`. One-shot test:
+  `python3 scripts/relay_loop.py news`. The Space has no Telegram egress; only
+  the GitHub Actions relay can send.
 - **Groq model deprecations are a live outage.** `llama-3.3-70b-versatile`
   was shut down 2026-08-16 for free/developer tiers (enterprise-only now), so
   every Groq call 404s. Current production models: `openai/gpt-oss-120b`
