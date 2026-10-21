@@ -31,12 +31,14 @@ never printed.
 
 from __future__ import annotations
 
+import html
 import json
 import os
 import re
 import sys
 import time
 import urllib.request
+import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
 
 HF_SPACE_URL = os.environ.get(
@@ -49,6 +51,33 @@ TICK_SECONDS = int(os.environ.get("RELAY_TICK_SECONDS", "60"))
 RUN_SECONDS = int(os.environ.get("RELAY_RUN_SECONDS", str(5 * 3600 + 45 * 60)))
 HEARTBEAT_HOURS = float(os.environ.get("RELAY_HEARTBEAT_HOURS", "0") or 0)
 STATE_FILE = os.environ.get("RELAY_STATE_FILE", "").strip()
+
+# News digest: a recurring tech/sports/markets roundup pushed to the admin.
+NEWS_ENABLED = os.environ.get("NEWS_ENABLED", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+    "",
+}
+NEWS_INTERVAL_SECONDS = int(os.environ.get("NEWS_INTERVAL_SECONDS", "300"))
+NEWS_MAX_PER_CATEGORY = int(os.environ.get("NEWS_MAX_PER_CATEGORY", "3"))
+NEWS_CATEGORIES: dict[str, list[tuple[str, str]]] = {
+    "💻 TECH": [
+        ("BBC Tech", "https://feeds.bbci.co.uk/news/technology/rss.xml"),
+        ("The Verge", "https://www.theverge.com/rss/index.xml"),
+    ],
+    "⚽ SPORTS": [
+        ("BBC Sport", "https://feeds.bbci.co.uk/sport/rss.xml"),
+    ],
+    "📈 MARKETS": [
+        ("BBC Business", "https://feeds.bbci.co.uk/news/business/rss.xml"),
+        ("CNBC", "https://www.cnbc.com/id/100003114/device/rss/rss.html"),
+    ],
+}
+# Cap how much of any feed we read/parse, so a hostile or huge feed cannot
+# exhaust memory.
+MAX_FEED_BYTES = 512 * 1024
 # Optional shared secret; must match TELEGRAM_WEBHOOK_SECRET on the Space.
 HF_SHARED_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
 
@@ -226,6 +255,79 @@ def heartbeat() -> None:
         _log("heartbeat sent")
 
 
+_ATOM = "{http://www.w3.org/2005/Atom}"
+
+
+def _clean(text: str | None) -> str:
+    """Collapse whitespace and unescape HTML entities from feed text."""
+    if not text:
+        return ""
+    return re.sub(r"\s+", " ", html.unescape(text)).strip()
+
+
+def _fetch_feed_titles(url: str) -> list[str]:
+    """Return up to NEWS_MAX_PER_CATEGORY headlines from an RSS/Atom feed."""
+    try:
+        req = urllib.request.Request(  # noqa: S310
+            url, headers={"User-Agent": "GenesisNews/1.0 (+relay)"}
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
+            data = resp.read(MAX_FEED_BYTES)
+    except Exception as exc:  # noqa: BLE001 - one dead feed must not stop the rest
+        _log(f"feed failed ({url.split('/')[2]}): {type(exc).__name__}")
+        return []
+    try:
+        root = ET.fromstring(data)
+    except ET.ParseError:
+        return []
+    items = root.findall(".//item") or root.findall(f".//{_ATOM}entry")
+    titles: list[str] = []
+    for item in items:
+        node = item.find("title")
+        if node is None:
+            node = item.find(f"{_ATOM}title")
+        title = _clean(node.text if node is not None else "")
+        if title:
+            titles.append(title)
+        if len(titles) >= NEWS_MAX_PER_CATEGORY:
+            break
+    return titles
+
+
+def build_news_digest() -> str | None:
+    """Build a tech/sports/markets digest, or None if every feed failed."""
+    sections: list[str] = []
+    for label, feeds in NEWS_CATEGORIES.items():
+        lines: list[str] = []
+        for source, url in feeds:
+            for title in _fetch_feed_titles(url):
+                lines.append(f"• {title} — {source}")
+                if len(lines) >= NEWS_MAX_PER_CATEGORY:
+                    break
+            if len(lines) >= NEWS_MAX_PER_CATEGORY:
+                break
+        if lines:
+            sections.append(label + "\n" + "\n".join(lines))
+    if not sections:
+        return None
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    return "📰 Genesis news update\n" + "\n\n".join(sections) + f"\n\n🕒 {stamp}"
+
+
+def news_digest() -> None:
+    """Send one news digest to the admin."""
+    if not TELEGRAM_ADMIN_ID:
+        _log("news skipped: TELEGRAM_ADMIN_ID is not set")
+        return
+    text = build_news_digest()
+    if text is None:
+        _log("news skipped: no feed returned headlines")
+        return
+    if _telegram_send(TELEGRAM_ADMIN_ID, text):
+        _log("news digest sent")
+
+
+
 def main() -> int:
     if not TELEGRAM_BOT_TOKEN:
         _log("TELEGRAM_BOT_TOKEN is not set; relay cannot deliver replies")
@@ -237,12 +339,17 @@ def main() -> int:
     next_heartbeat = (
         started + HEARTBEAT_HOURS * 3600.0 if HEARTBEAT_HOURS > 0 else float("inf")
     )
+    # Send the first news digest immediately, then every NEWS_INTERVAL_SECONDS.
+    next_news = started if NEWS_ENABLED and NEWS_INTERVAL_SECONDS > 0 else float("inf")
     while time.monotonic() - started < RUN_SECONDS:
         keep_awake()
         relay_once()
         if time.monotonic() >= next_heartbeat:
             heartbeat()
             next_heartbeat = time.monotonic() + HEARTBEAT_HOURS * 3600.0
+        if time.monotonic() >= next_news:
+            news_digest()
+            next_news = time.monotonic() + NEWS_INTERVAL_SECONDS
         time.sleep(TICK_SECONDS)
     _log("relay loop finished; the next scheduled run takes over")
     return 0
@@ -251,5 +358,8 @@ def main() -> int:
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "heartbeat":
         heartbeat()
+        sys.exit(0)
+    if len(sys.argv) > 1 and sys.argv[1] == "news":
+        news_digest()
         sys.exit(0)
     sys.exit(main())

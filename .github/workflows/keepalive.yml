@@ -64,6 +64,10 @@ jobs:
           # Send the proactive heartbeat from inside the long run instead of a
           # separate schedule, so it cannot be delayed by the scheduler.
           RELAY_HEARTBEAT_HOURS: "24"
+          # Tech/sports/markets news digest every 5 minutes.
+          NEWS_ENABLED: "1"
+          NEWS_INTERVAL_SECONDS: "300"
+          NEWS_MAX_PER_CATEGORY: "3"
         run: python3 scripts/relay_loop.py
 
       - name: Save relay dedupe state
