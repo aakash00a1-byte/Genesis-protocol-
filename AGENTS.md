@@ -112,6 +112,13 @@ Run weekly via `.github/workflows/self-improve.yml` (Monday 04:00 UTC) or by
 hand. Requires the `OPENHANDS_API_KEY` repo secret. `--dry-run` prints the task
 prompt without starting anything.
 
+Note: the agent sandbox gets a read-only GitHub credential, so the agent can
+commit locally but its `git push` / PR call returns 403. The agent leaves the
+branch and commit in the sandbox; a human (or the reviewer) lands them. Read the
+agent's final message for the branch name, then fetch the patch from the
+sandbox with `POST {agent_server_url}/api/bash/execute_bash_command`
+(`git format-patch -1 --stdout`), apply it, and open the PR.
+
 ## Auto-deploy to the Space
 `.github/workflows/deploy-space.yml` mirrors the repo to the HF Space on every
 push to `main` (runs `scripts/hf_deploy.sh` with the `HF_TOKEN` repo secret),
