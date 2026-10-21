@@ -4,12 +4,22 @@ name: Genesis Daily Heartbeat
 # on its own without the admin having to message it first. Delivery goes
 # through scripts/relay_loop.py's heartbeat mode (the HF Space itself cannot
 # reach api.telegram.org).
+#
+# The daily heartbeat is normally sent from inside the long keep-alive run
+# (RELAY_HEARTBEAT_HOURS=24). This workflow is a manual fallback so the admin
+# can trigger one on demand; it does not run on a schedule, which avoids a
+# duplicate heartbeat landing next to the in-run one.
 
 on:
-  schedule:
-    # 03:30 UTC (~09:00 IST) daily.
-    - cron: '30 3 * * *'
   workflow_dispatch:
+
+# Serialise heartbeat sends so two triggers cannot fire at the same moment.
+concurrency:
+  group: genesis-heartbeat
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   heartbeat:
@@ -23,4 +33,5 @@ jobs:
           HF_SPACE_URL: https://genesisno-genesis-automaton.hf.space
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ADMIN_ID: ${{ secrets.TELEGRAM_ADMIN_ID }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
         run: python3 scripts/relay_loop.py heartbeat

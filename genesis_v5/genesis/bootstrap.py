@@ -10,6 +10,7 @@ from __future__ import annotations
 from genesis.adapters.registration import register_default_adapters
 from genesis.agents.builtin import register_builtin_agents
 from genesis.agents.registry import AgentRegistry
+from genesis.autonomy.guard import TaskGuard
 from genesis.autonomy.loop import AutonomousLoop
 from genesis.care.companion import CareCompanion
 from genesis.config.settings import GenesisConfig
@@ -79,6 +80,12 @@ def build(
         auto_grant_permissions=auto_grant_permissions,
         auto_grant_max_risk=_risk_level(cfg.security.auto_grant_max_risk),
     )
+    if cfg.autonomy.enabled:
+        # Make the autonomy guard's forbidden-tool list a hard gate rule, not
+        # just a pre-check the loop performs. Then no actor/role (including an
+        # admin agent) can reach docker.exec / terminal.run / api.call /
+        # search.web on the agent path while autonomy is enabled.
+        gateway.forbid_tools(TaskGuard().forbidden_tools)
     factory = get_factory()
     router = ModelRouter(
         registry,

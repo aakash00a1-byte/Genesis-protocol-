@@ -9,7 +9,6 @@ No model or agent bypasses this gateway.
 from __future__ import annotations
 
 import logging
-import signal
 import threading
 import time
 from dataclasses import dataclass, field
@@ -18,7 +17,7 @@ from typing import Any
 from genesis.core import AuditEvent, RiskLevel, ToolResult, ToolStatus
 from genesis.exceptions import PermissionDenied, SandboxViolation, ToolTimeout
 from genesis.security.audit import AuditLogger
-from genesis.security.permissions import Permission, PolicyEngine
+from genesis.security.permissions import PolicyEngine
 from genesis.security.validation import InputValidator
 
 from .registry import ToolContext, ToolRegistry, ToolSpec
@@ -69,6 +68,15 @@ class ToolGateway:
             p.strip() for p in (auto_grant_permissions or []) if p.strip()
         )
         self._auto_grant_max_risk = auto_grant_max_risk
+        # Tools the kernel-side authority refuses outright, regardless of role or
+        # risk ceiling. This is the gate's enforcement of the autonomy guard's
+        # forbidden-tool list, so it cannot be bypassed by a role (e.g. an admin
+        # agent asking for docker.exec) on the agent path.
+        self._forbidden_tools: frozenset[str] = frozenset()
+
+    def forbid_tools(self, names: list[str] | set[str] | frozenset[str]) -> None:
+        """Refuse these tools at the gate, for every actor and role."""
+        self._forbidden_tools = frozenset(str(n) for n in names if str(n).strip())
 
     # ------------------------------------------------------------------
     def execute(
@@ -132,6 +140,27 @@ class ToolGateway:
                     action=f"tool.{spec.name}",
                     status="malformed",
                     details={"errors": validation.errors, "role": request.role},
+                ),
+            )
+
+        # 2b. Forbidden tools are refused for every actor and role, before any
+        # permission or risk consideration. This is not a bypassable policy.
+        if spec.name in self._forbidden_tools:
+            return self._finish(
+                ToolResult(
+                    tool=spec.name,
+                    status=ToolStatus.DENIED,
+                    error="tool is forbidden by the authority gate",
+                    risk_level=spec.risk_level,
+                    duration_ms=self._elapsed(start),
+                ),
+                AuditEvent(
+                    event_type="tool_denied",
+                    actor=request.actor,
+                    action=f"tool.{spec.name}",
+                    status="denied",
+                    risk_level=spec.risk_level.value,
+                    details={"reason": "forbidden_tool", "role": request.role},
                 ),
             )
 

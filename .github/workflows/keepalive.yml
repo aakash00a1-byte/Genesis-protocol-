@@ -5,22 +5,33 @@ name: HF Space Keep-Alive + Telegram Relay
 # it parks replies in /tmp/telegram_reply_queue.json; this job delivers them.
 #
 # Why a long-running loop instead of a short */10 job: GitHub's scheduled cron
-# is heavily delayed on free tier (observed runs ~5 hours apart, not 10 minutes),
-# so replies sat in the queue for hours. A single job now runs for ~5h30m and
-# pings the Space every 60s, so delivery is near real time and the Space never
-# sleeps. A public repo has unlimited Actions minutes, so this costs nothing.
+# is heavily delayed on free tier (observed runs ~5 hours apart, not 10
+# minutes), so replies sat in the queue for hours. A single job now runs for
+# ~5h30m and pings the Space every 60s, so delivery is near real time.
+# A public repo has unlimited Actions minutes, so this costs nothing.
+#
+# Honesty note: an HTTP 200 from the Space only proves its web layer answered.
+# It is NOT proof the bot/worker processes are healthy, and it does NOT
+# guarantee the Space "never sleeps" — the ping only reduces the chance of
+# idle sleep while a run is active.
 
 on:
   schedule:
-    # Every 4 hours. Each run lasts ~5h30m, so consecutive runs overlap by ~1h30m
-    # and cover any scheduler delay. Overlap is harmless for the relay.
+    # Every 4 hours. A run lasts ~5h30m, so as long as the scheduler fires at
+    # least every ~5h30m the relay is continuously active. The `concurrency`
+    # group below serialises runs (a queued run starts when the current one
+    # ends), so there is never a second relay worker at the same time.
     - cron: '0 */4 * * *'
   workflow_dispatch: # Allow manual trigger for testing
 
-# Never cancel a live relay; a queued run starts when the current one ends.
+# Serialise relay runs: never cancel a live relay, and a queued run starts
+# when the current one ends. This prevents overlapping relay workers.
 concurrency:
   group: hf-relay
   cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   relay:
@@ -31,13 +42,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Restore the sent-id set so a reply is never delivered twice, even
+      # across the overlapping runs above.
+      - name: Restore relay dedupe state
+        uses: actions/cache/restore@v4
+        with:
+          path: relay-state.json
+          key: relay-state-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            relay-state-
+
       - name: Relay + keep-alive loop
         env:
           HF_SPACE_URL: https://genesisno-genesis-automaton.hf.space
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ADMIN_ID: ${{ secrets.TELEGRAM_ADMIN_ID }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          RELAY_STATE_FILE: relay-state.json
           RELAY_TICK_SECONDS: "60"
           RELAY_RUN_SECONDS: "19800"
+          # Send the proactive heartbeat from inside the long run instead of a
+          # separate schedule, so it cannot be delayed by the scheduler.
           RELAY_HEARTBEAT_HOURS: "24"
         run: python3 scripts/relay_loop.py
 
+      - name: Save relay dedupe state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: relay-state.json
+          key: relay-state-${{ github.run_id }}-${{ github.run_attempt }}

@@ -102,6 +102,13 @@ class ChatGateway:
                 details={"reason": "rate_limited", "sender": sender},
             )
 
+        if len(text or "") > self.config.max_message_chars:
+            return ChatReply(
+                ok=False,
+                text="message too long",
+                details={"reason": "message_too_long"},
+            )
+
         decision = self.guard.scan_text(text)
         if not decision.allowed:
             return ChatReply(

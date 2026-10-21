@@ -1109,19 +1109,73 @@ def api_debug_telegram():
     })
 
 
+TELEGRAM_REPLY_QUEUE = '/tmp/telegram_reply_queue.json'
+TELEGRAM_QUEUE_MAX = 200  # bound so the file cannot grow without limit
+
+
+def _telegram_secret_ok():
+    """Shared-secret check for the Telegram webhook and the reply queue.
+
+    Set TELEGRAM_WEBHOOK_SECRET in the Space env and register it with Telegram
+    (setWebhook secret_token). If it is not configured we allow the request so
+    an existing deployment does not break, but we never trust the payload more
+    than we have to.
+    """
+    expected = os.environ.get('TELEGRAM_WEBHOOK_SECRET', '')
+    if not expected:
+        return True
+    supplied = request.headers.get('X-Telegram-Bot-Api-Secret-Token', '')
+    import hmac
+    return hmac.compare_digest(str(supplied), str(expected))
+
+
+def _read_reply_queue():
+    try:
+        with open(TELEGRAM_REPLY_QUEUE) as f:
+            queue = json.load(f)
+        return queue if isinstance(queue, list) else []
+    except Exception:
+        return []
+
+
+def _append_reply(chat_id, text):
+    """Append one validated reply, bounded, tagged with an id for dedup."""
+    queue = _read_reply_queue()
+    queue.append({
+        'id': f'{chat_id}:{int(time.time() * 1000)}:{len(queue)}',
+        'chat_id': chat_id,
+        'text': str(text)[:4000],
+    })
+    queue = queue[-TELEGRAM_QUEUE_MAX:]
+    with open(TELEGRAM_REPLY_QUEUE, 'w') as f:
+        json.dump(queue, f)
+
+
 @app.route('/api/telegram/webhook', methods=['POST'])
 def telegram_webhook():
     """Receive Telegram updates via webhook (inbound - works on HF Spaces).
     Stores replies in a queue file since HF can't reach telegram.org outbound.
     GitHub Actions sends queued replies to Telegram."""
+    if not _telegram_secret_ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+
     update = request.get_json(force=True, silent=True) or {}
-    
+
     if 'message' not in update:
         return jsonify({'ok': True})
-    
+
     msg = update['message']
-    chat_id = msg.get('chat', {}).get('id')
+    if not isinstance(msg, dict):
+        return jsonify({'ok': True})
+    chat = msg.get('chat') or {}
+    chat_id = chat.get('id') if isinstance(chat, dict) else None
+    # Only ever reply to a real chat id; drop anything else.
+    if not isinstance(chat_id, (int, str)) or not str(chat_id).strip():
+        return jsonify({'ok': True})
     text = msg.get('text', '')
+    if not isinstance(text, str):
+        return jsonify({'ok': True})
+    text = text[:4000]
     user = msg.get('from', {})
     
     # Build reply text
@@ -1169,41 +1223,29 @@ def telegram_webhook():
     # Store reply in queue (GitHub Actions will send it)
     if reply:
         try:
-            import threading
-            def store_reply():
-                queue_path = '/tmp/telegram_reply_queue.json'
-                try:
-                    with open(queue_path) as f:
-                        queue = json.load(f)
-                except Exception:
-                    queue = []
-                queue.append({'chat_id': chat_id, 'text': reply})
-                with open(queue_path, 'w') as f:
-                    json.dump(queue, f)
-            # Store synchronously to ensure it's saved before we return
-            store_reply()
+            _append_reply(chat_id, reply)
         except Exception as e:
             print(f"Queue store error: {e}")
-    
+
     return jsonify({'ok': True})
 
 
 @app.route('/api/telegram/queue', methods=['GET'])
 def telegram_queue_get():
     """Return pending replies (called by GitHub Actions relay)."""
-    try:
-        with open('/tmp/telegram_reply_queue.json') as f:
-            queue = json.load(f)
-    except Exception:
-        queue = []
+    if not _telegram_secret_ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    queue = _read_reply_queue()
     return jsonify({'replies': queue, 'count': len(queue)})
 
 
 @app.route('/api/telegram/queue', methods=['DELETE'])
 def telegram_queue_clear():
     """Clear the reply queue (called by GitHub Actions after sending)."""
+    if not _telegram_secret_ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     try:
-        with open('/tmp/telegram_reply_queue.json', 'w') as f:
+        with open(TELEGRAM_REPLY_QUEUE, 'w') as f:
             json.dump([], f)
         return jsonify({'ok': True, 'cleared': True})
     except Exception as e:

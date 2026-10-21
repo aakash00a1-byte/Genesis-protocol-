@@ -168,6 +168,9 @@ class IntegrationConfig:
     shots: int = 8
     poll_interval_seconds: float = 2.0
     rate_limit_per_minute: int = 30
+    # Reject an inbound message longer than this before it reaches the guard or
+    # a command parser, so an oversized payload cannot exhaust parsing.
+    max_message_chars: int = 4000
     # Allow-listed channels/chats. Empty means "refuse everything" — a chat
     # integration must be told explicitly which rooms it may answer.
     allowed_channels: list[str] = field(default_factory=list)
