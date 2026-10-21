@@ -114,6 +114,15 @@ delivers them.
 - **web/app.py must import.** It once used `@limiter.limit` with no `limiter`
   defined -> `NameError` on import -> any redeploy crash. Keep the optional
   flask-limiter setup (no-op fallback) intact.
+- **Groq model deprecations are a live outage.** `llama-3.3-70b-versatile`
+  was shut down 2026-08-16 for free/developer tiers (enterprise-only now), so
+  every Groq call 404s. Current production models: `openai/gpt-oss-120b`
+  (default) and `openai/gpt-oss-20b` (fast). Check
+  https://console.groq.com/docs/deprecations before pinning a model.
+- **Deploying:** GitHub push does NOT update the Space. Use
+  `HF_TOKEN=hf_... bash scripts/hf_deploy.sh` (the Space is a standalone git
+  repo; the script preserves README front-matter and maps Dockerfile.hf ->
+  Dockerfile).
 - **HF Space runs a frozen snapshot.** `GenesisNo/Genesis-Automaton` is
   `sdk: docker` and is NOT auto-deployed from GitHub (no workflow uploads it);
   its `lastModified` lags `main` by weeks. So the live Space can be running old
