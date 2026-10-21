@@ -94,6 +94,14 @@ MARKET_SYMBOLS: list[tuple[str, str]] = [
     ("Bitcoin", "BTC-USD"),
     ("Ethereum", "ETH-USD"),
 ]
+# Have the Space AI write a short Hinglish briefing from the headlines + market.
+AGENT_BRIEFING_ENABLED = os.environ.get("AGENT_BRIEFING_ENABLED", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+    "",
+}
 NEWS_CATEGORIES: dict[str, list[tuple[str, str]]] = {
     "🌍 WORLD": [
         ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
@@ -164,6 +172,20 @@ def _get(url: str, timeout: int = 30) -> bytes | None:
             return resp.read()
     except Exception as exc:  # noqa: BLE001 - relay must never die on one call
         _log(f"GET failed: {type(exc).__name__}")
+        return None
+
+
+def _post(url: str, payload: dict, timeout: int = 60) -> bytes | None:
+    try:
+        req = urllib.request.Request(  # noqa: S310
+            url,
+            data=json.dumps(payload).encode(),
+            headers={**_headers(), "Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            return resp.read()
+    except Exception as exc:  # noqa: BLE001 - relay must never die on one call
+        _log(f"POST failed: {type(exc).__name__}")
         return None
 
 
@@ -367,6 +389,39 @@ def build_news_sections() -> list[str]:
     return sections
 
 
+def collect_headlines(limit: int = 30) -> list[str]:
+    """Collect deduplicated headlines across all feeds for the AI briefing."""
+    headlines: list[str] = []
+    seen: set[str] = set()
+    for _label, feeds in NEWS_CATEGORIES.items():
+        for source, url in feeds:
+            for title in _fetch_feed_titles(url):
+                key = title.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                headlines.append(f"{title} ({source})")
+                if len(headlines) >= limit:
+                    return headlines
+    return headlines
+
+
+def collect_market_lines() -> list[str]:
+    """Collect 'label: price (+x%)' lines for the AI briefing."""
+    lines: list[str] = []
+    for label, symbol in MARKET_SYMBOLS:
+        quote = _fetch_quote(symbol)
+        if quote is None:
+            continue
+        price, prev = quote
+        if prev == 0:
+            continue
+        pct = (price - prev) / prev * 100.0
+        sign = "+" if pct >= 0 else ""
+        lines.append(f"{label}: {_fmt_number(price)} ({sign}{pct:.2f}%)")
+    return lines
+
+
 def _fit(text: str) -> str:
     """Trim to stay under Telegram's 4096-char limit."""
     if len(text) > MAX_DIGEST_CHARS:
@@ -491,6 +546,43 @@ def market_report() -> None:
         _log("market report sent")
 
 
+def agent_briefing() -> None:
+    """Ask the Space AI to write a briefing, then deliver it to the news chat.
+
+    This gives the agent a real job: it reads the day's headlines and market
+    numbers and writes its own Hinglish summary, which the relay posts.
+    """
+    if not NEWS_CHAT_ID:
+        _log("briefing skipped: no news chat id is set")
+        return
+    headlines = collect_headlines()
+    market_lines = collect_market_lines()
+    if not headlines and not market_lines:
+        _log("briefing skipped: no data collected")
+        return
+    raw = _post(
+        f"{HF_SPACE_URL}/api/briefing",
+        {"headlines": headlines, "market": market_lines},
+        timeout=90,
+    )
+    if raw is None:
+        _log("briefing skipped: the Space did not answer")
+        return
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        _log("briefing skipped: the Space sent non-JSON")
+        return
+    briefing = data.get("briefing") if isinstance(data, dict) else None
+    if not isinstance(briefing, str) or not briefing.strip():
+        _log("briefing skipped: the AI returned no text")
+        return
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    text = f"🧠 Genesis AI briefing\n\n{briefing.strip()}\n\n🕒 {stamp}"
+    if _telegram_send(NEWS_CHAT_ID, _fit(text)):
+        _log("agent briefing sent")
+
+
 
 def main() -> int:
     if not TELEGRAM_BOT_TOKEN:
@@ -509,6 +601,12 @@ def main() -> int:
     next_market = (
         started + 5.0 if MARKET_ENABLED and NEWS_INTERVAL_SECONDS > 0 else float("inf")
     )
+    # The AI briefing follows the market, offset again.
+    next_briefing = (
+        started + 10.0
+        if AGENT_BRIEFING_ENABLED and NEWS_INTERVAL_SECONDS > 0
+        else float("inf")
+    )
     while time.monotonic() - started < RUN_SECONDS:
         keep_awake()
         relay_once()
@@ -521,6 +619,9 @@ def main() -> int:
         if time.monotonic() >= next_market:
             market_report()
             next_market = time.monotonic() + NEWS_INTERVAL_SECONDS
+        if time.monotonic() >= next_briefing:
+            agent_briefing()
+            next_briefing = time.monotonic() + NEWS_INTERVAL_SECONDS
         time.sleep(TICK_SECONDS)
     _log("relay loop finished; the next scheduled run takes over")
     return 0
@@ -535,5 +636,8 @@ if __name__ == "__main__":
         sys.exit(0)
     if len(sys.argv) > 1 and sys.argv[1] == "market":
         market_report()
+        sys.exit(0)
+    if len(sys.argv) > 1 and sys.argv[1] == "briefing":
+        agent_briefing()
         sys.exit(0)
     sys.exit(main())

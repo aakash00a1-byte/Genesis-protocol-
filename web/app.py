@@ -1274,6 +1274,79 @@ def telegram_queue_clear():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+BRIEFING_PROMPT = (
+    "You are Genesis, an autonomous AI news editor. You are given today's "
+    "headlines and live market numbers. Write a short briefing for the user in "
+    "Hinglish (Hindi written in Latin script, mixed with English). Structure:\n"
+    "1) one line 'Aaj ka sabse bada news' highlighting the single most "
+    "important story;\n"
+    "2) 3-5 short bullet points on the biggest world/India/tech/sports items;\n"
+    "3) one line on the market mood, naming the direction (up/down) and the "
+    "notable mover.\n"
+    "Be factual: use only the supplied data, never invent prices or events. "
+    "Keep it under 900 characters. No markdown headings, plain text only."
+)
+
+
+def _ai_generate(system: str, user: str, timeout: int = 45) -> Optional[str]:
+    """Run one prompt through the provider chain. Returns text or None."""
+    try:
+        from genesis_protocol.ai.provider_chain import get_provider_chain
+        import asyncio
+
+        ai = get_provider_chain()
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(
+                ai.call(
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    user_input=user,
+                )
+            )
+        finally:
+            loop.close()
+        if result.success and result.response:
+            return result.response.content
+    except Exception as e:
+        logging.warning("briefing generation failed: %s", type(e).__name__)
+    return None
+
+
+@app.route('/api/briefing', methods=['POST'])
+def api_briefing():
+    """Have the AI write a short digest from supplied headlines + market data.
+
+    Called by the GitHub Actions relay (shared secret required). The relay owns
+    the outbound path to Telegram; the Space owns the AI. Returns the briefing
+    text so the relay can deliver it.
+    """
+    if not _telegram_secret_ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    payload = request.get_json(silent=True) or {}
+    headlines = payload.get('headlines') or []
+    market = payload.get('market') or []
+    if not isinstance(headlines, list):
+        headlines = []
+    if not isinstance(market, list):
+        market = []
+    # Bound the prompt so a hostile caller cannot blow up the model context.
+    lines = [str(h)[:200] for h in headlines[:40] if str(h).strip()]
+    quote_lines = [str(m)[:120] for m in market[:20] if str(m).strip()]
+    if not lines and not quote_lines:
+        return jsonify({'ok': False, 'error': 'no data supplied'}), 400
+    user = "HEADLINES:\n" + "\n".join(f"- {h}" for h in lines)
+    if quote_lines:
+        user += "\n\nMARKET:\n" + "\n".join(f"- {m}" for m in quote_lines)
+    text = _ai_generate(BRIEFING_PROMPT, user)
+    if not text:
+        return jsonify({'ok': False, 'error': 'ai unavailable'}), 503
+    return jsonify({'ok': True, 'briefing': text.strip()[:2000]})
+
+
 @app.route('/api/status', methods=['GET'])
 def api_status():
     """Detailed status with metrics."""

@@ -64,15 +64,17 @@ jobs:
           # Send the proactive heartbeat from inside the long run instead of a
           # separate schedule, so it cannot be delayed by the scheduler.
           RELAY_HEARTBEAT_HOURS: "24"
-          # Tech/sports/markets news digest every 5 minutes.
+          # News, market and AI briefing every 45 minutes.
           NEWS_ENABLED: "1"
-          NEWS_INTERVAL_SECONDS: "300"
+          NEWS_INTERVAL_SECONDS: "2700"
           NEWS_MAX_PER_CATEGORY: "3"
           # Each category as its own message (1) or one combined digest (0).
           NEWS_SEPARATE_MESSAGES: "1"
           NEWS_SEND_GAP_SECONDS: "1.5"
-          # Live market ticker (indices, commodities, crypto, FX) every 5 minutes.
+          # Live market ticker (indices, commodities, crypto, FX).
           MARKET_ENABLED: "1"
+          # Let the Space AI write its own Hinglish briefing from the news.
+          AGENT_BRIEFING_ENABLED: "1"
           # Post the digest to a channel instead of the admin DM by setting the
           # TELEGRAM_NEWS_CHAT_ID repo secret to a channel id (e.g. -100...).
           TELEGRAM_NEWS_CHAT_ID: ${{ secrets.TELEGRAM_NEWS_CHAT_ID }}

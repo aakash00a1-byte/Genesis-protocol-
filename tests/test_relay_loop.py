@@ -343,3 +343,67 @@ def test_market_report_sends_to_news_chat(monkeypatch, tmp_path) -> None:
     assert sent == [("42", "market-body")]
 
 
+
+
+# --- AI briefing ----------------------------------------------------------
+
+
+def test_collect_headlines_dedupes_and_caps(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    monkeypatch.setattr(
+        relay, "NEWS_CATEGORIES", {"A": [("s", "u")], "B": [("s", "u")]}
+    )
+    monkeypatch.setattr(relay, "_fetch_feed_titles", lambda url: ["Same", "Other"])
+    lines = relay.collect_headlines(limit=2)
+    assert lines == ["Same (s)", "Other (s)"]
+
+
+def test_agent_briefing_posts_and_sends(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok", TELEGRAM_ADMIN_ID="42")
+    monkeypatch.setattr(relay, "collect_headlines", lambda: ["h1"])
+    monkeypatch.setattr(relay, "collect_market_lines", lambda: ["Nifty: 1 (+1%)"])
+    captured: dict = {}
+
+    def _fake_post(url, payload, timeout=60):
+        captured["url"] = url
+        captured["payload"] = payload
+        return b'{"ok": true, "briefing": "Aaj ka bada news"}'
+
+    monkeypatch.setattr(relay, "_post", _fake_post)
+    sent: list[str] = []
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: sent.append(text) or True
+    )
+    relay.agent_briefing()
+    assert captured["url"].endswith("/api/briefing")
+    assert captured["payload"] == {"headlines": ["h1"], "market": ["Nifty: 1 (+1%)"]}
+    assert len(sent) == 1 and "Aaj ka bada news" in sent[0]
+
+
+def test_agent_briefing_skipped_when_space_silent(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok", TELEGRAM_ADMIN_ID="42")
+    monkeypatch.setattr(relay, "collect_headlines", lambda: ["h1"])
+    monkeypatch.setattr(relay, "collect_market_lines", lambda: [])
+    monkeypatch.setattr(relay, "_post", lambda url, payload, timeout=60: None)
+    sent: list[str] = []
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: sent.append(text) or True
+    )
+    relay.agent_briefing()
+    assert sent == []
+
+
+def test_agent_briefing_skipped_when_ai_unavailable(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok", TELEGRAM_ADMIN_ID="42")
+    monkeypatch.setattr(relay, "collect_headlines", lambda: ["h1"])
+    monkeypatch.setattr(relay, "collect_market_lines", lambda: [])
+    monkeypatch.setattr(
+        relay, "_post", lambda url, payload, timeout=60: b'{"ok": false}'
+    )
+    sent: list[str] = []
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: sent.append(text) or True
+    )
+    relay.agent_briefing()
+    assert sent == []
+
