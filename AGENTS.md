@@ -100,6 +100,12 @@ delivers them.
 Set `TELEGRAM_NEWS_CHAT_ID` to a channel id to broadcast to a channel instead
 of the admin DM. One-shot tests: `python3 scripts/relay_loop.py news|market|briefing`.
 
+## Auto-deploy to the Space
+`.github/workflows/deploy-space.yml` mirrors the repo to the HF Space on every
+push to `main` (runs `scripts/hf_deploy.sh` with the `HF_TOKEN` repo secret),
+so a GitHub push updates the live Space without a manual step. If `HF_TOKEN` is
+unset the job fails loudly instead of silently skipping.
+
 ## V6 hardening notes (relay + authority gate)
 
 - V6 kernel lives in `genesis_v5/genesis/`. Run its suite from that dir with

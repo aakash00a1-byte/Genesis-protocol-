@@ -14,11 +14,23 @@ from pathlib import Path
 WORKFLOWS = Path(__file__).resolve().parent.parent / ".github" / "workflows"
 KEEPALIVE = WORKFLOWS / "keepalive.yml"
 HEARTBEAT = WORKFLOWS / "heartbeat.yml"
+DEPLOY = WORKFLOWS / "deploy-space.yml"
 
 
 def test_workflows_exist() -> None:
     assert KEEPALIVE.is_file()
     assert HEARTBEAT.is_file()
+    assert DEPLOY.is_file()
+
+
+def test_deploy_workflow_mirrors_to_space() -> None:
+    text = DEPLOY.read_text(encoding="utf-8")
+    assert re.search(r"^permissions:", text, re.M)
+    assert "contents: read" in text
+    assert re.search(r"^concurrency:", text, re.M)
+    # Deploy must run the shared mirror script with the secret, never a literal.
+    assert "bash scripts/hf_deploy.sh" in text
+    assert "${{ secrets.HF_TOKEN }}" in text
 
 
 def test_keepalive_declares_permissions_and_concurrency() -> None:
@@ -38,8 +50,10 @@ def test_heartbeat_has_concurrency_and_permissions() -> None:
 
 def test_no_token_literal_in_workflows() -> None:
     # Secrets must come from ${{ secrets.* }}, never a literal.
-    literal = re.compile(r"(ghp_[A-Za-z0-9]{20,}|bot[0-9]{6,}:[A-Za-z0-9_-]{20,})")
-    for path in (KEEPALIVE, HEARTBEAT):
+    literal = re.compile(
+        r"(ghp_[A-Za-z0-9]{20,}|hf_[A-Za-z0-9]{20,}|bot[0-9]{6,}:[A-Za-z0-9_-]{20,})"
+    )
+    for path in (KEEPALIVE, HEARTBEAT, DEPLOY):
         assert not literal.search(path.read_text(encoding="utf-8")), path
 
 

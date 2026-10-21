@@ -1,0 +1,44 @@
+name: Deploy to Hugging Face Space
+
+# The HF Space (GenesisNo/Genesis-Automaton) is a STANDALONE git repo, not
+# linked to GitHub. A push to GitHub does NOT update the live Space, so this
+# workflow mirrors the repo into the Space on every push to main. That removes
+# the manual `HF_TOKEN=... bash scripts/hf_deploy.sh` step.
+#
+# Requires the repo secret HF_TOKEN: a Hugging Face WRITE token for a user that
+# can push to the Space. Without it the job fails loudly (no silent skip) so a
+# broken deploy is visible.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: hf-space-deploy
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check HF_TOKEN is configured
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::error::HF_TOKEN secret is not set; cannot deploy to the Space."
+            exit 1
+          fi
+
+      - name: Mirror repo to the HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: bash scripts/hf_deploy.sh
