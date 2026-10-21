@@ -65,6 +65,12 @@ NEWS_ENABLED = os.environ.get("NEWS_ENABLED", "1").strip().lower() not in {
 }
 NEWS_INTERVAL_SECONDS = int(os.environ.get("NEWS_INTERVAL_SECONDS", "300"))
 NEWS_MAX_PER_CATEGORY = int(os.environ.get("NEWS_MAX_PER_CATEGORY", "3"))
+# Send each category as its own message (1) or one combined digest (0).
+NEWS_SEPARATE_MESSAGES = os.environ.get(
+    "NEWS_SEPARATE_MESSAGES", "1"
+).strip().lower() not in {"0", "false", "no", "off", ""}
+# Pause between category messages so they arrive as separate, ordered messages.
+NEWS_SEND_GAP_SECONDS = float(os.environ.get("NEWS_SEND_GAP_SECONDS", "1.5"))
 NEWS_CATEGORIES: dict[str, list[tuple[str, str]]] = {
     "🌍 WORLD": [
         ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
@@ -316,8 +322,8 @@ def _fetch_feed_titles(url: str) -> list[str]:
     return titles
 
 
-def build_news_digest() -> str | None:
-    """Build a tech/sports/markets digest, or None if every feed failed."""
+def build_news_sections() -> list[str]:
+    """Build one message body per category, skipping empty categories."""
     sections: list[str] = []
     seen_titles: set[str] = set()
     for label, feeds in NEWS_CATEGORIES.items():
@@ -335,21 +341,53 @@ def build_news_digest() -> str | None:
                 break
         if lines:
             sections.append(label + "\n" + "\n".join(lines))
-    if not sections:
-        return None
-    stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-    text = "📰 Genesis news update\n" + "\n\n".join(sections) + f"\n\n🕒 {stamp}"
-    # Telegram rejects messages over 4096 chars; stay safely under the limit.
+    return sections
+
+
+def _fit(text: str) -> str:
+    """Trim to stay under Telegram's 4096-char limit."""
     if len(text) > MAX_DIGEST_CHARS:
         text = text[: MAX_DIGEST_CHARS - 20].rstrip() + "\n\n…(trimmed)"
     return text
 
 
+def build_news_digest() -> str | None:
+    """Build one combined tech/sports/markets digest, or None if all feeds failed."""
+    sections = build_news_sections()
+    if not sections:
+        return None
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    return _fit("📰 Genesis news update\n" + "\n\n".join(sections) + f"\n\n🕒 {stamp}")
+
+
 def news_digest() -> None:
-    """Send one news digest to the news chat (admin DM by default)."""
+    """Send the news digest to the news chat (admin DM by default).
+
+    By default each category goes as its own message, sent one after another, so
+    the admin gets them one at a time instead of a single wall of text.
+    """
     if not NEWS_CHAT_ID:
         _log("news skipped: no news chat id is set")
         return
+
+    if NEWS_SEPARATE_MESSAGES:
+        sections = build_news_sections()
+        if not sections:
+            _log("news skipped: no feed returned headlines")
+            return
+        stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+        total = len(sections)
+        sent = 0
+        for index, section in enumerate(sections, 1):
+            header = f"📰 Genesis news ({index}/{total})\n\n"
+            footer = f"\n\n🕒 {stamp}" if index == total else ""
+            if _telegram_send(NEWS_CHAT_ID, _fit(header + section + footer)):
+                sent += 1
+                if index < total and NEWS_SEND_GAP_SECONDS > 0:
+                    time.sleep(NEWS_SEND_GAP_SECONDS)
+        _log(f"news sent {sent}/{total} category messages")
+        return
+
     text = build_news_digest()
     if text is None:
         _log("news skipped: no feed returned headlines")

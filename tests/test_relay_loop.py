@@ -242,15 +242,36 @@ def test_build_news_digest_truncates_to_telegram_limit(monkeypatch, tmp_path) ->
     assert digest.endswith("…(trimmed)")
 
 
-def test_news_digest_sends_to_admin(monkeypatch, tmp_path) -> None:
+def test_news_digest_sends_one_message_per_category(monkeypatch, tmp_path) -> None:
     relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok", TELEGRAM_ADMIN_ID="42")
-    monkeypatch.setattr(relay, "build_news_digest", lambda: "digest-body")
-    captured: dict[str, str] = {}
+    monkeypatch.setattr(relay, "NEWS_SEND_GAP_SECONDS", 0)
     monkeypatch.setattr(
-        relay, "_telegram_send", lambda cid, text: captured.update(cid=cid, text=text) or True
+        relay, "build_news_sections", lambda: ["🌍 WORLD\n• a", "💻 TECH\n• b"]
+    )
+    sent: list[str] = []
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: sent.append(text) or True
     )
     relay.news_digest()
-    assert captured == {"cid": "42", "text": "digest-body"}
+    assert len(sent) == 2  # one message per category, not a combined digest
+    assert "1/2" in sent[0] and "🌍 WORLD" in sent[0]
+    assert "2/2" in sent[1] and "💻 TECH" in sent[1]
+
+
+def test_news_digest_combined_mode_sends_one_message(monkeypatch, tmp_path) -> None:
+    relay = _load(
+        monkeypatch,
+        TELEGRAM_BOT_TOKEN="tok",
+        TELEGRAM_ADMIN_ID="42",
+        NEWS_SEPARATE_MESSAGES="0",
+    )
+    monkeypatch.setattr(relay, "build_news_digest", lambda: "combined-body")
+    sent: list[str] = []
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: sent.append(text) or True
+    )
+    relay.news_digest()
+    assert sent == ["combined-body"]
 
 
 def test_news_digest_skipped_without_admin(monkeypatch, tmp_path, capsys) -> None:

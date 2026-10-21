@@ -68,6 +68,9 @@ jobs:
           NEWS_ENABLED: "1"
           NEWS_INTERVAL_SECONDS: "300"
           NEWS_MAX_PER_CATEGORY: "3"
+          # Each category as its own message (1) or one combined digest (0).
+          NEWS_SEPARATE_MESSAGES: "1"
+          NEWS_SEND_GAP_SECONDS: "1.5"
           # Post the digest to a channel instead of the admin DM by setting the
           # TELEGRAM_NEWS_CHAT_ID repo secret to a channel id (e.g. -100...).
           TELEGRAM_NEWS_CHAT_ID: ${{ secrets.TELEGRAM_NEWS_CHAT_ID }}
