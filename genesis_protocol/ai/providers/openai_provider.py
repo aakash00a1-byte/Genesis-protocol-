@@ -9,7 +9,7 @@ from typing import List, Dict, Any
 import httpx
 
 from genesis_protocol.ai.providers.base_provider import (
-    BaseProvider, AIRequest, AIResponse, ProviderCapability
+    BaseProvider, AIRequest, AIResponse, ProviderCapability, loop_safe_client
 )
 from genesis_protocol.config import get_config
 from genesis_protocol.utils.logger import get_logger
@@ -34,17 +34,19 @@ class OpenAIProvider(BaseProvider):
         self.default_model = config.openai.default_model
         self.timeout = config.openai.timeout
         
-        if self.api_key:
-            self._client = httpx.AsyncClient(
-                base_url=self.BASE_URL,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                timeout=self.timeout,
-            )
-        else:
-            self._client = None
+        self._client_headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        } if self.api_key else None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        """Client bound to the current event loop (safe across short loops)."""
+        return loop_safe_client(
+            self.name,
+            base_url=self.BASE_URL,
+            headers=self._client_headers,
+            timeout=self.timeout,
+        )
     
     def is_configured(self) -> bool:
         """Check if OpenAI is configured."""
@@ -85,7 +87,7 @@ class OpenAIProvider(BaseProvider):
                 "stream": False,
             }
             
-            response = await self._client.post("/chat/completions", json=payload)
+            response = await self._get_client().post("/chat/completions", json=payload)
             
             if response.status_code == 429:
                 self.record_failure()

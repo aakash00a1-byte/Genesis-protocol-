@@ -91,6 +91,28 @@ app.permanent_session_lifetime = timedelta(days=7)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Rate limiting. flask-limiter is optional: fall back to a no-op decorator so a
+# missing optional dependency can never break app import (it previously did).
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+
+    limiter = Limiter(
+        key_func=get_remote_address,
+        app=app,
+        default_limits=[],
+        storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
+    )
+except Exception:  # pragma: no cover - optional dependency
+    class _NoopLimiter:
+        def limit(self, *args, **kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+    limiter = _NoopLimiter()
+
 # Database setup
 DATABASE = 'genesis.db'
 

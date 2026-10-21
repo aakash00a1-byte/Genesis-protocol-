@@ -9,9 +9,52 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List, Dict, Any
 
+import httpx
+
 from genesis_protocol.utils.logger import get_logger
 
 logger = get_logger("ai.providers.base")
+
+# One HTTP client per event loop, per provider. httpx.AsyncClient binds to the
+# loop that first uses it; a client created once in __init__ then reused from a
+# new loop (e.g. the webhook builds a fresh loop per request) fails with
+# "Event loop is closed". Keying by the running loop avoids that.
+_clients_by_loop: "Dict[tuple[str, int], httpx.AsyncClient]" = {}
+
+
+def loop_safe_client(
+    name: str,
+    *,
+    base_url: str | None = None,
+    headers: Dict[str, str] | None = None,
+    timeout: float | None = None,
+) -> httpx.AsyncClient:
+    """Return an AsyncClient bound to the *current* event loop.
+
+    Reuses the client across calls within the same loop and creates a new one
+    when the loop changes (or the old loop has closed), so providers stay usable
+    from short-lived loops.
+    """
+    import asyncio
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    key = (name, id(loop))
+    client = _clients_by_loop.get(key)
+    if client is not None and not getattr(client, "is_closed", False):
+        return client
+    kwargs: Dict[str, Any] = {}
+    if base_url is not None:
+        kwargs["base_url"] = base_url
+    if headers is not None:
+        kwargs["headers"] = headers
+    if timeout is not None:
+        kwargs["timeout"] = timeout
+    client = httpx.AsyncClient(**kwargs)
+    _clients_by_loop[key] = client
+    return client
 
 
 class ProviderCapability(Enum):
