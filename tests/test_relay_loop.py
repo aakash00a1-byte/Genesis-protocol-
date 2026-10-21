@@ -324,6 +324,9 @@ def test_build_market_report_shows_arrows_and_pct(monkeypatch, tmp_path) -> None
     assert report is not None
     assert "🟢 Up" in report and "+10.00%" in report
     assert "🔴 Down" in report and "-10.00%" in report
+    # The biggest mover is called out explicitly.
+    assert "🏆 Top gainer: Up (+10.00%)" in report
+    assert "📉 Top loser: Down (-10.00%)" in report
 
 
 def test_build_market_report_none_when_no_quotes(monkeypatch, tmp_path) -> None:

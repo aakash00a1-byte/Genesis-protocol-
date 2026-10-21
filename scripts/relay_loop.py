@@ -512,6 +512,7 @@ def _fetch_quote(symbol: str) -> tuple[float, float] | None:
 def build_market_report() -> str | None:
     """Build a live market ticker, or None if no symbol returned a price."""
     lines: list[str] = []
+    movers: list[tuple[float, str]] = []
     for label, symbol in MARKET_SYMBOLS:
         quote = _fetch_quote(symbol)
         if quote is None:
@@ -527,10 +528,19 @@ def build_market_report() -> str | None:
             f"{arrow} {label}: {_fmt_number(price)} "
             f"({sign}{pct:.2f}%)"
         )
+        movers.append((pct, label))
     if not lines:
         return None
     stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-    return "📊 Genesis market update\n\n" + "\n".join(lines) + f"\n\n🕒 {stamp}"
+    report = "📊 Genesis market update\n\n" + "\n".join(lines)
+    if len(movers) >= 2:
+        movers.sort()
+        worst, best = movers[0], movers[-1]
+        report += (
+            f"\n\n🏆 Top gainer: {best[1]} (+{best[0]:.2f}%)"
+            f"\n📉 Top loser: {worst[1]} ({worst[0]:.2f}%)"
+        )
+    return report + f"\n\n🕒 {stamp}"
 
 
 def market_report() -> None:
