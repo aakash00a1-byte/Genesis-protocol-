@@ -96,9 +96,12 @@ delivers them.
   `genesis_protocol.ai.provider_chain` and returns a short Hinglish summary the
   relay then posts. Toggle with `AGENT_BRIEFING_ENABLED`. The Space must be
   redeployed (`hf_deploy.sh`) for this endpoint to exist.
+- A weather line from the free Open-Meteo API (no key). Toggle with
+  `WEATHER_ENABLED`; pick a city with `WEATHER_CITY` (default `Delhi`, or `all`
+  for every city in `WEATHER_PLACES`).
 
 Set `TELEGRAM_NEWS_CHAT_ID` to a channel id to broadcast to a channel instead
-of the admin DM. One-shot tests: `python3 scripts/relay_loop.py news|market|briefing`.
+of the admin DM. One-shot tests: `python3 scripts/relay_loop.py news|market|briefing|weather`.
 
 ## Auto-deploy to the Space
 `.github/workflows/deploy-space.yml` mirrors the repo to the HF Space on every

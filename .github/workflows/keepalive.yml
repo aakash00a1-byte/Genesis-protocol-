@@ -75,6 +75,9 @@ jobs:
           MARKET_ENABLED: "1"
           # Let the Space AI write its own Hinglish briefing from the news.
           AGENT_BRIEFING_ENABLED: "1"
+          # Weather for one city (WEATHER_CITY=all for every configured city).
+          WEATHER_ENABLED: "1"
+          WEATHER_CITY: "Delhi"
           # Post the digest to a channel instead of the admin DM by setting the
           # TELEGRAM_NEWS_CHAT_ID repo secret to a channel id (e.g. -100...).
           TELEGRAM_NEWS_CHAT_ID: ${{ secrets.TELEGRAM_NEWS_CHAT_ID }}

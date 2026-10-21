@@ -102,6 +102,51 @@ AGENT_BRIEFING_ENABLED = os.environ.get("AGENT_BRIEFING_ENABLED", "1").strip().l
     "off",
     "",
 }
+# Weather: a short forecast for one city, via the free Open-Meteo API (no key).
+WEATHER_ENABLED = os.environ.get("WEATHER_ENABLED", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+    "",
+}
+WEATHER_CITY = os.environ.get("WEATHER_CITY", "Delhi").strip() or "Delhi"
+# (label, latitude, longitude) — one city keeps it simple; extend if needed.
+WEATHER_PLACES: list[tuple[str, float, float]] = [
+    ("Delhi", 28.6139, 77.2090),
+    ("Mumbai", 19.0760, 72.8777),
+    ("Kolkata", 22.5726, 88.3639),
+    ("Chennai", 13.0827, 80.2707),
+]
+# WMO weather interpretation codes -> short text.
+WMO_CODES: dict[int, str] = {
+    0: "Clear",
+    1: "Mostly clear",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Fog",
+    48: "Rime fog",
+    51: "Light drizzle",
+    53: "Drizzle",
+    55: "Heavy drizzle",
+    61: "Light rain",
+    63: "Rain",
+    65: "Heavy rain",
+    66: "Freezing rain",
+    67: "Freezing rain",
+    71: "Light snow",
+    73: "Snow",
+    75: "Heavy snow",
+    77: "Snow grains",
+    80: "Light showers",
+    81: "Showers",
+    82: "Violent showers",
+    85: "Snow showers",
+    86: "Heavy snow showers",
+    95: "Thunderstorm",
+    96: "Thunderstorm + hail",
+    99: "Thunderstorm + hail",
+}
 NEWS_CATEGORIES: dict[str, list[tuple[str, str]]] = {
     "🌍 WORLD": [
         ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
@@ -556,6 +601,74 @@ def market_report() -> None:
         _log("market report sent")
 
 
+def _fetch_weather(lat: float, lon: float) -> dict | None:
+    """Return today's min/max, current temp and condition, or None on failure."""
+    url = (
+        "https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        "&current=temperature_2m,weather_code"
+        "&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+        "&timezone=auto&forecast_days=1"
+    )
+    try:
+        req = urllib.request.Request(  # noqa: S310
+            url, headers={"User-Agent": "Mozilla/5.0 GenesisNews/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
+            data = json.loads(resp.read(MAX_FEED_BYTES))
+    except Exception as exc:  # noqa: BLE001 - weather must never stop the relay
+        _log(f"weather failed: {type(exc).__name__}")
+        return None
+    try:
+        current = data["current"]
+        daily = data["daily"]
+        return {
+            "temp": float(current["temperature_2m"]),
+            "code": int(current["weather_code"]),
+            "tmax": float(daily["temperature_2m_max"][0]),
+            "tmin": float(daily["temperature_2m_min"][0]),
+            "rain": daily.get("precipitation_probability_max", [None])[0],
+        }
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+
+
+def build_weather_report() -> str | None:
+    """Build a short weather message for the configured cities."""
+    lines: list[str] = []
+    for label, lat, lon in WEATHER_PLACES:
+        if WEATHER_CITY.lower() not in ("", "all") and label.lower() != WEATHER_CITY.lower():
+            continue
+        w = _fetch_weather(lat, lon)
+        if w is None:
+            continue
+        condition = WMO_CODES.get(w["code"], f"Code {w['code']}")
+        line = (
+            f"🌤 {label}: {condition}, {w['temp']:.0f}°C"
+            f" (min {w['tmin']:.0f}° / max {w['tmax']:.0f}°)"
+        )
+        if isinstance(w["rain"], (int, float)):
+            line += f", rain {w['rain']:.0f}%"
+        lines.append(line)
+    if not lines:
+        return None
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    return "🌦 Genesis weather\n\n" + "\n".join(lines) + f"\n\n🕒 {stamp}"
+
+
+def weather_report() -> None:
+    """Send the weather to the news chat."""
+    if not NEWS_CHAT_ID:
+        _log("weather skipped: no news chat id is set")
+        return
+    text = build_weather_report()
+    if text is None:
+        _log("weather skipped: no city returned data")
+        return
+    if _telegram_send(NEWS_CHAT_ID, text):
+        _log("weather report sent")
+
+
 def agent_briefing() -> None:
     """Ask the Space AI to write a briefing, then deliver it to the news chat.
 
@@ -617,6 +730,12 @@ def main() -> int:
         if AGENT_BRIEFING_ENABLED and NEWS_INTERVAL_SECONDS > 0
         else float("inf")
     )
+    # Weather follows the briefing.
+    next_weather = (
+        started + 15.0
+        if WEATHER_ENABLED and NEWS_INTERVAL_SECONDS > 0
+        else float("inf")
+    )
     while time.monotonic() - started < RUN_SECONDS:
         keep_awake()
         relay_once()
@@ -632,6 +751,9 @@ def main() -> int:
         if time.monotonic() >= next_briefing:
             agent_briefing()
             next_briefing = time.monotonic() + NEWS_INTERVAL_SECONDS
+        if time.monotonic() >= next_weather:
+            weather_report()
+            next_weather = time.monotonic() + NEWS_INTERVAL_SECONDS
         time.sleep(TICK_SECONDS)
     _log("relay loop finished; the next scheduled run takes over")
     return 0
@@ -649,5 +771,8 @@ if __name__ == "__main__":
         sys.exit(0)
     if len(sys.argv) > 1 and sys.argv[1] == "briefing":
         agent_briefing()
+        sys.exit(0)
+    if len(sys.argv) > 1 and sys.argv[1] == "weather":
+        weather_report()
         sys.exit(0)
     sys.exit(main())

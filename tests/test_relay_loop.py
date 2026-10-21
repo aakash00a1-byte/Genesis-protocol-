@@ -410,3 +410,41 @@ def test_agent_briefing_skipped_when_ai_unavailable(monkeypatch, tmp_path) -> No
     relay.agent_briefing()
     assert sent == []
 
+
+# --- Weather ---------------------------------------------------------------
+
+
+def test_build_weather_report_formats(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    monkeypatch.setattr(relay, "WEATHER_CITY", "Delhi")
+    monkeypatch.setattr(relay, "WEATHER_PLACES", [("Delhi", 28.6, 77.2)])
+    monkeypatch.setattr(
+        relay,
+        "_fetch_weather",
+        lambda lat, lon: {"temp": 31.4, "code": 61, "tmax": 34.0, "tmin": 27.0, "rain": 40},
+    )
+    report = relay.build_weather_report()
+    assert report is not None
+    assert "Delhi" in report
+    assert "Light rain" in report
+    assert "31°C" in report
+    assert "rain 40%" in report
+
+
+def test_build_weather_report_none_when_no_data(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    monkeypatch.setattr(relay, "WEATHER_PLACES", [("Delhi", 28.6, 77.2)])
+    monkeypatch.setattr(relay, "_fetch_weather", lambda lat, lon: None)
+    assert relay.build_weather_report() is None
+
+
+def test_weather_report_sends_to_news_chat(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok", TELEGRAM_ADMIN_ID="42")
+    monkeypatch.setattr(relay, "build_weather_report", lambda: "weather-body")
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: sent.append((cid, text)) or True
+    )
+    relay.weather_report()
+    assert sent == [("42", "weather-body")]
+
