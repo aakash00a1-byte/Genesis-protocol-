@@ -37,6 +37,7 @@ import os
 import re
 import sys
 import time
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
@@ -71,6 +72,28 @@ NEWS_SEPARATE_MESSAGES = os.environ.get(
 ).strip().lower() not in {"0", "false", "no", "off", ""}
 # Pause between category messages so they arrive as separate, ordered messages.
 NEWS_SEND_GAP_SECONDS = float(os.environ.get("NEWS_SEND_GAP_SECONDS", "1.5"))
+# A live market ticker (indices, commodities, crypto, FX) sent as its own message.
+MARKET_ENABLED = os.environ.get("MARKET_ENABLED", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+    "",
+}
+# (label, yahoo symbol) — Yahoo Finance chart API returns price + previous close.
+MARKET_SYMBOLS: list[tuple[str, str]] = [
+    ("Nifty 50", "^NSEI"),
+    ("Sensex", "^BSESN"),
+    ("S&P 500", "^GSPC"),
+    ("Nasdaq", "^IXIC"),
+    ("Dow Jones", "^DJI"),
+    ("Gold", "GC=F"),
+    ("Silver", "SI=F"),
+    ("Crude Oil", "CL=F"),
+    ("USD/INR", "INR=X"),
+    ("Bitcoin", "BTC-USD"),
+    ("Ethereum", "ETH-USD"),
+]
 NEWS_CATEGORIES: dict[str, list[tuple[str, str]]] = {
     "🌍 WORLD": [
         ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
@@ -396,6 +419,78 @@ def news_digest() -> None:
         _log("news digest sent")
 
 
+def _fmt_number(value: float) -> str:
+    """Format a price with thousands separators, trimming needless decimals."""
+    if abs(value) >= 1000:
+        return f"{value:,.0f}"
+    if abs(value) >= 1:
+        return f"{value:,.2f}"
+    return f"{value:,.4f}"
+
+
+def _fetch_quote(symbol: str) -> tuple[float, float] | None:
+    """Return (price, previous_close) for a Yahoo symbol, or None on failure."""
+    url = (
+        "https://query1.finance.yahoo.com/v8/finance/chart/"
+        f"{urllib.parse.quote(symbol)}?interval=1d&range=1d"
+    )
+    try:
+        req = urllib.request.Request(  # noqa: S310
+            url, headers={"User-Agent": "Mozilla/5.0 GenesisNews/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
+            data = json.loads(resp.read(MAX_FEED_BYTES))
+    except Exception as exc:  # noqa: BLE001 - one bad symbol must not stop the rest
+        _log(f"quote failed ({symbol}): {type(exc).__name__}")
+        return None
+    try:
+        meta = data["chart"]["result"][0]["meta"]
+        price = float(meta["regularMarketPrice"])
+        prev = meta.get("chartPreviousClose") or meta.get("previousClose")
+        if prev is None:
+            return None
+        return price, float(prev)
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+
+
+def build_market_report() -> str | None:
+    """Build a live market ticker, or None if no symbol returned a price."""
+    lines: list[str] = []
+    for label, symbol in MARKET_SYMBOLS:
+        quote = _fetch_quote(symbol)
+        if quote is None:
+            continue
+        price, prev = quote
+        if prev == 0:
+            continue
+        change = price - prev
+        pct = change / prev * 100.0
+        arrow = "🟢" if change >= 0 else "🔴"
+        sign = "+" if change >= 0 else ""
+        lines.append(
+            f"{arrow} {label}: {_fmt_number(price)} "
+            f"({sign}{pct:.2f}%)"
+        )
+    if not lines:
+        return None
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    return "📊 Genesis market update\n\n" + "\n".join(lines) + f"\n\n🕒 {stamp}"
+
+
+def market_report() -> None:
+    """Send the live market ticker to the news chat."""
+    if not NEWS_CHAT_ID:
+        _log("market skipped: no news chat id is set")
+        return
+    text = build_market_report()
+    if text is None:
+        _log("market skipped: no quote returned a price")
+        return
+    if _telegram_send(NEWS_CHAT_ID, text):
+        _log("market report sent")
+
+
 
 def main() -> int:
     if not TELEGRAM_BOT_TOKEN:
@@ -410,6 +505,10 @@ def main() -> int:
     )
     # Send the first news digest immediately, then every NEWS_INTERVAL_SECONDS.
     next_news = started if NEWS_ENABLED and NEWS_INTERVAL_SECONDS > 0 else float("inf")
+    # Market ticker follows the news, offset so the two do not collide.
+    next_market = (
+        started + 5.0 if MARKET_ENABLED and NEWS_INTERVAL_SECONDS > 0 else float("inf")
+    )
     while time.monotonic() - started < RUN_SECONDS:
         keep_awake()
         relay_once()
@@ -419,6 +518,9 @@ def main() -> int:
         if time.monotonic() >= next_news:
             news_digest()
             next_news = time.monotonic() + NEWS_INTERVAL_SECONDS
+        if time.monotonic() >= next_market:
+            market_report()
+            next_market = time.monotonic() + NEWS_INTERVAL_SECONDS
         time.sleep(TICK_SECONDS)
     _log("relay loop finished; the next scheduled run takes over")
     return 0
@@ -430,5 +532,8 @@ if __name__ == "__main__":
         sys.exit(0)
     if len(sys.argv) > 1 and sys.argv[1] == "news":
         news_digest()
+        sys.exit(0)
+    if len(sys.argv) > 1 and sys.argv[1] == "market":
+        market_report()
         sys.exit(0)
     sys.exit(main())

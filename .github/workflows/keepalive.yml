@@ -71,6 +71,8 @@ jobs:
           # Each category as its own message (1) or one combined digest (0).
           NEWS_SEPARATE_MESSAGES: "1"
           NEWS_SEND_GAP_SECONDS: "1.5"
+          # Live market ticker (indices, commodities, crypto, FX) every 5 minutes.
+          MARKET_ENABLED: "1"
           # Post the digest to a channel instead of the admin DM by setting the
           # TELEGRAM_NEWS_CHAT_ID repo secret to a channel id (e.g. -100...).
           TELEGRAM_NEWS_CHAT_ID: ${{ secrets.TELEGRAM_NEWS_CHAT_ID }}

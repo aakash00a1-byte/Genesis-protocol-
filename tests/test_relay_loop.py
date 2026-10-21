@@ -284,3 +284,62 @@ def test_news_digest_skipped_without_admin(monkeypatch, tmp_path, capsys) -> Non
     assert called["n"] == 0
     assert "skipped" in capsys.readouterr().out
 
+
+# --- market report --------------------------------------------------------
+
+
+def test_fmt_number_trims_decimals(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    assert relay._fmt_number(22693.4) == "22,693"
+    assert relay._fmt_number(94.63) == "94.63"
+    assert relay._fmt_number(0.00123) == "0.0012"
+
+
+def test_fetch_quote_parses_yahoo_shape(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    body = (
+        b'{"chart":{"result":[{"meta":{"regularMarketPrice":100.0,'
+        b'"chartPreviousClose":98.0}}]}}'
+    )
+    monkeypatch.setattr(relay.urllib.request, "urlopen", _fake_urlopen(body))
+    assert relay._fetch_quote("^NSEI") == (100.0, 98.0)
+
+
+def test_fetch_quote_survives_bad_symbol(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+
+    def _boom(req, timeout=15):
+        raise OSError("no route")
+
+    monkeypatch.setattr(relay.urllib.request, "urlopen", _boom)
+    assert relay._fetch_quote("^NSEI") is None
+
+
+def test_build_market_report_shows_arrows_and_pct(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    monkeypatch.setattr(relay, "MARKET_SYMBOLS", [("Up", "A"), ("Down", "B")])
+    quotes = {"A": (110.0, 100.0), "B": (90.0, 100.0)}
+    monkeypatch.setattr(relay, "_fetch_quote", lambda s: quotes.get(s))
+    report = relay.build_market_report()
+    assert report is not None
+    assert "🟢 Up" in report and "+10.00%" in report
+    assert "🔴 Down" in report and "-10.00%" in report
+
+
+def test_build_market_report_none_when_no_quotes(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    monkeypatch.setattr(relay, "_fetch_quote", lambda s: None)
+    assert relay.build_market_report() is None
+
+
+def test_market_report_sends_to_news_chat(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok", TELEGRAM_ADMIN_ID="42")
+    monkeypatch.setattr(relay, "build_market_report", lambda: "market-body")
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: sent.append((cid, text)) or True
+    )
+    relay.market_report()
+    assert sent == [("42", "market-body")]
+
+
