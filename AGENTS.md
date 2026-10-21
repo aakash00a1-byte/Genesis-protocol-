@@ -102,3 +102,25 @@ delivers them.
   enforcement on (absent = allowed, to avoid breaking an existing deploy).
 - Never claim the HF Space "never sleeps" or that an HTTP 200 is a health
   check; the heartbeat reports only verified status.
+
+## Live runtime gotchas (found by driving the real Space)
+
+- **AI brain / event loops:** providers must not cache `httpx.AsyncClient` in
+  `__init__`. The Telegram webhook builds a fresh asyncio loop per request and
+  closes it, so a cached client fails on the 2nd request with
+  `groq: Event loop is closed`. Use `loop_safe_client()` from
+  `genesis_protocol/ai/providers/base_provider.py` (one client per running
+  loop). Regression: `tests/test_provider_loop_safety.py`.
+- **web/app.py must import.** It once used `@limiter.limit` with no `limiter`
+  defined -> `NameError` on import -> any redeploy crash. Keep the optional
+  flask-limiter setup (no-op fallback) intact.
+- **HF Space runs a frozen snapshot.** `GenesisNo/Genesis-Automaton` is
+  `sdk: docker` and is NOT auto-deployed from GitHub (no workflow uploads it);
+  its `lastModified` lags `main` by weeks. So the live Space can be running old
+  code regardless of what is merged. To run the current code live, start
+  `PORT=<port> python web/app.py` (routes: `/api/status`, `/api/health`,
+  `/api/telegram/webhook`, `/api/telegram/queue`).
+- **Legacy root `tests/` need** `python-dotenv`, `flask`, `httpx`, `structlog`
+  (and the rest of `requirements.txt`); without them collection errors are the
+  norm. With them installed: ~408 pass, 1 pre-existing unrelated failure
+  (`personality` module status).
