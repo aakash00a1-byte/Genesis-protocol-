@@ -79,3 +79,26 @@ delivers them.
 - Both call `scripts/relay_loop.py` (stdlib only). Required repo secrets:
   `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_ID`.
 
+## V6 hardening notes (relay + authority gate)
+
+- V6 kernel lives in `genesis_v5/genesis/`. Run its suite from that dir with
+  `python -m pytest tests/ -q` (the AGENTS `-tb=no` flag is invalid for the
+  installed pytest). Root `tests/` are legacy and fail only because `dotenv`
+  and `flask` are absent here.
+- The authority gate (`genesis/tools/gateway.py`) now has `forbid_tools()`.
+  With autonomy enabled, `bootstrap.build()` installs the autonomy guard's
+  forbidden-tool list as a hard gate rule, so no actor/role (admin included)
+  can reach `docker.exec`, `terminal.run`, `api.call`, `search.web` on the
+  agent path. Keep this invariant: a role must never widen the tool set past
+  the gate's forbidden list.
+- The chat gateway rejects messages longer than `integration.max_message_chars`
+  (4000) before the guard or a command parser sees them.
+- Relay delivery is idempotent: each queued reply carries an `id`, and the
+  worker persists sent ids in `RELAY_STATE_FILE` (restored via actions/cache)
+  before clearing the queue. Do not reintroduce a bare "clear after send".
+- The webhook and reply-queue endpoints accept an optional shared secret
+  (`TELEGRAM_WEBHOOK_SECRET`, header `X-Telegram-Bot-Api-Secret-Token`); the
+  relay sends it. Set the same value on the Space and as a repo secret to turn
+  enforcement on (absent = allowed, to avoid breaking an existing deploy).
+- Never claim the HF Space "never sleeps" or that an HTTP 200 is a health
+  check; the heartbeat reports only verified status.
