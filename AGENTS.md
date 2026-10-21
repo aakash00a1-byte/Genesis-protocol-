@@ -79,6 +79,27 @@ delivers them.
 - Both call `scripts/relay_loop.py` (stdlib only). Required repo secrets:
   `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_ID`.
 
+### News, market and AI briefing (every 45 minutes)
+
+`scripts/relay_loop.py` sends three things to the admin on a 45-minute cadence
+(`NEWS_INTERVAL_SECONDS=2700`):
+
+- News categories (World, India, Tech, Sports, Markets, Crypto, Obituaries)
+  from free RSS feeds, each category as its own message
+  (`NEWS_SEPARATE_MESSAGES=1`). Toggle with `NEWS_ENABLED`,
+  `NEWS_MAX_PER_CATEGORY`.
+- A live market ticker (indices, commodities, FX, crypto) with price and
+  percent change from the Yahoo Finance chart API. Toggle with
+  `MARKET_ENABLED`.
+- An AI briefing: the relay posts the collected headlines and market numbers to
+  `POST /api/briefing` on the Space, which runs them through
+  `genesis_protocol.ai.provider_chain` and returns a short Hinglish summary the
+  relay then posts. Toggle with `AGENT_BRIEFING_ENABLED`. The Space must be
+  redeployed (`hf_deploy.sh`) for this endpoint to exist.
+
+Set `TELEGRAM_NEWS_CHAT_ID` to a channel id to broadcast to a channel instead
+of the admin DM. One-shot tests: `python3 scripts/relay_loop.py news|market|briefing`.
+
 ## V6 hardening notes (relay + authority gate)
 
 - V6 kernel lives in `genesis_v5/genesis/`. Run its suite from that dir with
