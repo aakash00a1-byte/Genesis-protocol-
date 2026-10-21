@@ -1,0 +1,47 @@
+name: Genesis Self-Improvement
+
+# Gives the agent a real job: improve the Genesis repository itself.
+#
+# This starts ONE OpenHands Cloud conversation that reviews the repo, makes a
+# single small safe change on its own branch, runs the tests, and opens a pull
+# request. It does NOT merge. A human reviews the PR; merging it then triggers
+# the normal auto-deploy workflow. Nothing reaches production without review.
+#
+# Requires the repo secret OPENHANDS_API_KEY. Without it the job fails loudly.
+
+on:
+  schedule:
+    # Once a week, Monday 04:00 UTC.
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: genesis-self-improve
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  self-improve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check OPENHANDS_API_KEY is configured
+        env:
+          OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
+        run: |
+          if [ -z "$OPENHANDS_API_KEY" ]; then
+            echo "::error::OPENHANDS_API_KEY secret is not set; cannot start the agent."
+            exit 1
+          fi
+
+      - name: Start a self-improvement conversation
+        env:
+          OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
+          SELF_IMPROVE_REPO: ${{ github.repository }}
+          SELF_IMPROVE_BRANCH: main
+        run: python3 scripts/self_improve.py

@@ -103,6 +103,15 @@ delivers them.
 Set `TELEGRAM_NEWS_CHAT_ID` to a channel id to broadcast to a channel instead
 of the admin DM. One-shot tests: `python3 scripts/relay_loop.py news|market|briefing|weather`.
 
+## Agent self-improvement (Level B)
+`scripts/self_improve.py` gives the agent a job on the repo itself: it starts one
+OpenHands Cloud conversation that reviews this repo, makes a single small safe
+change on its own branch, runs the tests, and opens a pull request. It never
+merges, so a human reviews the PR; merging it triggers the auto-deploy workflow.
+Run weekly via `.github/workflows/self-improve.yml` (Monday 04:00 UTC) or by
+hand. Requires the `OPENHANDS_API_KEY` repo secret. `--dry-run` prints the task
+prompt without starting anything.
+
 ## Auto-deploy to the Space
 `.github/workflows/deploy-space.yml` mirrors the repo to the HF Space on every
 push to `main` (runs `scripts/hf_deploy.sh` with the `HF_TOKEN` repo secret),
