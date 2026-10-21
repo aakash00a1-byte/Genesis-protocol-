@@ -117,8 +117,8 @@ class LLMRouter:
         ),
         
         # Groq Models (fallback)
-        "llama-3.3-70b-versatile": ModelInfo(
-            name="llama-3.3-70b-versatile",
+        "openai/gpt-oss-120b": ModelInfo(
+            name="openai/gpt-oss-120b",
             provider="groq",
             capabilities=[ModelCapability.FAST, ModelCapability.CHEAP, ModelCapability.REASONING],
             context_window=32768,
@@ -282,7 +282,7 @@ class LLMRouter:
     def _route_fast(self) -> str:
         """Route to fastest/cheapest model."""
         # Groq for speed
-        return "llama-3.3-70b-versatile"
+        return "openai/gpt-oss-120b"
     
     def _route_default(self) -> str:
         """Default routing."""
@@ -320,11 +320,11 @@ class LLMRouter:
         provider = self.get_provider_for_model(primary_model)
         
         if provider == "openai":
-            chain.extend(["gemini-2.0-flash", "claude-3-5-sonnet-20241022", "llama-3.3-70b-versatile"])
+            chain.extend(["gemini-2.0-flash", "claude-3-5-sonnet-20241022", "openai/gpt-oss-120b"])
         elif provider == "claude":
-            chain.extend(["gemini-2.0-flash", "gpt-4o", "llama-3.3-70b-versatile"])
+            chain.extend(["gemini-2.0-flash", "gpt-4o", "openai/gpt-oss-120b"])
         elif provider == "gemini":
-            chain.extend(["gpt-4o", "claude-3-5-sonnet-20241022", "llama-3.3-70b-versatile"])
+            chain.extend(["gpt-4o", "claude-3-5-sonnet-20241022", "openai/gpt-oss-120b"])
         else:  # groq or unknown
             chain.extend(["gemini-2.0-flash", "gpt-4o", "claude-3-5-sonnet-20241022"])
         

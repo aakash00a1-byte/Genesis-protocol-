@@ -183,7 +183,7 @@ class ScoringEngine:
         },
         
         # Groq (Fast & Cheap)
-        "llama-3.3-70b-versatile": {
+        "openai/gpt-oss-120b": {
             "provider": "groq",
             "capabilities": ["fast", "reasoning", "coding", "cost_effective"],
             "strengths": ["fast_responses", "cost_effective", "reasoning", "coding"],
@@ -211,22 +211,22 @@ class ScoringEngine:
             "gpt-4o": 0.95, "gpt-4-turbo": 0.90, "gpt-4o-mini": 0.75,
             "claude-3-5-sonnet-20241022": 0.85, "claude-sonnet-4-20250514": 0.90,
             "gemini-1.5-flash": 0.70, "gemini-2.0-flash": 0.75,
-            "llama-3.3-70b-versatile": 0.80, "mixtral-8x7b-32768": 0.70,
+            "openai/gpt-oss-120b": 0.80, "mixtral-8x7b-32768": 0.70,
         },
         "creative": {
             "claude-3-5-sonnet-20241022": 0.95, "claude-sonnet-4-20250514": 0.98,
             "gpt-4o": 0.90, "gpt-4-turbo": 0.85,
             "gemini-1.5-flash": 0.65, "gemini-2.0-flash": 0.70,
-            "llama-3.3-70b-versatile": 0.60, "mixtral-8x7b-32768": 0.50,
+            "openai/gpt-oss-120b": 0.60, "mixtral-8x7b-32768": 0.50,
         },
         "reasoning": {
             "gemini-1.5-pro": 0.95, "gpt-4o": 0.90,
             "claude-3-5-sonnet-20241022": 0.88, "claude-sonnet-4-20250514": 0.92,
-            "gemini-2.0-flash": 0.85, "llama-3.3-70b-versatile": 0.75,
+            "gemini-2.0-flash": 0.85, "openai/gpt-oss-120b": 0.75,
         },
         "fast": {
             "gemini-2.0-flash": 0.98, "gemini-1.5-flash": 0.95,
-            "llama-3.3-70b-versatile": 0.95, "mixtral-8x7b-32768": 0.90,
+            "openai/gpt-oss-120b": 0.95, "mixtral-8x7b-32768": 0.90,
             "gpt-4o-mini": 0.85, "claude-3-haiku-20240307": 0.85,
             "deepseek-chat": 0.80, "mistral-small": 0.78,
             "deepseek-chat": 0.80, "mistral-small": 0.78,
@@ -239,7 +239,7 @@ class ScoringEngine:
         "long_context": {
             "gemini-1.5-pro": 0.98, "gemini-2.0-flash": 0.90,
             "claude-3-5-sonnet-20241022": 0.85, "claude-sonnet-4-20250514": 0.88,
-            "gpt-4o": 0.80, "llama-3.3-70b-versatile": 0.60,
+            "gpt-4o": 0.80, "openai/gpt-oss-120b": 0.60,
         },
         "vision": {
             "gpt-4o": 0.95, "gemini-1.5-pro": 0.95, "gemini-1.5-flash": 0.90,
@@ -248,7 +248,7 @@ class ScoringEngine:
         "analysis": {
             "claude-sonnet-4-20250514": 0.95, "gpt-4o": 0.92,
             "gemini-1.5-pro": 0.90, "claude-3-5-sonnet-20241022": 0.88,
-            "gemini-2.0-flash": 0.80, "llama-3.3-70b-versatile": 0.70,
+            "gemini-2.0-flash": 0.80, "openai/gpt-oss-120b": 0.70,
         },
     }
     
@@ -478,7 +478,7 @@ class ScoringEngine:
         # Check for simple query bypass
         if self.is_simple_query(query):
             # Use fastest model for simple queries
-            fast_model = "gemini-2.0-flash" if "gemini" in available_providers else "llama-3.3-70b-versatile"
+            fast_model = "gemini-2.0-flash" if "gemini" in available_providers else "openai/gpt-oss-120b"
             self.logger.info(f"Simple query - bypassing planning, using {fast_model}")
             return ("gemini" if "gemini" in available_providers else "groq", fast_model, 0.95, intent)
         
@@ -487,7 +487,7 @@ class ScoringEngine:
         
         if not scored_models:
             # Fallback to Groq
-            return ("groq", "llama-3.3-70b-versatile", 0.5, intent)
+            return ("groq", "openai/gpt-oss-120b", 0.5, intent)
         
         # Select best model
         best = scored_models[0]
@@ -531,8 +531,8 @@ class ScoringEngine:
                 break
         
         # Ensure Groq is last fallback
-        if "llama-3.3-70b-versatile" not in chain:
-            chain.append("llama-3.3-70b-versatile")
+        if "openai/gpt-oss-120b" not in chain:
+            chain.append("openai/gpt-oss-120b")
         
         return chain
     

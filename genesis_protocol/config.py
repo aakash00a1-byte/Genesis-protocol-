@@ -83,8 +83,8 @@ class AIProviderConfig:
 class GroqConfig(AIProviderConfig):
     """Groq AI provider configuration."""
     endpoint: str = "https://api.groq.com/openai/v1/chat/completions"
-    default_model: str = "llama-3.3-70b-versatile"
-    fast_model: str = "llama-3.3-70b-versatile"
+    default_model: str = "openai/gpt-oss-120b"
+    fast_model: str = "openai/gpt-oss-20b"
     rate_limit_rpm: int = 30
 
 
@@ -388,7 +388,7 @@ class Config:
         
         # Groq
         config.groq.api_key = os.getenv("GROQ_API_KEY", "")
-        config.groq.default_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        config.groq.default_model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
         
         # OpenAI
         config.openai.api_key = os.getenv("OPENAI_API_KEY", "")
