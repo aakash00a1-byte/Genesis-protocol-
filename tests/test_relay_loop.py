@@ -24,6 +24,7 @@ def _load(monkeypatch, **env):
         "HF_SPACE_URL",
         "TELEGRAM_BOT_TOKEN",
         "TELEGRAM_ADMIN_ID",
+        "TELEGRAM_NEWS_CHAT_ID",
         "RELAY_STATE_FILE",
         "TELEGRAM_WEBHOOK_SECRET",
     ):

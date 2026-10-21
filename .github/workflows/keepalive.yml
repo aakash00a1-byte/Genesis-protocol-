@@ -68,6 +68,9 @@ jobs:
           NEWS_ENABLED: "1"
           NEWS_INTERVAL_SECONDS: "300"
           NEWS_MAX_PER_CATEGORY: "3"
+          # Post the digest to a channel instead of the admin DM by setting the
+          # TELEGRAM_NEWS_CHAT_ID repo secret to a channel id (e.g. -100...).
+          TELEGRAM_NEWS_CHAT_ID: ${{ secrets.TELEGRAM_NEWS_CHAT_ID }}
         run: python3 scripts/relay_loop.py
 
       - name: Save relay dedupe state

@@ -46,6 +46,9 @@ HF_SPACE_URL = os.environ.get(
 ).rstrip("/")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_ADMIN_ID = os.environ.get("TELEGRAM_ADMIN_ID", "").strip()
+# Where the news digest is delivered. Defaults to the admin DM; set
+# TELEGRAM_NEWS_CHAT_ID to a channel id (e.g. -1001234567890) to post there.
+NEWS_CHAT_ID = os.environ.get("TELEGRAM_NEWS_CHAT_ID", "").strip() or TELEGRAM_ADMIN_ID
 
 TICK_SECONDS = int(os.environ.get("RELAY_TICK_SECONDS", "60"))
 RUN_SECONDS = int(os.environ.get("RELAY_RUN_SECONDS", str(5 * 3600 + 45 * 60)))
@@ -343,15 +346,15 @@ def build_news_digest() -> str | None:
 
 
 def news_digest() -> None:
-    """Send one news digest to the admin."""
-    if not TELEGRAM_ADMIN_ID:
-        _log("news skipped: TELEGRAM_ADMIN_ID is not set")
+    """Send one news digest to the news chat (admin DM by default)."""
+    if not NEWS_CHAT_ID:
+        _log("news skipped: no news chat id is set")
         return
     text = build_news_digest()
     if text is None:
         _log("news skipped: no feed returned headlines")
         return
-    if _telegram_send(TELEGRAM_ADMIN_ID, text):
+    if _telegram_send(NEWS_CHAT_ID, text):
         _log("news digest sent")
 
 
