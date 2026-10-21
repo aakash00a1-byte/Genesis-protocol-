@@ -165,3 +165,100 @@ def test_heartbeat_skipped_without_admin(monkeypatch, tmp_path, capsys) -> None:
     relay.heartbeat()
     assert called["n"] == 0
     assert "skipped" in capsys.readouterr().out
+
+
+# --- news digest ----------------------------------------------------------
+
+
+def _fake_urlopen(body: bytes):
+    class _Resp:
+        def read(self, _n=None):
+            return body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    return lambda req, timeout=15: _Resp()
+
+
+def test_clean_collapses_whitespace_and_unescapes(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    assert relay._clean("  a &amp;\n  b  ") == "a & b"
+    assert relay._clean(None) == ""
+
+
+def test_fetch_feed_titles_parses_and_caps(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    monkeypatch.setattr(relay, "NEWS_MAX_PER_CATEGORY", 2)
+    rss = (
+        b"<rss><channel>"
+        b"<item><title>One &amp; only</title></item>"
+        b"<item><title>Two</title></item>"
+        b"<item><title>Three</title></item>"
+        b"</channel></rss>"
+    )
+    monkeypatch.setattr(relay.urllib.request, "urlopen", _fake_urlopen(rss))
+    assert relay._fetch_feed_titles("https://example.com/feed") == ["One & only", "Two"]
+
+
+def test_fetch_feed_titles_survives_bad_feed(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+
+    def _boom(req, timeout=15):
+        raise OSError("network down")
+
+    monkeypatch.setattr(relay.urllib.request, "urlopen", _boom)
+    assert relay._fetch_feed_titles("https://example.com/feed") == []
+
+
+def test_build_news_digest_dedupes_and_bounds(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    monkeypatch.setattr(relay, "NEWS_CATEGORIES", {"A": [("s", "u")], "B": [("s", "u")]})
+    monkeypatch.setattr(relay, "_fetch_feed_titles", lambda url: ["Same", "Same", "Unique"])
+    digest = relay.build_news_digest()
+    assert digest is not None
+    assert digest.count("Same") == 1  # deduplicated across categories
+    assert "Unique" in digest
+
+
+def test_build_news_digest_none_when_all_feeds_fail(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    monkeypatch.setattr(relay, "_fetch_feed_titles", lambda url: [])
+    assert relay.build_news_digest() is None
+
+
+def test_build_news_digest_truncates_to_telegram_limit(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    monkeypatch.setattr(relay, "MAX_DIGEST_CHARS", 120)
+    monkeypatch.setattr(relay, "NEWS_CATEGORIES", {"A": [("s", "u")]})
+    monkeypatch.setattr(relay, "_fetch_feed_titles", lambda url: ["X" * 500])
+    digest = relay.build_news_digest()
+    assert digest is not None
+    assert len(digest) <= 120
+    assert digest.endswith("…(trimmed)")
+
+
+def test_news_digest_sends_to_admin(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok", TELEGRAM_ADMIN_ID="42")
+    monkeypatch.setattr(relay, "build_news_digest", lambda: "digest-body")
+    captured: dict[str, str] = {}
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: captured.update(cid=cid, text=text) or True
+    )
+    relay.news_digest()
+    assert captured == {"cid": "42", "text": "digest-body"}
+
+
+def test_news_digest_skipped_without_admin(monkeypatch, tmp_path, capsys) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    called = {"n": 0}
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: called.__setitem__("n", called["n"] + 1)
+    )
+    relay.news_digest()
+    assert called["n"] == 0
+    assert "skipped" in capsys.readouterr().out
+

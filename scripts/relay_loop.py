@@ -63,21 +63,40 @@ NEWS_ENABLED = os.environ.get("NEWS_ENABLED", "1").strip().lower() not in {
 NEWS_INTERVAL_SECONDS = int(os.environ.get("NEWS_INTERVAL_SECONDS", "300"))
 NEWS_MAX_PER_CATEGORY = int(os.environ.get("NEWS_MAX_PER_CATEGORY", "3"))
 NEWS_CATEGORIES: dict[str, list[tuple[str, str]]] = {
+    "🌍 WORLD": [
+        ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
+        ("Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml"),
+        ("The Guardian", "https://www.theguardian.com/world/rss"),
+    ],
+    "🇮🇳 INDIA": [
+        ("NDTV", "https://feeds.feedburner.com/ndtvnews-top-stories"),
+        ("The Hindu", "https://www.thehindu.com/news/national/feeder/default.rss"),
+    ],
     "💻 TECH": [
         ("BBC Tech", "https://feeds.bbci.co.uk/news/technology/rss.xml"),
         ("The Verge", "https://www.theverge.com/rss/index.xml"),
     ],
     "⚽ SPORTS": [
         ("BBC Sport", "https://feeds.bbci.co.uk/sport/rss.xml"),
+        ("Sky Sports", "https://www.skysports.com/rss/12040"),
     ],
     "📈 MARKETS": [
         ("BBC Business", "https://feeds.bbci.co.uk/news/business/rss.xml"),
         ("CNBC", "https://www.cnbc.com/id/100003114/device/rss/rss.html"),
     ],
+    "🪙 CRYPTO": [
+        ("Cointelegraph", "https://cointelegraph.com/rss"),
+    ],
+    "🪦 OBITUARIES": [
+        ("The Guardian", "https://www.theguardian.com/tone/obituaries/rss"),
+        ("NYT", "https://rss.nytimes.com/services/xml/rss/nyt/Obituaries.xml"),
+    ],
 }
 # Cap how much of any feed we read/parse, so a hostile or huge feed cannot
 # exhaust memory.
 MAX_FEED_BYTES = 512 * 1024
+# Telegram sendMessage rejects text over 4096 chars.
+MAX_DIGEST_CHARS = 3900
 # Optional shared secret; must match TELEGRAM_WEBHOOK_SECRET on the Space.
 HF_SHARED_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
 
@@ -297,10 +316,15 @@ def _fetch_feed_titles(url: str) -> list[str]:
 def build_news_digest() -> str | None:
     """Build a tech/sports/markets digest, or None if every feed failed."""
     sections: list[str] = []
+    seen_titles: set[str] = set()
     for label, feeds in NEWS_CATEGORIES.items():
         lines: list[str] = []
         for source, url in feeds:
             for title in _fetch_feed_titles(url):
+                key = title.lower()
+                if key in seen_titles:
+                    continue
+                seen_titles.add(key)
                 lines.append(f"• {title} — {source}")
                 if len(lines) >= NEWS_MAX_PER_CATEGORY:
                     break
@@ -311,7 +335,11 @@ def build_news_digest() -> str | None:
     if not sections:
         return None
     stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-    return "📰 Genesis news update\n" + "\n\n".join(sections) + f"\n\n🕒 {stamp}"
+    text = "📰 Genesis news update\n" + "\n\n".join(sections) + f"\n\n🕒 {stamp}"
+    # Telegram rejects messages over 4096 chars; stay safely under the limit.
+    if len(text) > MAX_DIGEST_CHARS:
+        text = text[: MAX_DIGEST_CHARS - 20].rstrip() + "\n\n…(trimmed)"
+    return text
 
 
 def news_digest() -> None:
