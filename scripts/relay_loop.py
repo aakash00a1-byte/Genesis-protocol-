@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Genesis relay + keep-alive loop: pings the HF Space, delivers queued Telegram replies, and sends the daily heartbeat.
 """Genesis relay + keep-alive loop.
 
 Runs inside a GitHub Actions job (public repo => free, unlimited minutes) and
