@@ -65,10 +65,12 @@ class GitHubPRTransport:
         *,
         http: HttpFn | None = None,
         branch_prefix: str = AGENT_BRANCH_PREFIX,
+        on_merged: Callable[[Update], None] | None = None,
     ) -> None:
         self.repo = repo
         self.token = token
         self.branch_prefix = branch_prefix
+        self.on_merged = on_merged
         if http is not None:
             self._http = http
         else:
@@ -119,6 +121,11 @@ class GitHubPRTransport:
             payload,
         )
         if isinstance(result, dict) and result.get("merged"):
+            if self.on_merged is not None:
+                try:
+                    self.on_merged(item)
+                except Exception:  # noqa: BLE001 - deploy dispatch must not fail the merge reply
+                    pass
             return (
                 f"✅ Approved & merged: {item.title}\n"
                 f"main par push ho gaya; deploy workflow chal raha hai.\n"

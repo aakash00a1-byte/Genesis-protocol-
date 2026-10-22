@@ -124,16 +124,21 @@ without touching the network.
 until the owner approves it: the owner replies `/approve <id|number>` (or
 `/reject`, `/updates`), the webhook parks the command in
 `/tmp/telegram_command_queue.json`, and the self-improvement loop merges the PR.
-The merge *is* the push, and it triggers `deploy-space.yml`, which deploys to
-the HF Space. The loop is transport-agnostic: `handle_command` drives a
-`GitHubPRTransport` (only `agent/` branches are approvable), and tests drive a
-fake transport, so no network is needed to test the gate. Merging requires a
-write token; the agent sandbox token is read-only.
+The merge *is* the push. Because a push made with the default `GITHUB_TOKEN`
+does not trigger another workflow, the loop then explicitly dispatches
+`deploy-space.yml` (`workflow_dispatch` is the one event that always runs), so
+the HF Space deploys either way. The loop is transport-agnostic:
+`handle_command` drives a `GitHubPRTransport` (only `agent/` branches are
+approvable), and tests drive a fake transport, so no network is needed to test
+the gate.
 
-Secrets: `OPENHANDS_API_KEY` (required), `AGENT_GH_TOKEN` (a fine-grained PAT
-with Contents + Pull requests write -- required for approval to land; the loop
-warns and refuses to merge without it), and optionally `TELEGRAM_WEBHOOK_SECRET`
-to authenticate the Space queue reads.
+Tokens: **no new token is strictly required.** HF deploy uses the `HF_TOKEN`
+secret, which is already set. GitHub push/PR/merge uses the default
+`GITHUB_TOKEN` when the repo allows Actions to write (the workflow already
+declares `contents: write` and `pull-requests: write`); set `AGENT_GH_TOKEN` (a
+fine-grained PAT with Contents + Pull requests write) only if the repo is set to
+read-only for Actions. The agent sandbox token is read-only either way, which is
+why the harness lands the commit.
 
 Note: the agent sandbox gets a read-only GitHub credential, so the agent can
 commit locally but its `git push` / PR call returns 403. The harness lands the

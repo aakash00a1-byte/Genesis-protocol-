@@ -172,6 +172,36 @@ def test_transport_approve_reports_merge_failure() -> None:
     assert "not mergeable" in transport.approve("5")
 
 
+def test_transport_calls_on_merged_after_success() -> None:
+    merged: list[str] = []
+
+    def http(method, url, payload):
+        if method == "GET":
+            return [_pr(6, "ship it")]
+        return {"merged": True, "sha": "deadbeef"}
+
+    transport = GitHubPRTransport(
+        "o/r", "tok", http=http, on_merged=lambda item: merged.append(item.id)
+    )
+    transport.approve("6")
+    assert merged == ["6"]
+
+
+def test_transport_on_merged_not_called_when_merge_fails() -> None:
+    merged: list[str] = []
+
+    def http(method, url, payload):
+        if method == "GET":
+            return [_pr(6, "ship it")]
+        return {"merged": False}
+
+    transport = GitHubPRTransport(
+        "o/r", "tok", http=http, on_merged=lambda item: merged.append(item.id)
+    )
+    transport.approve("6")
+    assert merged == []
+
+
 def test_transport_reject_closes_pr() -> None:
     calls = []
 

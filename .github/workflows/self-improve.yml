@@ -73,8 +73,10 @@ jobs:
         env:
           OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.AGENT_GH_TOKEN || secrets.GITHUB_TOKEN }}
-          # Only the owner's write token may merge (approve) an update.
-          GH_MERGE_TOKEN: ${{ secrets.AGENT_GH_TOKEN }}
+          # Approval (merge) uses the same token as push. The default
+          # GITHUB_TOKEN is enough when the repo allows write for Actions; a
+          # PAT (AGENT_GH_TOKEN) is only needed if the repo is read-only.
+          GH_MERGE_TOKEN: ${{ secrets.AGENT_GH_TOKEN || secrets.GITHUB_TOKEN }}
           HF_SPACE_URL: https://genesisno-genesis-automaton.hf.space
           TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
           SELF_IMPROVE_REPO: ${{ github.repository }}

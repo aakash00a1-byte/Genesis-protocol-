@@ -344,6 +344,32 @@ def _space_get(url: str, timeout: int = 20) -> bytes | None:
         return None
 
 
+def _dispatch_deploy() -> None:
+    """Explicitly start the HF deploy workflow after a merge.
+
+    A push made with GITHUB_TOKEN does not trigger another workflow (GitHub
+    blocks it to prevent loops), so ``on: push`` on deploy-space.yml would be
+    skipped when we merge with the default token. ``workflow_dispatch`` is the
+    documented exception: it always creates a run, token or not. So we ask for
+    the deploy directly instead of relying on the push event.
+    """
+    req = urllib.request.Request(  # noqa: S310 - fixed GitHub host
+        f"https://api.github.com/repos/{REPO}/actions/workflows/deploy-space.yml/dispatches",
+        data=json.dumps({"ref": BRANCH}).encode(),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {GH_MERGE_TOKEN or GITHUB_TOKEN}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30):  # noqa: S310
+            _log("deploy workflow dispatched")
+    except Exception as exc:  # noqa: BLE001 - the merge already succeeded
+        _log(f"deploy dispatch failed: {type(exc).__name__}")
+
+
 def _transport():
     """Build the approval transport, or None when no merge token is set.
 
@@ -355,7 +381,9 @@ def _transport():
     try:
         from genesis_protocol.updates.github_prs import GitHubPRTransport
 
-        return GitHubPRTransport(REPO, GH_MERGE_TOKEN)
+        return GitHubPRTransport(
+            REPO, GH_MERGE_TOKEN, on_merged=lambda _item: _dispatch_deploy()
+        )
     except Exception as exc:  # noqa: BLE001
         _log(f"approval transport unavailable: {type(exc).__name__}")
         return None
