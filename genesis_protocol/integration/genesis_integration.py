@@ -93,7 +93,9 @@ class GenesisIntegration:
                 PersonalityEngine, Persona, ConversationMode,
                 UserPreferences, PreferenceManager, HumorEngine
             )
-            self._personality_engine = PersonalityEngine()
+            # A personality engine is per-user; the integration layer only
+            # needs one to confirm the module loads, so bind it to user 0.
+            self._personality_engine = PersonalityEngine(user_id=0)
             self._preference_manager = PreferenceManager()
             self._humor_engine = HumorEngine()
             
@@ -122,7 +124,9 @@ class GenesisIntegration:
             )
             self._long_term_memory = LongTermMemory()
             self._memory_summarizer = MemorySummarizer(self._long_term_memory)
-            self._memory_importance = MemoryImportance()
+            # MemoryImportance is an Enum, not a class you instantiate; keep a
+            # member so callers can reach the scale through the integration.
+            self._memory_importance = MemoryImportance.MEDIUM
             
             self._modules['memory'] = ModuleInfo(
                 name='memory',

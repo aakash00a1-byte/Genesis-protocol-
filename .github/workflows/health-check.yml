@@ -1,0 +1,39 @@
+name: Genesis Health Check
+
+# Answers "it is running, but is anything broken?" without a human looking.
+# scripts/health_check.py checks that every genesis_protocol package imports,
+# that the live HF Space answers, and that no workflow's latest run is red.
+# It only messages the owner when something is wrong, so a healthy day is quiet.
+
+on:
+  schedule:
+    # Twice a day. GitHub's free-tier cron can drift by hours, so this is a
+    # safety net, not a precise clock.
+    - cron: '0 3,15 * * *'
+  workflow_dispatch: # manual run from the Actions tab
+
+permissions:
+  contents: read
+  actions: read # read workflow run conclusions
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run health check
+        env:
+          HF_SPACE_URL: https://genesisno-genesis-automaton.hf.space
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ADMIN_ID: ${{ secrets.TELEGRAM_ADMIN_ID }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEALTH_REPO: ${{ github.repository }}
+        run: python3 scripts/health_check.py

@@ -247,3 +247,16 @@ unset the job fails loudly instead of silently skipping.
   `.github/workflows/register-webhook.yml` runs the idempotent
   `scripts/register_telegram_webhook.py` on push to main / every 6h / on demand
   and re-registers only on drift. Never call `deleteWebhook` from the Space.
+- **Health check: `scripts/health_check.py` answers "is anything broken?".**
+  Three independent checks: every `genesis_protocol` package imports, the live
+  HF Space answers `/api/health`, and no workflow's latest run is red. It only
+  messages the owner on failure, so a healthy day is quiet. Run it by hand
+  (`python3 scripts/health_check.py --no-send`), or let
+  `.github/workflows/health-check.yml` run it twice a day. This is the "who
+  checks it?" answer — the repo no longer relies on a human noticing.
+- **Stale AI reports live in `docs/archive/`, not the repo root.** The root
+  keeps only live docs (README, AGENTS, CHANGELOG, the BOOK_OF_* books the code
+  writes, and the deployment guides). Historical snapshots moved to
+  `docs/archive/` with an index; see `docs/archive/README.md`. Do not treat
+  anything in there as current — it describes older states of the project.
+
