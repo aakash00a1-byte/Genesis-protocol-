@@ -28,6 +28,13 @@ jobs:
         with:
           python-version: '3.11'
 
+      # Install the real dependencies so the import check exercises the actual
+      # code, not a bare runner. Without this every optional provider shows up
+      # as a missing module and the check cannot tell "not installed" from
+      # "broken". Best-effort: a pip hiccup should not hide the other checks.
+      - name: Install dependencies
+        run: pip install -r requirements.txt || echo "::warning::pip install failed; import check will report missing deps"
+
       - name: Run health check
         env:
           HF_SPACE_URL: https://genesisno-genesis-automaton.hf.space

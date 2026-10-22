@@ -53,7 +53,14 @@ def _space_headers() -> dict[str, str]:
 
 
 def check_imports() -> tuple[bool, str]:
-    """Import every genesis_protocol package. One bad package fails the check."""
+    """Import every genesis_protocol package.
+
+    A bare runner (CI) has none of the third-party packages installed, so a
+    ``ModuleNotFoundError`` for something like ``httpx`` means "dependency not
+    installed here", not "the code is broken". Only a failure that is *not* a
+    missing external dependency — a syntax error, a bad name, a broken import
+    inside genesis_protocol — is reported as broken.
+    """
     import importlib
 
     root_pkg = os.path.join(_ROOT, "genesis_protocol")
@@ -63,14 +70,25 @@ def check_imports() -> tuple[bool, str]:
             names.append(f"genesis_protocol.{entry}")
 
     broken: list[str] = []
+    missing_deps: set[str] = set()
     for name in names:
         try:
             importlib.import_module(name)
+        except ModuleNotFoundError as exc:
+            dep = (exc.name or "").split(".")[0]
+            if dep and dep != "genesis_protocol":
+                missing_deps.add(dep)
+            else:
+                broken.append(f"{name}: {type(exc).__name__}: {str(exc)[:80]}")
         except Exception as exc:  # noqa: BLE001 - the failure *is* the finding
             broken.append(f"{name}: {type(exc).__name__}: {str(exc)[:80]}")
+
     total = len(names)
     if broken:
         return False, f"modules: {total - len(broken)}/{total} import ({len(broken)} broken)\n  " + "\n  ".join(broken)
+    if missing_deps:
+        deps = ", ".join(sorted(missing_deps))
+        return True, f"modules: {total}/{total} import OK (deps not installed here: {deps})"
     return True, f"modules: {total}/{total} import OK"
 
 

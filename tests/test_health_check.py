@@ -44,6 +44,23 @@ def test_import_check_reports_a_broken_package(monkeypatch) -> None:
     assert "genesis_protocol.voice" in detail
 
 
+def test_missing_third_party_dep_is_not_a_failure(monkeypatch) -> None:
+    """A bare runner has no optional deps; that is not broken code."""
+    module = _load()
+
+    real_import = importlib.import_module
+
+    def fake_import(name, *args, **kwargs):
+        if name == "genesis_protocol.vision":
+            raise ModuleNotFoundError("No module named 'PIL'", name="PIL")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", fake_import)
+    ok, detail = module.check_imports()
+    assert ok
+    assert "PIL" in detail
+
+
 def test_run_checks_offline_reports_imports(monkeypatch) -> None:
     module = _load()
     ok, results = module.run_checks(do_net=False)
