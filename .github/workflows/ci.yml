@@ -24,3 +24,23 @@ jobs:
     - name: Lint with flake8
       run: |
         flake8 genesis_protocol --count --select=E9,F63,F7,F82 --show-source --statistics
+
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install pytest
+
+    - name: Run test suite
+      run: python -m pytest tests/ -q
+
