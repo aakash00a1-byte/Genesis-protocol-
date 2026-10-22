@@ -22,6 +22,23 @@ def _load():
     return module
 
 
+def test_approval_package_imports_from_another_cwd(tmp_path) -> None:
+    """Regression: `python3 scripts/self_improve.py` from any cwd.
+
+    Python puts scripts/ on sys.path, not the repo root, so the approval
+    package failed to import and every /approve was silently ignored.
+    """
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "--check-approvals"],
+        capture_output=True,
+        text=True,
+        cwd=str(tmp_path),
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "OK" in proc.stdout
+
+
 def test_task_prompt_is_self_contained() -> None:
     module = _load()
     text = module.TASK.format(repo="owner/repo", branch="main", topic="harden the relay")

@@ -38,6 +38,13 @@ import time
 import urllib.error
 import urllib.request
 
+# The approval package (genesis_protocol) lives at the repository root. When
+# this file runs as `python3 scripts/self_improve.py`, Python puts scripts/ on
+# sys.path, not the root, so the package would not import. Add the root.
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
 BASE_URL = os.environ.get("OH_BASE_URL", "https://app.all-hands.dev").rstrip("/")
 API_KEY = os.environ.get("OPENHANDS_API_KEY", "").strip()
 REPO = os.environ.get("SELF_IMPROVE_REPO", "aakash00a1-byte/Genesis-protocol-").strip()
@@ -464,7 +471,8 @@ def process_approvals() -> None:
     _log(f"{len(texts)} owner command(s) pending")
     try:
         from genesis_protocol.updates import handle_command, parse_command
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        _log(f"approval package unavailable: {type(exc).__name__}: {str(exc)[:160]}")
         return
 
     transport = _transport()
@@ -597,10 +605,24 @@ def _pr_number(pr_url: str) -> str:
     return pr_url.rstrip("/").rsplit("/", 1)[-1] if pr_url else "?"
 
 
+def _approval_available() -> bool:
+    """True when the approval package can be imported from here."""
+    try:
+        from genesis_protocol.updates import handle_command  # noqa: F401
+
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def main() -> int:
     if "--dry-run" in sys.argv:
         print(TASK.format(repo=REPO, branch=BRANCH, topic=choose_topic(0)))
         return 0
+    if "--check-approvals" in sys.argv:
+        ok = _approval_available()
+        print(f"approval package: {'OK' if ok else 'UNAVAILABLE'}")
+        return 0 if ok else 1
     if "--approvals-only" in sys.argv:
         # Land any pending owner decision; needs no OpenHands key.
         process_approvals()
