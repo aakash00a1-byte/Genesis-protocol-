@@ -212,6 +212,7 @@ def poll_until_ready(start: dict) -> str | None:
     deadline = time.time() + POLL_TIMEOUT_SECONDS
     while time.time() < deadline:
         time.sleep(POLL_SECONDS)
+        _safe_process_approvals()
         try:
             task = _api("GET", f"/api/v1/app-conversations/start-tasks?ids={task_id}")
         except RuntimeError as exc:
@@ -232,10 +233,19 @@ def poll_until_ready(start: dict) -> str | None:
     return None
 
 
+def _safe_process_approvals() -> None:
+    """process_approvals() that never raises into the caller's control flow."""
+    try:
+        process_approvals()
+    except Exception as exc:  # noqa: BLE001 - an approval hiccup must not stop the loop
+        _log(f"approval check failed: {type(exc).__name__}: {str(exc)[:200]}")
+
+
 def wait_until_finished(app_id: str) -> bool:
     deadline = time.time() + RUN_TIMEOUT_SECONDS
     while time.time() < deadline:
         time.sleep(POLL_SECONDS)
+        _safe_process_approvals()  # a decision can land while the agent works
         try:
             conv = _conversation(app_id)
         except RuntimeError as exc:
@@ -609,10 +619,7 @@ def main() -> int:
     started = time.monotonic()
     index = int(time.time() // max(CYCLE_INTERVAL_SECONDS, 1))
     # Handle any owner decision that arrived while we were away, before new work.
-    try:
-        process_approvals()
-    except Exception as exc:  # noqa: BLE001 - keep going on a transient error
-        _log(f"approval check failed: {type(exc).__name__}: {str(exc)[:200]}")
+    _safe_process_approvals()
     while time.monotonic() - started < RUN_SECONDS:
         try:
             run_cycle(index)
@@ -623,10 +630,7 @@ def main() -> int:
         # so a decision lands in about a minute rather than in 45.
         cycle_due = time.monotonic() + CYCLE_INTERVAL_SECONDS
         while time.monotonic() < min(cycle_due, started + RUN_SECONDS):
-            try:
-                process_approvals()
-            except Exception as exc:  # noqa: BLE001 - keep polling on a transient error
-                _log(f"approval check failed: {type(exc).__name__}: {str(exc)[:200]}")
+            _safe_process_approvals()
             remaining = min(cycle_due, started + RUN_SECONDS) - time.monotonic()
             if remaining <= 0:
                 break
