@@ -231,6 +231,17 @@ unset the job fails loudly instead of silently skipping.
      stdlib-only; there is a regression test for this.
   Verify the runner path with `python3 scripts/self_improve.py --check-approvals`
   and `--approvals-only` (process pending commands, no OpenHands key needed).
+- **Work orders (`/do`) are the owner's way to aim the agent.** `/do <instruction>`
+  is parsed by `genesis_protocol/updates/work_orders.py` (stdlib-only) and parked
+  on the Space's task queue (`/tmp/telegram_task_queue.json`, exposed at
+  `/api/telegram/tasks`). The `self-improve.yml` loop drains it **before** an
+  autonomous cycle: it starts an OpenHands conversation from the instruction
+  (`start_conversation_for_work`), lands the resulting patch as a PR, and pings
+  Telegram with the same Approve/Reject buttons. Order state is patched
+  queued -> running -> done/failed via `PATCH /api/telegram/tasks`; a `running`
+  order left by a dead run is requeued at loop start (`_requeue_stuck_orders`).
+  An order still only opens a PR — nothing merges without `/approve`.
+  Debug with `python3 scripts/self_improve.py --tasks-only`.
 - **The Telegram webhook is registered from GitHub Actions.** HF free tier
   blocks egress to `api.telegram.org`, so the Space's `setWebhook` times out.
   `.github/workflows/register-webhook.yml` runs the idempotent
