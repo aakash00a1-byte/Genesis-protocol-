@@ -8,7 +8,10 @@ name: Genesis Self-Improvement
 # It does NOT merge. A human reviews the PR; merging it triggers the normal
 # auto-deploy workflow. Nothing reaches production without review.
 #
-# Requires the repo secrets OPENHANDS_API_KEY and GITHUB_TOKEN (contents:write).
+# Requires the repo secret OPENHANDS_API_KEY, and a token that can push. If the
+# repository allows "Read and write permissions" for Actions, the default
+# GITHUB_TOKEN works. Otherwise set an AGENT_GH_TOKEN secret (a fine-grained PAT
+# with Contents + Pull requests write); this workflow prefers it automatically.
 # A scheduled run lasts ~5h30m; cron fires every 4h so the loop is continuous.
 
 on:
@@ -39,32 +42,33 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.AGENT_GH_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Configure git
+        env:
+          GH_TOKEN_FOR_PUSH: ${{ secrets.AGENT_GH_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "openhands"
           git config user.email "openhands@all-hands.dev"
-          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN_FOR_PUSH}@github.com/${{ github.repository }}.git"
 
       - name: Check required secrets
         env:
           OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AGENT_GH_TOKEN: ${{ secrets.AGENT_GH_TOKEN }}
         run: |
           if [ -z "$OPENHANDS_API_KEY" ]; then
             echo "::error::OPENHANDS_API_KEY secret is not set; cannot start the agent."
             exit 1
           fi
-          if [ -z "$GITHUB_TOKEN" ]; then
-            echo "::error::GITHUB_TOKEN secret is not set; cannot open pull requests."
-            exit 1
+          if [ -z "$AGENT_GH_TOKEN" ]; then
+            echo "::warning::AGENT_GH_TOKEN is not set; using the default GITHUB_TOKEN. If Actions is set to read-only, PRs cannot be opened. Set AGENT_GH_TOKEN (Contents + Pull requests: write)."
           fi
 
       - name: Run the continuous self-improvement loop
         env:
           OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.AGENT_GH_TOKEN || secrets.GITHUB_TOKEN }}
           SELF_IMPROVE_REPO: ${{ github.repository }}
           SELF_IMPROVE_BRANCH: main
           SELF_IMPROVE_INTERVAL_SECONDS: "2700"

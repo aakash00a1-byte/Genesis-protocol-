@@ -103,21 +103,31 @@ delivers them.
 Set `TELEGRAM_NEWS_CHAT_ID` to a channel id to broadcast to a channel instead
 of the admin DM. One-shot tests: `python3 scripts/relay_loop.py news|market|briefing|weather`.
 
-## Agent self-improvement (Level B)
-`scripts/self_improve.py` gives the agent a job on the repo itself: it starts one
-OpenHands Cloud conversation that reviews this repo, makes a single small safe
-change on its own branch, runs the tests, and opens a pull request. It never
-merges, so a human reviews the PR; merging it triggers the auto-deploy workflow.
-Run weekly via `.github/workflows/self-improve.yml` (Monday 04:00 UTC) or by
-hand. Requires the `OPENHANDS_API_KEY` repo secret. `--dry-run` prints the task
-prompt without starting anything.
+## Agent self-improvement (Level B, continuous)
+`scripts/self_improve.py` gives the agent a continuous job on the repo itself.
+It is a long-running loop (like the relay): every `SELF_IMPROVE_INTERVAL_SECONDS`
+(45 min) it starts one OpenHands Cloud conversation on a rotating topic, waits
+for it to finish, pulls the agent's commit out of the sandbox, applies it on a
+fresh `agent/` branch, pushes, opens a pull request, and pings Telegram. It
+pauses when `SELF_IMPROVE_MAX_OPEN_PRS` (5) agent PRs await review, and it never
+merges -- a human reviews the PR and merging triggers the auto-deploy workflow.
+
+Run via `.github/workflows/self-improve.yml`: cron every 4 hours with a ~5h30m
+run (`SELF_IMPROVE_RUN_SECONDS`), so the loop is continuous. Trigger a single
+cycle with `workflow_dispatch` + `once: true`, or locally with
+`python3 scripts/self_improve.py --once`. `--dry-run` prints the task prompt
+without touching the network.
+
+Secrets: `OPENHANDS_API_KEY` (required) and a token that can push. If the repo
+allows "Read and write permissions" for Actions, the default `GITHUB_TOKEN`
+works; otherwise set `AGENT_GH_TOKEN` (a fine-grained PAT with Contents + Pull
+requests write) and the workflow prefers it automatically.
 
 Note: the agent sandbox gets a read-only GitHub credential, so the agent can
-commit locally but its `git push` / PR call returns 403. The agent leaves the
-branch and commit in the sandbox; a human (or the reviewer) lands them. Read the
-agent's final message for the branch name, then fetch the patch from the
-sandbox with `POST {agent_server_url}/api/bash/execute_bash_command`
-(`git format-patch -1 --stdout`), apply it, and open the PR.
+commit locally but its `git push` / PR call returns 403. The harness lands the
+commit for it: it reads the patch from the sandbox with
+`POST {agent_server_url}/api/bash/execute_bash_command`
+(`git format-patch {branch}..HEAD --stdout`), applies it, and opens the PR.
 
 ## Auto-deploy to the Space
 `.github/workflows/deploy-space.yml` mirrors the repo to the HF Space on every
