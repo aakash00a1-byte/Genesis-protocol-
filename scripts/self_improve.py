@@ -163,16 +163,41 @@ def _github(method: str, path: str, payload: dict | None = None) -> object:
     return json.loads(body or b"{}")
 
 
-def _notify(text: str) -> None:
+def _notify(text: str, reply_markup: dict | None = None) -> None:
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_ADMIN_ID:
         return
+    payload: dict = {
+        "chat_id": TELEGRAM_ADMIN_ID,
+        "text": text[:3900],
+        "disable_web_page_preview": True,
+    }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     try:
         _api_raw(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            {"chat_id": TELEGRAM_ADMIN_ID, "text": text[:3900], "disable_web_page_preview": True},
+            payload,
         )
     except Exception as exc:  # noqa: BLE001 - a failed ping must not stop the loop
         _log(f"telegram notify failed: {type(exc).__name__}")
+
+
+def _approve_keyboard(pr_number: str) -> dict:
+    """Inline buttons for a fresh proposal.
+
+    A tap sends its own command (``/approve <n>``), so the owner never has to
+    retype a number — and a client that only forwards the bare command text
+    cannot drop the number, because the number rides in the button payload.
+    """
+    return {
+        "inline_keyboard": [
+            [
+                {"text": f"✅ Approve #{pr_number}", "callback_data": f"approve:{pr_number}"},
+                {"text": f"❌ Reject #{pr_number}", "callback_data": f"reject:{pr_number}"},
+            ],
+            [{"text": "📋 List pending", "callback_data": "list"}],
+        ]
+    }
 
 
 def _api_raw(url: str, payload: dict) -> None:
@@ -589,12 +614,14 @@ def run_cycle(index: int) -> None:
         return
     if pr_url:
         _log(f"opened PR: {pr_url}")
+        number = _pr_number(pr_url)
         _notify(
             f"🧠 Genesis ne ek update propose kiya:\n{topic[:80]}\n\n"
             f"{pr_url}\n\n"
-            f"Approve + deploy: /approve {_pr_number(pr_url)}\n"
-            f"Reject: /reject {_pr_number(pr_url)}\n"
-            f"List: /updates"
+            f"Approve + deploy: /approve {number}\n"
+            f"Reject: /reject {number}\n"
+            f"List: /updates",
+            reply_markup=_approve_keyboard(number),
         )
     else:
         _log("could not land the patch as a PR")

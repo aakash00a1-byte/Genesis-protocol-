@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from genesis_protocol.updates import (
     Update,
     handle_command,
+    newest,
     parse_command,
     render_list,
     resolve,
@@ -95,6 +96,39 @@ def test_handle_command_approve_and_reject() -> None:
     transport = FakeTransport([Update(id="8", title="fix web")])
     assert "Rejected" in handle_command("/reject 8", transport)
     assert transport.rejected == ["8"]
+
+
+def test_newest_picks_highest_pr_number() -> None:
+    items = [Update(id="14", title="a"), Update(id="17", title="b"), Update(id="16", title="c")]
+    assert newest(items).id == "17"
+    assert newest([]) is None
+
+
+def test_bare_approve_targets_the_newest_update() -> None:
+    """Tapping the command in a notification sends only ``/approve``.
+
+    That must land the newest proposal, not print a usage error and strand the
+    owner — the failure mode seen when #17 was tapped but never merged.
+    """
+    transport = FakeTransport([Update(id="14", title="older"), Update(id="17", title="newest")])
+    reply = handle_command("/approve", transport)
+    assert "17" in reply
+    assert transport.approved == ["17"]
+    # The older one is untouched.
+    assert [u.id for u in transport.list_open()] == ["14"]
+
+
+def test_bare_approve_with_nothing_pending_is_honest() -> None:
+    transport = FakeTransport([])
+    assert "Koi pending update nahi hai" in handle_command("/approve", transport)
+
+
+def test_bare_reject_targets_the_newest_update() -> None:
+    transport = FakeTransport([Update(id="14", title="older"), Update(id="17", title="newest")])
+    reply = handle_command("/reject", transport)
+    assert transport.rejected == ["17"]
+    assert "17" in reply
+
 
 
 def test_handle_command_list_and_help() -> None:

@@ -112,6 +112,21 @@ def resolve(items: list[Update], token: str) -> Update | None:
     return matches[0] if len(matches) == 1 else None
 
 
+def newest(items: list[Update]) -> Update | None:
+    """The most recently opened update (highest PR number).
+
+    A bare ``/approve`` — e.g. a Telegram client that sends only ``/approve``
+    when the owner taps the command text in a notification — means "the newest
+    one". Picking by PR number (not list order) keeps that deterministic.
+    """
+    if not items:
+        return None
+    numeric = [item for item in items if str(item.id).isdigit()]
+    if numeric:
+        return max(numeric, key=lambda item: int(item.id))
+    return items[0]
+
+
 def handle_command(text: str, transport: UpdateTransport) -> str | None:
     """Handle an approval command and return the reply text, or None.
 
@@ -131,10 +146,18 @@ def handle_command(text: str, transport: UpdateTransport) -> str | None:
         return "Use: /status <id>" if not arg else transport.status(arg)
 
     if verb in {"approve", "reject"}:
-        if not arg:
-            return f"Use: /{verb} <id|number>"
-        token, _, reason = arg.partition(" ")
         action = transport.approve if verb == "approve" else transport.reject
+        if not arg:
+            # A bare /approve or /reject targets the newest pending update, so
+            # tapping the command in a notification still does the right thing.
+            target = newest(transport.list_open())
+            if target is None:
+                return "Koi pending update nahi hai."
+            try:
+                return f"Newest pending: #{target.id}\n{action(target.id, '')}"
+            except Exception as exc:  # noqa: BLE001 - a failed action is reported, not hidden
+                return f"⚠️ {exc}"
+        token, _, reason = arg.partition(" ")
         try:
             return action(token.strip(), reason.strip())
         except Exception as exc:  # noqa: BLE001 - a failed action is reported, not hidden

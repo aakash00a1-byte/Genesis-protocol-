@@ -1159,6 +1159,32 @@ def _append_command(chat_id, text):
         json.dump(queue[-TELEGRAM_QUEUE_MAX:], f)
 
 
+def _handle_callback_query(callback):
+    """Turn an inline-button tap into the command it represents.
+
+    Button payloads are ``"<verb>:<arg>"`` (e.g. ``approve:17``, ``list``).
+    Only verbs the update pipeline understands are accepted, so a forged
+    callback cannot inject an arbitrary command. The command is parked on the
+    same queue as a typed one; the harness replies after it acts.
+    """
+    data = str(callback.get('data', '')).strip()
+    verb, _, arg = data.partition(':')
+    allowed = {'approve', 'reject', 'list', 'updates', 'pending', 'status', 'help'}
+    if verb not in allowed:
+        return jsonify({'ok': True})
+    command = f'/{verb}' + (f' {arg}' if arg else '')
+    message = callback.get('message') or {}
+    chat = message.get('chat') or {}
+    chat_id = chat.get('id') if isinstance(chat, dict) else None
+    if not isinstance(chat_id, (int, str)) or not str(chat_id).strip():
+        return jsonify({'ok': True})
+    try:
+        _append_command(chat_id, command)
+    except Exception as e:
+        print(f"Callback command store error: {e}")
+    return jsonify({'ok': True, 'queued': 'callback', 'command': command})
+
+
 def _telegram_secret_ok():
     """Shared-secret check for the Telegram webhook and the reply queue.
 
@@ -1206,6 +1232,14 @@ def telegram_webhook():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
 
     update = request.get_json(force=True, silent=True) or {}
+
+    # Inline-button taps arrive as callback_query, not message. The button
+    # carries its own command (e.g. "approve:17"), so we translate it into the
+    # equivalent /command and park it for the self-improvement harness. A tap
+    # therefore never depends on the owner retyping a number.
+    callback = update.get('callback_query')
+    if isinstance(callback, dict):
+        return _handle_callback_query(callback)
 
     if 'message' not in update:
         return jsonify({'ok': True})

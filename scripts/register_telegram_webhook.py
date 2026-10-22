@@ -53,17 +53,22 @@ def main() -> int:
         print(f"getWebhookInfo failed: {type(exc).__name__}: {exc}")
         return 1
 
-    current = (info.get("result") or {}).get("url", "")
+    result = info.get("result") or {}
+    current = result.get("url", "")
+    want_updates = ["message", "callback_query"]
+    current_updates = result.get("allowed_updates")
     print(f"current webhook: {current or '(none)'}")
-    if current == WEBHOOK_URL:
-        last_error = (info.get("result") or {}).get("last_error_message", "")
+    if current == WEBHOOK_URL and (
+        not current_updates or set(want_updates) <= set(current_updates)
+    ):
+        last_error = result.get("last_error_message", "")
         print(f"webhook already correct; last_error={last_error or '(none)'}")
         return 0
 
     payload: dict = {
         "url": WEBHOOK_URL,
         "max_connections": 5,
-        "allowed_updates": ["message"],
+        "allowed_updates": want_updates,
         "drop_pending_updates": False,
     }
     if WEBHOOK_SECRET:
