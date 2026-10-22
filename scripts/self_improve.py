@@ -58,6 +58,9 @@ TELEGRAM_ADMIN_ID = os.environ.get("TELEGRAM_ADMIN_ID", "").strip()
 CYCLE_INTERVAL_SECONDS = int(os.environ.get("SELF_IMPROVE_INTERVAL_SECONDS", "2700"))
 RUN_SECONDS = int(os.environ.get("SELF_IMPROVE_RUN_SECONDS", str(5 * 3600 + 30 * 60)))
 MAX_OPEN_PRS = int(os.environ.get("SELF_IMPROVE_MAX_OPEN_PRS", "5"))
+# How often the loop checks for an owner /approve between cycles, so a decision
+# lands within a minute instead of waiting for the next 45-min cycle.
+APPROVAL_TICK_SECONDS = int(os.environ.get("SELF_IMPROVE_APPROVAL_TICK_SECONDS", "60"))
 # Optional: a backlog written by the Genesis evolution agent
 # (genesis_v5/genesis_evolve.py). When present, its highest-priority proposal
 # seeds the cycle's focus instead of the static rotation below.
@@ -545,11 +548,16 @@ def main() -> int:
     index = int(time.time() // max(CYCLE_INTERVAL_SECONDS, 1))
     while time.monotonic() - started < RUN_SECONDS:
         run_cycle(index)
-        process_approvals()
         index += 1
-        # Sleep until the next cycle, but stop early at the run deadline.
-        remaining = RUN_SECONDS - (time.monotonic() - started)
-        time.sleep(max(0.0, min(CYCLE_INTERVAL_SECONDS, remaining)))
+        # Between cycles, poll for an owner /approve every APPROVAL_TICK_SECONDS
+        # so a decision lands in about a minute rather than in 45.
+        cycle_due = time.monotonic() + CYCLE_INTERVAL_SECONDS
+        while time.monotonic() < min(cycle_due, started + RUN_SECONDS):
+            process_approvals()
+            remaining = min(cycle_due, started + RUN_SECONDS) - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(APPROVAL_TICK_SECONDS, remaining))
     _log("self-improvement loop finished; the next scheduled run takes over")
     return 0
 
