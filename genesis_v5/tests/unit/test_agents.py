@@ -109,7 +109,7 @@ def test_agent_registry_selects_agents() -> None:
     registry = AgentRegistry()
     register_builtin_agents(registry)
     assert registry.names() == [
-        "coding", "deployment", "generic", "memory", "planning",
+        "coding", "deployment", "evolution", "generic", "memory", "planning",
         "qa", "research", "security",
     ]
     assert registry.has("coding")

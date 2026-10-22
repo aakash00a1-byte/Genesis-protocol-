@@ -41,6 +41,11 @@ python -m pytest tests/unit/test_memory.py -q
   limit, validation.
 - `genesis/reflection/`, `genesis/qa/` — bounded reflection + independent
   verifier.
+- `genesis/evolution/` — the Evolution agent: `SignalCollector` reads the
+  transparency ledgers + metrics (read-only) and `EvolutionAgent` turns them
+  into a bounded, ranked, review-gated backlog of `EvolutionProposal`s. It
+  edits/deploys/merges nothing and is wired with no tool gateway. Off by
+  default (`GenesisConfig.evolution`); run `python3 genesis_evolve.py`.
 - `genesis/risk/` — `RiskAnalyzer`: scores task risk (offline, advisory),
   recommends a response, and holds the (opt-in) alert-notifier boundary.
   Scoring only — it does not fetch external disaster data and does not

@@ -70,6 +70,27 @@ class TaskDecomposer:
             subtasks.append(
                 {"label": "deploy", "instruction": f"Prepare deployment for: {task}"}
             )
+        # Self-improvement is a distinct sub-goal: observe the system's own
+        # recent behaviour and propose improvements. Deliberately narrow
+        # keywords so an ordinary task is not turned into a self-review.
+        if any(
+            k in lowered
+            for k in [
+                "self-improve",
+                "self improve",
+                "self-improvement",
+                "improve itself",
+                "improve the system",
+                "evolve the system",
+                "evolve itself",
+            ]
+        ):
+            subtasks.append(
+                {
+                    "label": "evolve",
+                    "instruction": f"Observe the system and propose improvements for: {task}",
+                }
+            )
 
         # Memory is always a candidate (gather context, persist outcome).
         subtasks.append(
@@ -94,6 +115,7 @@ _AGENT_BY_LABEL: dict[str, str] = {
     "research": "research",
     "deploy": "deployment",
     "memory": "memory",
+    "evolve": "evolution",
 }
 
 

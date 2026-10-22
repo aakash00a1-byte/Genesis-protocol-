@@ -125,6 +125,20 @@ class MemoryAgent(_DeterministicAgent):
     verb = "memorized"
 
 
+class EvolutionAgent(_DeterministicAgent):
+    """Fallback evolution agent used by the registry/planner.
+
+    The registry builds agents with no arguments, so this thin subclass only
+    carries the name and label. The full self-observation implementation lives
+    in ``genesis.evolution.evolution.EvolutionAgent`` and is wired explicitly
+    (with a signal collector and store) by the bootstrap/runner.
+    """
+
+    name = "evolution"
+    description = "Observes the system and proposes bounded improvements."
+    verb = "proposed improvements for"
+
+
 # A generic fallback for unassigned labels.
 class GenericAgent(_DeterministicAgent):
     name = "generic"
@@ -141,6 +155,7 @@ def register_builtin_agents(registry) -> None:
         SecurityAgent,
         DeploymentAgent,
         MemoryAgent,
+        EvolutionAgent,
         GenericAgent,
     ]
     for cls in agents:

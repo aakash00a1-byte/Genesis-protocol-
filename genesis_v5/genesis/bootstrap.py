@@ -16,6 +16,8 @@ from genesis.care.companion import CareCompanion
 from genesis.config.settings import GenesisConfig
 from genesis.coordinator.coordinator import AgentCoordinator, CoordinatorConfig
 from genesis.core import RiskLevel
+from genesis.evolution.evolution import EvolutionAgent, ProposalStore
+from genesis.evolution.signals import SignalCollector
 from genesis.generation.generator import ParallelGenerator
 from genesis.integration.gateway import ChatGateway
 from genesis.kernel.kernel import GenesisKernel
@@ -125,6 +127,24 @@ def build(
         )
         kernel.coordinator = coordinator
         kernel.agent_registry = agent_registry
+
+    if cfg.evolution.enabled:
+        # Self-improvement is wired only when explicitly enabled. It observes
+        # the transparency ledgers and metrics and proposes bounded changes; it
+        # is given no tool gateway, so it cannot act on anything even in
+        # principle. A human reviews the proposals.
+        collector = SignalCollector(
+            failure_ledger=transparency.failures,
+            decision_ledger=transparency.decisions,
+            metrics=kernel.metrics,
+        )
+        store = ProposalStore(cfg.evolution.store_dir) if cfg.evolution.persist else None
+        kernel.evolution = EvolutionAgent(
+            config=cfg.evolution,
+            collector=collector,
+            store=store,
+            memory=kernel.memory,
+        )
 
     if with_qa:
         kernel.qa = IndependentVerifier(

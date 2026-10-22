@@ -118,6 +118,7 @@ class GenesisKernel:
         self.qa = None
         self.security = None
         self.care = None
+        self.evolution = None
 
     # ------------------------------------------------------------------
     # Provider factory (wired to the global factory + adapters)

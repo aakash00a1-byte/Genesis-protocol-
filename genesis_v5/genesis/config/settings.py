@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from genesis.evolution.evolution import EvolutionConfig
+
 
 class Env(str, Enum):
     DEVELOPMENT = "development"
@@ -204,6 +206,7 @@ class GenesisConfig:
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     autonomy: AutonomyConfig = field(default_factory=AutonomyConfig)
     integration: IntegrationConfig = field(default_factory=IntegrationConfig)
+    evolution: EvolutionConfig = field(default_factory=EvolutionConfig)
 
     @property
     def is_production(self) -> bool:

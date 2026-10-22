@@ -76,6 +76,26 @@ These were built ahead of the roadmap and are already in the suite:
 - CLI and web surfaces wired to the generation and authority endpoints.
 - Optional Telegram/Discord adapters, reusing the existing adapter layer.
 
+### Phase 18 — Evolution agent  ✅ DONE
+- `genesis/evolution/` observes the system's own recent behaviour and turns it
+  into a small, ranked, review-gated backlog of improvement proposals.
+- `SignalCollector` reads the real transparency ledgers and metrics (recent
+  failures, agent-tool denials, unresolved decisions) and produces three signal
+  kinds: `WeaknessSignal`, `HealthSignal`, `ImprovementSignal`. Read-only.
+- `EvolutionAgent` turns signals into `EvolutionProposal`s. Every proposal is
+  `requires_review=True` and `requires_authority=True`; `bypass_available` is
+  always false. The agent edits nothing, deploys nothing, merges nothing, and
+  is wired with no tool gateway, so it cannot act even in principle.
+- Bounded and de-duplicated: the same failure twice is one proposal with a
+  raised priority, not two; a cycle emits at most `max_proposals`. Dropped or
+  deferred proposals are reported in `notes`, never silently.
+- Registered as the `evolution` agent and reachable from the planner via the
+  `evolve` label (narrow keywords only), so a self-improvement task flows
+  through the normal Kernel pipeline.
+- Runnable: `python3 genesis_evolve.py` (one cycle), `--loop` to observe
+  continuously, `--via-pipeline` to route the task through the full Kernel.
+- Config: `GenesisConfig.evolution` (`EvolutionConfig`), off by default.
+
 ## Non-goals (explicit)
 
 These are deliberately out of scope, now and later:
@@ -89,6 +109,6 @@ These are deliberately out of scope, now and later:
 ## Definition of done per phase
 
 - New code covered by unit tests.
-- Full suite green (currently 199 tests).
+- Full suite green (currently 420 tests).
 - No phase weakens the authority layer or the transparency/resilience
   guarantees.
