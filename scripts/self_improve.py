@@ -44,6 +44,14 @@ REPO = os.environ.get("SELF_IMPROVE_REPO", "aakash00a1-byte/Genesis-protocol-").
 BRANCH = os.environ.get("SELF_IMPROVE_BRANCH", "main").strip()
 MODEL = os.environ.get("SELF_IMPROVE_MODEL", "").strip()
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "").strip()
+# A token allowed to merge. The sandbox token above is read-only; the owner's
+# write token arrives here (AGENT_GH_TOKEN) and is used only to land an
+# approved update. Absent, approval replies say so instead of failing silently.
+GH_MERGE_TOKEN = os.environ.get("GH_MERGE_TOKEN", "").strip()
+HF_SPACE_URL = os.environ.get(
+    "HF_SPACE_URL", "https://genesisno-genesis-automaton.hf.space"
+).rstrip("/")
+HF_SHARED_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_ADMIN_ID = os.environ.get("TELEGRAM_ADMIN_ID", "").strip()
 
@@ -317,6 +325,108 @@ def choose_topic(index: int) -> str:
     return evolution_topic() or TOPICS[index % len(TOPICS)]
 
 
+def _space_headers() -> dict[str, str]:
+    headers = {"Accept": "application/json"}
+    if HF_SHARED_SECRET:
+        headers["X-Telegram-Bot-Api-Secret-Token"] = HF_SHARED_SECRET
+    return headers
+
+
+def _space_get(url: str, timeout: int = 20) -> bytes | None:
+    req = urllib.request.Request(url, headers=_space_headers())  # noqa: S310 - fixed host
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            return resp.read()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _transport():
+    """Build the approval transport, or None when no merge token is set.
+
+    Imported lazily so the harness keeps working without the package on the
+    path (it is stdlib-only by design).
+    """
+    if not GH_MERGE_TOKEN:
+        return None
+    try:
+        from genesis_protocol.updates.github_prs import GitHubPRTransport
+
+        return GitHubPRTransport(REPO, GH_MERGE_TOKEN)
+    except Exception as exc:  # noqa: BLE001
+        _log(f"approval transport unavailable: {type(exc).__name__}")
+        return None
+
+
+def _incoming_commands() -> list[str]:
+    """Owner commands parked by the Space webhook, without consuming them.
+
+    The webhook routes ``/approve``-style text to the command queue and the
+    harness owns that queue: it reads here, acts, then clears. The reply queue
+    is untouched (the relay still delivers ordinary replies).
+    """
+    raw = _space_get(f"{HF_SPACE_URL}/api/telegram/commands")
+    if raw is None:
+        return []
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        return []
+    commands = payload.get("commands") if isinstance(payload, dict) else None
+    if not isinstance(commands, list):
+        return []
+    return [
+        entry["text"]
+        for entry in commands
+        if isinstance(entry, dict) and isinstance(entry.get("text"), str)
+    ]
+
+
+def _clear_commands() -> None:
+    req = urllib.request.Request(  # noqa: S310 - fixed host
+        f"{HF_SPACE_URL}/api/telegram/commands",
+        method="DELETE",
+        headers=_space_headers(),
+    )
+    try:
+        urllib.request.urlopen(req, timeout=20).read()  # noqa: S310
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def process_approvals() -> None:
+    """Apply any ``/approve`` or ``/reject`` the owner has sent.
+
+    Reads the command queue, and for each command merges the matching agent PR
+    (the push + deploy) or closes it, then replies so the owner knows the
+    outcome. The queue is cleared only after every command has been handled, so
+    a crash mid-run does not drop an approval.
+    """
+    texts = _incoming_commands()
+    if not texts:
+        return
+    try:
+        from genesis_protocol.updates import handle_command, parse_command
+    except Exception:  # noqa: BLE001
+        return
+
+    transport = _transport()
+    for text in texts:
+        if transport is None:
+            if parse_command(text) is not None:
+                _notify(
+                    "⚠️ Approval ke liye merge token nahi mila. "
+                    "Repo secret AGENT_GH_TOKEN set karo "
+                    "(fine-grained PAT: Contents + Pull requests = write)."
+                )
+            continue
+        reply = handle_command(text, transport)
+        if reply is not None:
+            _log(f"approval: {text[:40]} -> {reply.splitlines()[0]}")
+            _notify(reply)
+    _clear_commands()
+
+
 def _git(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", *args], capture_output=True, text=True, cwd=os.getcwd()
@@ -392,31 +502,50 @@ def run_cycle(index: int) -> None:
     pr_url = land_pr(patch, topic, app_id)
     if pr_url:
         _log(f"opened PR: {pr_url}")
-        _notify(f"🧠 Genesis agent ne ek improvement bheja:\n{topic[:80]}\n\nPR: {pr_url}")
+        _notify(
+            f"🧠 Genesis ne ek update propose kiya:\n{topic[:80]}\n\n"
+            f"{pr_url}\n\n"
+            f"Approve + deploy: /approve {_pr_number(pr_url)}\n"
+            f"Reject: /reject {_pr_number(pr_url)}\n"
+            f"List: /updates"
+        )
     else:
         _log("could not land the patch as a PR")
         _notify(f"🧠 Genesis agent cycle '{topic[:50]}': patch did not apply; skipped.")
+
+
+def _pr_number(pr_url: str) -> str:
+    return pr_url.rstrip("/").rsplit("/", 1)[-1] if pr_url else "?"
 
 
 def main() -> int:
     if "--dry-run" in sys.argv:
         print(TASK.format(repo=REPO, branch=BRANCH, topic=choose_topic(0)))
         return 0
+    if "--approvals-only" in sys.argv:
+        # Land any pending owner decision; needs no OpenHands key.
+        process_approvals()
+        return 0
     if not API_KEY:
         _log("OPENHANDS_API_KEY is not set")
         return 1
     if "--once" in sys.argv:
         run_cycle(int(time.time() // max(CYCLE_INTERVAL_SECONDS, 1)))
+        process_approvals()
         return 0
     if not GITHUB_TOKEN:
         _log("GITHUB_TOKEN is not set; cannot open PRs")
         return 1
     _log(f"starting continuous self-improvement every {CYCLE_INTERVAL_SECONDS}s for {RUN_SECONDS}s")
-    _notify("🧠 Genesis agent 24x7 loop start: main improvements karta rahunga.")
+    _notify(
+        "🧠 Genesis 24x7 loop start: main updates propose karta rahunga. "
+        "Approve karne ke liye: /updates, phir /approve <number>."
+    )
     started = time.monotonic()
     index = int(time.time() // max(CYCLE_INTERVAL_SECONDS, 1))
     while time.monotonic() - started < RUN_SECONDS:
         run_cycle(index)
+        process_approvals()
         index += 1
         # Sleep until the next cycle, but stop early at the run deadline.
         remaining = RUN_SECONDS - (time.monotonic() - started)

@@ -24,6 +24,10 @@ on:
         description: 'Run exactly one improvement cycle and exit'
         type: boolean
         default: false
+      approvals_only:
+        description: 'Only process pending /approve commands and exit'
+        type: boolean
+        default: false
 
 concurrency:
   group: genesis-self-improve
@@ -62,13 +66,17 @@ jobs:
             exit 1
           fi
           if [ -z "$AGENT_GH_TOKEN" ]; then
-            echo "::warning::AGENT_GH_TOKEN is not set; using the default GITHUB_TOKEN. If Actions is set to read-only, PRs cannot be opened. Set AGENT_GH_TOKEN (Contents + Pull requests: write)."
+            echo "::warning::AGENT_GH_TOKEN is not set; using the default GITHUB_TOKEN. Approval (/approve) needs a write token, so set AGENT_GH_TOKEN (Contents + Pull requests: write)."
           fi
 
       - name: Run the continuous self-improvement loop
         env:
           OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.AGENT_GH_TOKEN || secrets.GITHUB_TOKEN }}
+          # Only the owner's write token may merge (approve) an update.
+          GH_MERGE_TOKEN: ${{ secrets.AGENT_GH_TOKEN }}
+          HF_SPACE_URL: https://genesisno-genesis-automaton.hf.space
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
           SELF_IMPROVE_REPO: ${{ github.repository }}
           SELF_IMPROVE_BRANCH: main
           SELF_IMPROVE_INTERVAL_SECONDS: "2700"
@@ -77,7 +85,9 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ADMIN_ID: ${{ secrets.TELEGRAM_ADMIN_ID }}
         run: |
-          if [ "${{ inputs.once }}" = "true" ]; then
+          if [ "${{ inputs.approvals_only }}" = "true" ]; then
+            python3 scripts/self_improve.py --approvals-only
+          elif [ "${{ inputs.once }}" = "true" ]; then
             python3 scripts/self_improve.py --once
           else
             python3 scripts/self_improve.py

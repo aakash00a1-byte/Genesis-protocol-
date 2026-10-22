@@ -131,3 +131,56 @@ def test_choose_topic_ignores_corrupt_backlog(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(module, "EVOLUTION_BACKLOG", str(backlog))
     assert module.choose_topic(1) == module.TOPICS[1]
 
+
+def test_pr_number_extracts_trailing_id() -> None:
+    module = _load()
+    assert module._pr_number("https://github.com/o/r/pull/42") == "42"
+    assert module._pr_number("https://github.com/o/r/pull/42/") == "42"
+    assert module._pr_number("") == "?"
+
+
+def test_process_approvals_merges_via_transport(monkeypatch) -> None:
+    module = _load()
+    module.GH_MERGE_TOKEN = "tok"
+    replies: list[str] = []
+    monkeypatch.setattr(module, "_notify", lambda text: replies.append(text))
+    monkeypatch.setattr(module, "_incoming_commands", lambda: ["/approve 7"])
+    monkeypatch.setattr(module, "_clear_commands", lambda: None)
+
+    class Transport:
+        def approve(self, token, reason=""):
+            return f"✅ Approved & merged: fix relay ({token})"
+
+        def reject(self, token, reason=""):
+            return "rejected"
+
+        def status(self, token):
+            return "status"
+
+        def list_open(self):
+            return []
+
+    monkeypatch.setattr(module, "_transport", lambda: Transport())
+    module.process_approvals()
+    assert any("Approved & merged" in r for r in replies)
+
+
+def test_process_approvals_without_token_warns(monkeypatch) -> None:
+    module = _load()
+    replies: list[str] = []
+    monkeypatch.setattr(module, "_notify", lambda text: replies.append(text))
+    monkeypatch.setattr(module, "_incoming_commands", lambda: ["/approve 1"])
+    monkeypatch.setattr(module, "_transport", lambda: None)
+    monkeypatch.setattr(module, "_clear_commands", lambda: None)
+    module.process_approvals()
+    assert any("merge token" in r for r in replies)
+
+
+def test_process_approvals_no_commands_is_noop(monkeypatch) -> None:
+    module = _load()
+    called = {"clear": False}
+    monkeypatch.setattr(module, "_incoming_commands", lambda: [])
+    monkeypatch.setattr(module, "_clear_commands", lambda: called.update(clear=True))
+    module.process_approvals()
+    assert called["clear"] is False
+

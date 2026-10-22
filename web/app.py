@@ -1133,6 +1133,30 @@ def api_debug_telegram():
 
 TELEGRAM_REPLY_QUEUE = '/tmp/telegram_reply_queue.json'
 TELEGRAM_QUEUE_MAX = 200  # bound so the file cannot grow without limit
+# Owner commands (/approve, /reject, /updates) are parked here, separate from
+# the reply queue: the relay sends replies, but only the self-improvement
+# harness acts on commands, so a command must not be rendered as a reply.
+TELEGRAM_COMMAND_QUEUE = '/tmp/telegram_command_queue.json'
+
+
+def _read_command_queue():
+    try:
+        with open(TELEGRAM_COMMAND_QUEUE) as f:
+            queue = json.load(f)
+        return queue if isinstance(queue, list) else []
+    except Exception:
+        return []
+
+
+def _append_command(chat_id, text):
+    queue = _read_command_queue()
+    queue.append({
+        'id': f'{chat_id}:{int(time.time() * 1000)}:{len(queue)}',
+        'chat_id': chat_id,
+        'text': str(text)[:4000],
+    })
+    with open(TELEGRAM_COMMAND_QUEUE, 'w') as f:
+        json.dump(queue[-TELEGRAM_QUEUE_MAX:], f)
 
 
 def _telegram_secret_ok():
@@ -1200,6 +1224,21 @@ def telegram_webhook():
     text = text[:4000]
     user = msg.get('from', {})
     
+    # Owner update commands are parked for the self-improvement harness, which
+    # is the only thing that may act on them. They get no immediate reply; the
+    # harness replies after it merges or rejects.
+    try:
+        from genesis_protocol.updates import parse_command
+        is_command = parse_command(text) is not None
+    except Exception:
+        is_command = False
+    if is_command:
+        try:
+            _append_command(chat_id, text)
+        except Exception as e:
+            print(f"Command queue store error: {e}")
+        return jsonify({'ok': True, 'queued': 'command'})
+
     # Build reply text
     if text == '/start':
         reply = "🤖 *Genesis Protocol* online!\n\nI'm your autonomous AI. Send me any message or question!\n\nCommands:\n/start - Welcome\n/status - Bot status\n/ask <question> - Ask AI"
@@ -1268,6 +1307,28 @@ def telegram_queue_clear():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     try:
         with open(TELEGRAM_REPLY_QUEUE, 'w') as f:
+            json.dump([], f)
+        return jsonify({'ok': True, 'cleared': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/telegram/commands', methods=['GET'])
+def telegram_commands_get():
+    """Return pending owner commands (called by the self-improvement harness)."""
+    if not _telegram_secret_ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    queue = _read_command_queue()
+    return jsonify({'commands': queue, 'count': len(queue)})
+
+
+@app.route('/api/telegram/commands', methods=['DELETE'])
+def telegram_commands_clear():
+    """Clear the command queue (called after the harness acts on them)."""
+    if not _telegram_secret_ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    try:
+        with open(TELEGRAM_COMMAND_QUEUE, 'w') as f:
             json.dump([], f)
         return jsonify({'ok': True, 'cleared': True})
     except Exception as e:

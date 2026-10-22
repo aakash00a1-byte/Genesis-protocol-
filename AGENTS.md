@@ -110,18 +110,30 @@ It is a long-running loop (like the relay): every `SELF_IMPROVE_INTERVAL_SECONDS
 for it to finish, pulls the agent's commit out of the sandbox, applies it on a
 fresh `agent/` branch, pushes, opens a pull request, and pings Telegram. It
 pauses when `SELF_IMPROVE_MAX_OPEN_PRS` (5) agent PRs await review, and it never
-merges -- a human reviews the PR and merging triggers the auto-deploy workflow.
+merges on its own -- see the approval gate below.
 
 Run via `.github/workflows/self-improve.yml`: cron every 4 hours with a ~5h30m
 run (`SELF_IMPROVE_RUN_SECONDS`), so the loop is continuous. Trigger a single
 cycle with `workflow_dispatch` + `once: true`, or locally with
-`python3 scripts/self_improve.py --once`. `--dry-run` prints the task prompt
+`python3 scripts/self_improve.py --once`. `--approvals-only` processes pending
+`/approve` commands without starting a cycle. `--dry-run` prints the task prompt
 without touching the network.
 
-Secrets: `OPENHANDS_API_KEY` (required) and a token that can push. If the repo
-allows "Read and write permissions" for Actions, the default `GITHUB_TOKEN`
-works; otherwise set `AGENT_GH_TOKEN` (a fine-grained PAT with Contents + Pull
-requests write) and the workflow prefers it automatically.
+## Approval gate (owner approves, then it pushes and deploys)
+`genesis_protocol/updates/` is the only path to `main`. An agent PR is inert
+until the owner approves it: the owner replies `/approve <id|number>` (or
+`/reject`, `/updates`), the webhook parks the command in
+`/tmp/telegram_command_queue.json`, and the self-improvement loop merges the PR.
+The merge *is* the push, and it triggers `deploy-space.yml`, which deploys to
+the HF Space. The loop is transport-agnostic: `handle_command` drives a
+`GitHubPRTransport` (only `agent/` branches are approvable), and tests drive a
+fake transport, so no network is needed to test the gate. Merging requires a
+write token; the agent sandbox token is read-only.
+
+Secrets: `OPENHANDS_API_KEY` (required), `AGENT_GH_TOKEN` (a fine-grained PAT
+with Contents + Pull requests write -- required for approval to land; the loop
+warns and refuses to merge without it), and optionally `TELEGRAM_WEBHOOK_SECRET`
+to authenticate the Space queue reads.
 
 Note: the agent sandbox gets a read-only GitHub credential, so the agent can
 commit locally but its `git push` / PR call returns 403. The harness lands the
