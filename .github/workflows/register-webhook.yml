@@ -1,0 +1,32 @@
+name: Register Telegram Webhook
+
+# Hugging Face's free tier blocks egress to api.telegram.org, so the Space
+# cannot register its own webhook (setWebhook times out). GitHub Actions can,
+# so register it from here: on every push to main (i.e. after a deploy), on a
+# schedule, and on demand. Idempotent and self-healing — it re-registers only
+# when the webhook URL has drifted, then verifies.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Register the webhook
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          SPACE_URL: https://genesisno-genesis-automaton.hf.space
+        run: python3 scripts/register_telegram_webhook.py

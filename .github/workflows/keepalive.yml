@@ -52,16 +52,6 @@ jobs:
           restore-keys: |
             relay-state-
 
-      - name: Register the Telegram webhook
-        # The Space cannot reach api.telegram.org, so register the webhook from
-        # here, where egress works. Idempotent: re-registers only on drift.
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
-          SPACE_URL: https://genesisno-genesis-automaton.hf.space
-        run: python3 scripts/register_telegram_webhook.py
-        continue-on-error: true
-
       - name: Relay + keep-alive loop
         env:
           HF_SPACE_URL: https://genesisno-genesis-automaton.hf.space
