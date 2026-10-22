@@ -109,6 +109,47 @@ def test_relay_is_idempotent_across_ticks(monkeypatch, tmp_path) -> None:
     assert sent == ["once"]
 
 
+def test_relay_state_survives_corrupt_file_and_persists_before_clear(
+    monkeypatch, tmp_path
+) -> None:
+    """The sent ids must be on disk *before* the queue is cleared.
+
+    A failed clear (or a corrupt state file) must never cause a duplicate
+    delivery on the next tick.
+    """
+    state_file = tmp_path / "state.json"
+    # A truncated state file means "nothing seen yet", not a crash.
+    state_file.write_text('{"sent_ids": [', encoding="utf-8")
+    relay = _load(
+        monkeypatch,
+        HF_SPACE_URL="https://space.invalid",
+        TELEGRAM_BOT_TOKEN="tok",
+        TELEGRAM_ADMIN_ID="1",
+        RELAY_STATE_FILE=str(state_file),
+    )
+    queue = {"replies": [{"id": "x", "chat_id": "1", "text": "once"}]}
+    sent: list[str] = []
+    monkeypatch.setattr(relay, "_get", lambda url, timeout=30: json.dumps(queue).encode())
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: sent.append(text) or True
+    )
+
+    # Make the clear (DELETE) fail: the id must still have been persisted first.
+    import urllib.request
+
+    def boom(req, *a, **k):
+        raise OSError("clear failed")
+
+    monkeypatch.setattr(urllib.request, "urlopen", boom)
+
+    assert relay.relay_once() == 1
+    assert json.loads(state_file.read_text(encoding="utf-8"))["sent_ids"] == ["x"]
+
+    # The queue still holds the reply, but the recorded id stops a re-send.
+    assert relay.relay_once() == 0
+    assert sent == ["once"]
+
+
 def test_relay_log_redacts_token(monkeypatch, tmp_path, capsys) -> None:
     relay = _load(
         monkeypatch,
