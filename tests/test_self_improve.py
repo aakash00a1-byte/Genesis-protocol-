@@ -96,3 +96,38 @@ def test_run_cycle_pauses_when_too_many_agent_prs(monkeypatch) -> None:
     module.run_cycle(0)
     assert started == []
 
+
+def test_choose_topic_falls_back_to_rotation_without_backlog(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setattr(module, "EVOLUTION_BACKLOG", "/nonexistent/backlog.jsonl")
+    assert module.choose_topic(0) == module.TOPICS[0]
+
+
+def test_choose_topic_prefers_highest_priority_evolution_proposal(monkeypatch, tmp_path) -> None:
+    import json
+
+    module = _load()
+    backlog = tmp_path / "backlog.jsonl"
+    backlog.write_text(
+        json.dumps(
+            {
+                "proposals": [
+                    {"title": "low", "priority": 0.2},
+                    {"title": "Fix gateway: credential leak", "priority": 0.9},
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "EVOLUTION_BACKLOG", str(backlog))
+    assert module.choose_topic(0) == "Fix gateway: credential leak"
+
+
+def test_choose_topic_ignores_corrupt_backlog(monkeypatch, tmp_path) -> None:
+    module = _load()
+    backlog = tmp_path / "backlog.jsonl"
+    backlog.write_text("not json\n", encoding="utf-8")
+    monkeypatch.setattr(module, "EVOLUTION_BACKLOG", str(backlog))
+    assert module.choose_topic(1) == module.TOPICS[1]
+

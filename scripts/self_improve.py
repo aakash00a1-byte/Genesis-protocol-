@@ -50,6 +50,12 @@ TELEGRAM_ADMIN_ID = os.environ.get("TELEGRAM_ADMIN_ID", "").strip()
 CYCLE_INTERVAL_SECONDS = int(os.environ.get("SELF_IMPROVE_INTERVAL_SECONDS", "2700"))
 RUN_SECONDS = int(os.environ.get("SELF_IMPROVE_RUN_SECONDS", str(5 * 3600 + 30 * 60)))
 MAX_OPEN_PRS = int(os.environ.get("SELF_IMPROVE_MAX_OPEN_PRS", "5"))
+# Optional: a backlog written by the Genesis evolution agent
+# (genesis_v5/genesis_evolve.py). When present, its highest-priority proposal
+# seeds the cycle's focus instead of the static rotation below.
+EVOLUTION_BACKLOG = os.environ.get(
+    "SELF_IMPROVE_EVOLUTION_BACKLOG", "genesis_v5/data/evolution/backlog.jsonl"
+).strip()
 POLL_SECONDS = 15
 POLL_TIMEOUT_SECONDS = 900
 # A conversation can take a while; the earlier one took ~50 minutes. Allow 45
@@ -280,6 +286,37 @@ def _slug(topic: str) -> str:
     return keep.strip("-")[:40].strip("-") or "improve"
 
 
+def evolution_topic() -> str | None:
+    """Highest-priority focus from the Genesis evolution backlog, if any.
+
+    The evolution agent (genesis_v5/genesis_evolve.py) writes a review-gated
+    backlog. When it exists, the newest record's top proposal is a better focus
+    than the static rotation. Absent or unreadable, this returns None and the
+    caller falls back to TOPICS — the backlog is an optimisation, never a
+    dependency.
+    """
+    if not EVOLUTION_BACKLOG or not os.path.exists(EVOLUTION_BACKLOG):
+        return None
+    try:
+        with open(EVOLUTION_BACKLOG, encoding="utf-8") as fh:
+            records = [json.loads(line) for line in fh if line.strip()]
+    except (OSError, json.JSONDecodeError):
+        return None
+    for record in reversed(records):
+        proposals = record.get("proposals") or []
+        if proposals:
+            best = max(proposals, key=lambda p: p.get("priority", 0.0))
+            title = str(best.get("title", "")).strip()
+            if title:
+                return title
+    return None
+
+
+def choose_topic(index: int) -> str:
+    """Prefer a real, evidence-backed focus; otherwise rotate the static list."""
+    return evolution_topic() or TOPICS[index % len(TOPICS)]
+
+
 def _git(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", *args], capture_output=True, text=True, cwd=os.getcwd()
@@ -327,7 +364,7 @@ def land_pr(patch: str, topic: str, app_id: str) -> str | None:
 
 
 def run_cycle(index: int) -> None:
-    topic = TOPICS[index % len(TOPICS)]
+    topic = choose_topic(index)
     waiting = open_agent_prs()
     if len(waiting) >= MAX_OPEN_PRS:
         _log(f"{len(waiting)} agent PRs already await review; skipping this cycle")
@@ -363,7 +400,7 @@ def run_cycle(index: int) -> None:
 
 def main() -> int:
     if "--dry-run" in sys.argv:
-        print(TASK.format(repo=REPO, branch=BRANCH, topic=TOPICS[0]))
+        print(TASK.format(repo=REPO, branch=BRANCH, topic=choose_topic(0)))
         return 0
     if not API_KEY:
         _log("OPENHANDS_API_KEY is not set")
