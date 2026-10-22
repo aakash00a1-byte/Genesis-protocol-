@@ -1256,6 +1256,75 @@ def _handle_tasks_list(chat_id):
     return jsonify({'ok': True, 'queued': 'tasks'})
 
 
+# /council [best|vote|synth] <question> — ask several models, reconcile.
+_COUNCIL_STRATEGIES = {
+    'best': 'best',
+    'vote': 'vote',
+    'synth': 'synthesis',
+    'synthesis': 'synthesis',
+}
+
+
+def _handle_council(chat_id, arg):
+    """Run a multi-LLM deliberation and queue the reconciled answer.
+
+    The first word may select the strategy; anything else is the question.
+    Runs the async council on a fresh loop, the same way the normal AI path
+    does, because the webhook is synchronous.
+    """
+    if not arg:
+        _append_reply(
+            chat_id,
+            "🧠 *Council mode* — kai models ek saath jawab dete hain, phir best chunte hain.\n\n"
+            "Use: /council <question>\n"
+            "/council vote <question> — majority jawab\n"
+            "/council synth <question> — sab jawab ek me merge",
+        )
+        return jsonify({'ok': True, 'queued': 'council-help'})
+
+    strategy_name = 'best'
+    question = arg
+    first, _, rest = arg.partition(' ')
+    if first.lower() in _COUNCIL_STRATEGIES and rest.strip():
+        strategy_name = _COUNCIL_STRATEGIES[first.lower()]
+        question = rest.strip()
+
+    try:
+        import asyncio
+        from genesis_protocol.ai.council import CouncilStrategy, get_council
+
+        strategy = CouncilStrategy(strategy_name)
+        council = get_council()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(
+            council.deliberate(
+                messages=[
+                    {"role": "system", "content": "You are Genesis, a helpful autonomous AI. Keep responses concise and helpful."},
+                    {"role": "user", "content": question},
+                ],
+                user_input=question,
+                strategy=strategy,
+            )
+        )
+        loop.close()
+    except Exception as e:
+        _append_reply(chat_id, f"❌ Council error: {str(e)[:500]}")
+        return jsonify({'ok': True, 'queued': 'council-error'})
+
+    if not result.success:
+        _append_reply(chat_id, f"❌ Council failed: {(result.error or 'unknown')[:500]}")
+        return jsonify({'ok': True, 'queued': 'council-failed'})
+
+    members = ", ".join(f"{m.provider}✓" for m in result.members if m.ok)
+    header = f"🧠 *Council* ({result.strategy.value}) — {result.answered_by}"
+    if result.consensus:
+        header += f" | agreement {int(result.consensus * 100)}%"
+    body = f"{header}\n_({members})_\n\n{result.answer[:3800]}"
+    _append_reply(chat_id, body)
+    return jsonify({'ok': True, 'queued': 'council'})
+
+
 def _handle_callback_query(callback):
     """Turn an inline-button tap into the command it represents.
 
@@ -1370,9 +1439,15 @@ def telegram_webhook():
             print(f"Command queue store error: {e}")
         return jsonify({'ok': True, 'queued': 'command'})
 
+    # Multi-LLM council: /council <question> asks several models at once and
+    # reconciles their answers, so a hard question does not depend on one model
+    # being right. /council vote and /council synth pick the reconciliation.
+    if text.startswith('/council'):
+        return _handle_council(chat_id, text[len('/council'):].strip())
+
     # Build reply text
     if text == '/start':
-        reply = "🤖 *Genesis Protocol* online!\n\nI'm your autonomous AI. Send me any message or question!\n\nCommands:\n/start - Welcome\n/status - Bot status\n/ask <question> - Ask AI"
+        reply = "🤖 *Genesis Protocol* online!\n\nI'm your autonomous AI. Send me any message or question!\n\nCommands:\n/start - Welcome\n/status - Bot status\n/ask <question> - Ask AI\n/council <question> - Ask several models at once"
     elif text == '/status':
         reply = "✅ Genesis bot running (webhook + relay mode)\n🚀 HF Space: LIVE\n🧠 AI: Groq-powered\n📡 Replies relayed via GitHub Actions"
     elif text.startswith('/ask '):

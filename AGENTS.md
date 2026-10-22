@@ -260,3 +260,13 @@ unset the job fails loudly instead of silently skipping.
   `docs/archive/` with an index; see `docs/archive/README.md`. Do not treat
   anything in there as current — it describes older states of the project.
 
+- **Multi-LLM council: `genesis_protocol/ai/council.py`.** The provider chain
+  asks one model and falls back on failure; the council asks several at once
+  and reconciles. Members are drawn one-per-provider from the scoring engine's
+  ranking, so it reuses normal routing rather than inventing a second selector.
+  Three strategies: `BEST` (QualityJudge picks the top answer), `VOTE` (the
+  centroid answer, with an agreement fraction), `SYNTHESIS` (the strongest
+  member merges the rest). Reachable from Telegram with `/council <question>`,
+  `/council vote ...`, `/council synth ...`. A member failing is expected and
+  never fails the deliberation.
+
