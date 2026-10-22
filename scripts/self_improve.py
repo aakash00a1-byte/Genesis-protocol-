@@ -71,21 +71,24 @@ TOPICS: list[str] = [
 TASK = """\
 You are working on the Genesis Protocol repository ({repo}), branch {branch}.
 
-Goal: make ONE small, safe, high-value improvement. Focus this cycle on:
+Goal: make ONE small, safe, high-value improvement, then STOP. Focus this cycle on:
   {topic}
 
-Rules (important):
-- Pick a single, focused change. Small is good: a bug fix, a missing test, a
-  doc fix, a clearer error message, a small hardening. Do NOT attempt a large
-  refactor or a new feature.
-- Run the relevant tests before you finish:
-  `python3 -m pytest tests/ -q` and lint with `python3 -m ruff check scripts/ web/`.
-- Work on a NEW branch and COMMIT your change locally.
+Be fast and decisive (aim to finish in under 10 minutes):
+- Spend at most a few minutes exploring. Do NOT read the whole repository.
+- Pick the first small, clear improvement you find in the focus area. One file,
+  a handful of lines. Do NOT attempt a large refactor or a new feature.
+- Run the focused tests for what you touched, e.g.
+  `python3 -m pytest tests/test_relay_loop.py tests/test_workflows_static.py -q`
+  and lint with `python3 -m ruff check scripts/ web/`.
+- As soon as your change passes, COMMIT it on a new branch and STOP. Do not keep
+  exploring or polishing.
 - Do NOT merge anything and do NOT push to `{branch}` directly.
 - You do NOT have push access and cannot open the pull request; the harness does
-  that for you. Do not keep retrying `git push`. Just leave one clean commit.
-- When you are done, report the branch name, the commit sha, and a one-line
-  summary of what changed and how you verified it.
+  that for you. Do not run `git push`. Just leave one clean commit.
+
+When you are done, report the branch name, the commit sha, and a one-line
+summary of what changed and how you verified it.
 """
 
 
