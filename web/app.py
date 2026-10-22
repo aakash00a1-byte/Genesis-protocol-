@@ -1139,24 +1139,38 @@ TELEGRAM_QUEUE_MAX = 200  # bound so the file cannot grow without limit
 TELEGRAM_COMMAND_QUEUE = '/tmp/telegram_command_queue.json'
 
 
-def _read_command_queue():
+def _read_queue(path):
     try:
-        with open(TELEGRAM_COMMAND_QUEUE) as f:
+        with open(path) as f:
             queue = json.load(f)
         return queue if isinstance(queue, list) else []
     except Exception:
         return []
 
 
-def _append_command(chat_id, text):
-    queue = _read_command_queue()
+def _append_queue(path, chat_id, text):
+    """Append one bounded entry, tagged with an id so the relay can dedup."""
+    queue = _read_queue(path)
     queue.append({
         'id': f'{chat_id}:{int(time.time() * 1000)}:{len(queue)}',
         'chat_id': chat_id,
         'text': str(text)[:4000],
     })
-    with open(TELEGRAM_COMMAND_QUEUE, 'w') as f:
+    with open(path, 'w') as f:
         json.dump(queue[-TELEGRAM_QUEUE_MAX:], f)
+
+
+def _clear_queue(path):
+    with open(path, 'w') as f:
+        json.dump([], f)
+
+
+def _read_command_queue():
+    return _read_queue(TELEGRAM_COMMAND_QUEUE)
+
+
+def _append_command(chat_id, text):
+    _append_queue(TELEGRAM_COMMAND_QUEUE, chat_id, text)
 
 
 def _handle_callback_query(callback):
@@ -1202,25 +1216,12 @@ def _telegram_secret_ok():
 
 
 def _read_reply_queue():
-    try:
-        with open(TELEGRAM_REPLY_QUEUE) as f:
-            queue = json.load(f)
-        return queue if isinstance(queue, list) else []
-    except Exception:
-        return []
+    return _read_queue(TELEGRAM_REPLY_QUEUE)
 
 
 def _append_reply(chat_id, text):
     """Append one validated reply, bounded, tagged with an id for dedup."""
-    queue = _read_reply_queue()
-    queue.append({
-        'id': f'{chat_id}:{int(time.time() * 1000)}:{len(queue)}',
-        'chat_id': chat_id,
-        'text': str(text)[:4000],
-    })
-    queue = queue[-TELEGRAM_QUEUE_MAX:]
-    with open(TELEGRAM_REPLY_QUEUE, 'w') as f:
-        json.dump(queue, f)
+    _append_queue(TELEGRAM_REPLY_QUEUE, chat_id, text)
 
 
 @app.route('/api/telegram/webhook', methods=['POST'])
@@ -1340,8 +1341,7 @@ def telegram_queue_clear():
     if not _telegram_secret_ok():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     try:
-        with open(TELEGRAM_REPLY_QUEUE, 'w') as f:
-            json.dump([], f)
+        _clear_queue(TELEGRAM_REPLY_QUEUE)
         return jsonify({'ok': True, 'cleared': True})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
@@ -1362,8 +1362,7 @@ def telegram_commands_clear():
     if not _telegram_secret_ok():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     try:
-        with open(TELEGRAM_COMMAND_QUEUE, 'w') as f:
-            json.dump([], f)
+        _clear_queue(TELEGRAM_COMMAND_QUEUE)
         return jsonify({'ok': True, 'cleared': True})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
