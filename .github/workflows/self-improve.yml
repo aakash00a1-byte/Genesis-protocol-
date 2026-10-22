@@ -5,14 +5,15 @@ name: Genesis Self-Improvement
 # A long-running loop (like the Telegram relay): each cycle starts ONE OpenHands
 # Cloud conversation that makes a single small, safe change on its own branch,
 # then this harness lands the result as a pull request and pings Telegram.
-# It does NOT merge. A human reviews the PR; merging it triggers the normal
-# auto-deploy workflow. Nothing reaches production without review.
+# Nothing reaches main until the owner approves: the owner replies /approve in
+# Telegram, the harness merges the PR (that merge is the push) and then asks the
+# deploy workflow to run. So the owner decides, and only then does it ship.
 #
-# Requires the repo secret OPENHANDS_API_KEY, and a token that can push. If the
-# repository allows "Read and write permissions" for Actions, the default
-# GITHUB_TOKEN works. Otherwise set an AGENT_GH_TOKEN secret (a fine-grained PAT
-# with Contents + Pull requests write); this workflow prefers it automatically.
-# A scheduled run lasts ~5h30m; cron fires every 4h so the loop is continuous.
+# Requires the repo secret OPENHANDS_API_KEY. No other token is needed: the
+# workflow grants its own GITHUB_TOKEN contents/pull-requests/actions write, so
+# push, PR and merge all work. Set AGENT_GH_TOKEN only if the repo is pinned to
+# read-only for Actions. A scheduled run lasts ~5h30m; cron fires every 4h so
+# the loop is continuous.
 
 on:
   schedule:
@@ -70,7 +71,7 @@ jobs:
             exit 1
           fi
           if [ -z "$AGENT_GH_TOKEN" ]; then
-            echo "::warning::AGENT_GH_TOKEN is not set; using the default GITHUB_TOKEN. Approval (/approve) needs a write token, so set AGENT_GH_TOKEN (Contents + Pull requests: write)."
+            echo "::notice::AGENT_GH_TOKEN not set; using the default GITHUB_TOKEN. That is fine: this workflow grants contents/pull-requests/actions write, which covers push, PR and the merge (/approve)."
           fi
 
       - name: Run the continuous self-improvement loop
