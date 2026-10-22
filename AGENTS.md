@@ -215,3 +215,24 @@ unset the job fails loudly instead of silently skipping.
   (and the rest of `requirements.txt`); without them collection errors are the
   norm. With them installed: ~408 pass, 1 pre-existing unrelated failure
   (`personality` module status).
+
+- **Self-improvement approval (`/approve`) runs on the Actions runner, not the
+  Space.** The webhook parks owner commands in the Space's command queue; the
+  `self-improve.yml` loop reads them, merges the PR (`GitHubPRTransport`), then
+  dispatches `deploy-space.yml`. Two runner-only traps, both fixed and covered
+  by tests:
+  1. The workflow runs `python3 scripts/self_improve.py`, which puts `scripts/`
+     (not the repo root) on `sys.path`. `self_improve.py` now inserts the repo
+     root so `import genesis_protocol.updates` works.
+  2. `genesis_protocol/__init__.py` exports `Config`/`Message`/`...` lazily
+     (PEP 562). An eager import pulled in `config` -> `python-dotenv`, which the
+     runner does not install, so every `/approve` died with
+     `ModuleNotFoundError: dotenv`. Keep leaf imports (`genesis_protocol.updates`)
+     stdlib-only; there is a regression test for this.
+  Verify the runner path with `python3 scripts/self_improve.py --check-approvals`
+  and `--approvals-only` (process pending commands, no OpenHands key needed).
+- **The Telegram webhook is registered from GitHub Actions.** HF free tier
+  blocks egress to `api.telegram.org`, so the Space's `setWebhook` times out.
+  `.github/workflows/register-webhook.yml` runs the idempotent
+  `scripts/register_telegram_webhook.py` on push to main / every 6h / on demand
+  and re-registers only on drift. Never call `deleteWebhook` from the Space.
