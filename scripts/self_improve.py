@@ -608,6 +608,11 @@ def main() -> int:
     )
     started = time.monotonic()
     index = int(time.time() // max(CYCLE_INTERVAL_SECONDS, 1))
+    # Handle any owner decision that arrived while we were away, before new work.
+    try:
+        process_approvals()
+    except Exception as exc:  # noqa: BLE001 - keep going on a transient error
+        _log(f"approval check failed: {type(exc).__name__}: {str(exc)[:200]}")
     while time.monotonic() - started < RUN_SECONDS:
         try:
             run_cycle(index)
