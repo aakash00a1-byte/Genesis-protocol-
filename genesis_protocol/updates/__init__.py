@@ -17,6 +17,31 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from .work_orders import (
+    WORK_HELP,
+    WorkOrder,
+    is_tasks_command,
+    parse_work_order,
+    render_work_orders,
+    resolve_order,
+)
+
+__all__ = [
+    "HELP_TEXT",
+    "Update",
+    "UpdateTransport",
+    "WORK_HELP",
+    "WorkOrder",
+    "handle_command",
+    "is_tasks_command",
+    "parse_command",
+    "parse_work_order",
+    "render_list",
+    "render_work_orders",
+    "resolve",
+    "resolve_order",
+]
+
 
 @dataclass
 class Update:
@@ -66,8 +91,11 @@ _COMMAND_RE = re.compile(
 )
 
 HELP_TEXT = (
-    "Genesis update commands:\n"
-    "/updates — list pending updates\n"
+    "Genesis commands:\n"
+    "/do <instruction> — order Genesis to do work (opens a PR for your approval)\n"
+    "/tasks — list your work orders\n"
+    "/cancel <id> — cancel a work order\n"
+    "/updates — list pending updates (agent proposals)\n"
     "/approve <id|number> — approve, push and deploy an update\n"
     "/reject <id|number> [reason] — reject an update\n"
     "/status <id> — show one update"

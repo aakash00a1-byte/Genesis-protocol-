@@ -13,10 +13,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from genesis_protocol.updates import (
     Update,
+    WorkOrder,
     handle_command,
+    is_tasks_command,
     parse_command,
+    parse_work_order,
     render_list,
+    render_work_orders,
     resolve,
+    resolve_order,
 )
 from genesis_protocol.updates.github_prs import GitHubPRTransport
 
@@ -277,3 +282,62 @@ def test_leaf_import_does_not_load_the_whole_app() -> None:
     )
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() == "False", out.stdout
+
+
+# ------------------------------------------------------------------
+# Work orders: the owner gives one order, Genesis does the work
+# ------------------------------------------------------------------
+def test_parse_work_order_do_and_cancel() -> None:
+    assert parse_work_order("/do fix the login bug") == ("do", "fix the login bug")
+    assert parse_work_order("/cancel 3") == ("cancel", "3")
+    # /do is not an approval command.
+    assert parse_command("/do fix it") is None
+
+
+def test_parse_work_order_ignores_other_commands() -> None:
+    assert parse_work_order("/approve 17") is None
+    assert parse_work_order("hello") is None
+    assert parse_work_order("") is None
+
+
+def test_is_tasks_command() -> None:
+    assert is_tasks_command("/tasks")
+    assert is_tasks_command("/TASKS")
+    assert not is_tasks_command("/task")  # not a real command
+    assert not is_tasks_command("tasks")
+
+
+def test_render_work_orders_states() -> None:
+    assert "/do" in render_work_orders([])
+    orders = [
+        WorkOrder(id="1", instruction="fix bug", state="queued"),
+        WorkOrder(id="2", instruction="add tests", state="done", pr="http://x/2"),
+    ]
+    text = render_work_orders(orders)
+    assert "#1" in text and "queued" in text
+    assert "http://x/2" in text
+
+
+def test_resolve_order_by_index_id_and_prefix() -> None:
+    orders = [WorkOrder(id="100", instruction="a"), WorkOrder(id="200", instruction="b")]
+    assert resolve_order(orders, "1").id == "100"
+    assert resolve_order(orders, "200").id == "200"
+    assert resolve_order(orders, "2").id == "200"
+    assert resolve_order(orders, "") is None
+
+
+def test_work_order_import_stays_stdlib_only() -> None:
+    """The runner imports work orders with nothing but the standard library."""
+    import subprocess
+
+    root = str(Path(__file__).resolve().parent.parent)
+    code = (
+        f"import sys; sys.path.insert(0, r'{root}');"
+        "from genesis_protocol.updates import parse_work_order, WorkOrder;"
+        "print(parse_work_order('/do x'))"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=30
+    )
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "('do', 'x')"

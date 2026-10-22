@@ -1138,6 +1138,10 @@ TELEGRAM_QUEUE_MAX = 200  # bound so the file cannot grow without limit
 # harness acts on commands, so a command must not be rendered as a reply.
 TELEGRAM_COMMAND_QUEUE = '/tmp/telegram_command_queue.json'
 
+# Owner work orders (/do <instruction>) are parked here. The self-improvement
+# harness drains it, runs the agent, and opens a PR — then asks for /approve.
+TELEGRAM_TASK_QUEUE = '/tmp/telegram_task_queue.json'
+
 
 def _read_queue(path):
     try:
@@ -1171,6 +1175,85 @@ def _read_command_queue():
 
 def _append_command(chat_id, text):
     _append_queue(TELEGRAM_COMMAND_QUEUE, chat_id, text)
+
+
+def _read_task_queue():
+    return _read_queue(TELEGRAM_TASK_QUEUE)
+
+
+def _append_task(order):
+    queue = _read_task_queue()
+    queue.append(order)
+    with open(TELEGRAM_TASK_QUEUE, 'w') as f:
+        json.dump(queue[-TELEGRAM_QUEUE_MAX:], f)
+
+
+def _update_task(order_id, **changes):
+    """Patch one work order in place; returns the updated order or None."""
+    queue = _read_task_queue()
+    updated = None
+    for order in queue:
+        if isinstance(order, dict) and str(order.get('id')) == str(order_id):
+            order.update({k: v for k, v in changes.items() if v is not None})
+            updated = order
+            break
+    if updated is not None:
+        with open(TELEGRAM_TASK_QUEUE, 'w') as f:
+            json.dump(queue[-TELEGRAM_QUEUE_MAX:], f)
+    return updated
+
+
+def _handle_work_order(chat_id, verb, arg):
+    """Park a /do order, or cancel one with /cancel.
+
+    The self-improvement harness owns the task queue: it runs the agent and
+    opens a PR, then reports back. Nothing here runs the agent or merges.
+    """
+    from genesis_protocol.updates import WorkOrder, render_work_orders, resolve_order
+
+    if verb == 'do':
+        if not arg:
+            _append_reply(chat_id, "Kya karwana hai? Bhejo: /do <instruction>")
+            return jsonify({'ok': True, 'queued': 'do-help'})
+        order_id = f"{int(time.time() * 1000) % 100000000}"
+        order = WorkOrder(
+            id=order_id,
+            instruction=arg[:2000],
+            state='queued',
+            created=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+        )
+        try:
+            _append_task(order.to_dict())
+        except Exception as e:
+            print(f"Task queue store error: {e}")
+            return jsonify({'ok': True})
+        _append_reply(
+            chat_id,
+            f"🛠️ Work order #{order_id} mil gaya. Genesis agent ispe kaam karega "
+            f"aur ek PR kholega — merge tumhari /approve ke baad hi hoga.\n\n"
+            f"Instruction: {arg[:300]}",
+        )
+        return jsonify({'ok': True, 'queued': 'work-order', 'id': order_id})
+
+    # verb == 'cancel'
+    orders = [WorkOrder(**{k: o.get(k, '') for k in ('id', 'instruction', 'state', 'pr', 'note', 'created')})
+              for o in _read_task_queue() if isinstance(o, dict)]
+    target = resolve_order(orders, arg)
+    if target is None:
+        _append_reply(chat_id, f"Work order '{arg}' nahi mila. /tasks se dekho.")
+        return jsonify({'ok': True})
+    _update_task(target.id, state='cancelled')
+    _append_reply(chat_id, f"🚫 Work order #{target.id} cancel kar diya.")
+    return jsonify({'ok': True, 'queued': 'cancel'})
+
+
+def _handle_tasks_list(chat_id):
+    from genesis_protocol.updates import WorkOrder, render_work_orders
+
+    orders = [WorkOrder(**{k: o.get(k, '') for k in ('id', 'instruction', 'state', 'pr', 'note', 'created')})
+              for o in _read_task_queue() if isinstance(o, dict)]
+    _append_reply(chat_id, render_work_orders(orders))
+    return jsonify({'ok': True, 'queued': 'tasks'})
 
 
 def _handle_callback_query(callback):
@@ -1259,6 +1342,19 @@ def telegram_webhook():
     text = text[:4000]
     user = msg.get('from', {})
     
+    # Owner work orders (/do, /cancel, /tasks) are handled here: the order is
+    # parked on the task queue for the harness, and the owner gets an immediate
+    # acknowledgement. These are not approval commands.
+    try:
+        from genesis_protocol.updates import is_tasks_command, parse_work_order
+        work = parse_work_order(text)
+        if work is not None:
+            return _handle_work_order(chat_id, work[0], work[1])
+        if is_tasks_command(text):
+            return _handle_tasks_list(chat_id)
+    except Exception as e:
+        print(f"Work-order routing error: {e}")
+
     # Owner update commands are parked for the self-improvement harness, which
     # is the only thing that may act on them. They get no immediate reply; the
     # harness replies after it merges or rejects.
@@ -1363,6 +1459,44 @@ def telegram_commands_clear():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     try:
         _clear_queue(TELEGRAM_COMMAND_QUEUE)
+        return jsonify({'ok': True, 'cleared': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/telegram/tasks', methods=['GET'])
+def telegram_tasks_get():
+    """Return parked work orders (called by the self-improvement harness)."""
+    if not _telegram_secret_ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    queue = _read_task_queue()
+    return jsonify({'tasks': queue, 'count': len(queue)})
+
+
+@app.route('/api/telegram/tasks', methods=['PATCH'])
+def telegram_tasks_patch():
+    """Patch one work order's state (running/done/failed) from the harness."""
+    if not _telegram_secret_ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    body = request.get_json(force=True, silent=True) or {}
+    order_id = body.get('id')
+    if order_id is None:
+        return jsonify({'ok': False, 'error': 'id required'}), 400
+    allowed = {'state', 'pr', 'note'}
+    changes = {k: v for k, v in body.items() if k in allowed}
+    updated = _update_task(order_id, **changes)
+    if updated is None:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    return jsonify({'ok': True, 'task': updated})
+
+
+@app.route('/api/telegram/tasks', methods=['DELETE'])
+def telegram_tasks_clear():
+    """Clear the task queue (called after the harness has drained it)."""
+    if not _telegram_secret_ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    try:
+        _clear_queue(TELEGRAM_TASK_QUEUE)
         return jsonify({'ok': True, 'cleared': True})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500

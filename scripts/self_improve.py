@@ -399,6 +399,170 @@ def _space_get(url: str, timeout: int = 20) -> bytes | None:
         return None
 
 
+def _space_send(method: str, url: str, payload: dict | None = None, timeout: int = 20) -> bytes | None:
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(  # noqa: S310 - fixed host
+        url, data=data, method=method, headers=_space_headers()
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            return resp.read()
+    except Exception as exc:  # noqa: BLE001
+        _log(f"space {method} {url} failed: {type(exc).__name__}: {str(exc)[:120]}")
+        return None
+
+
+WORK_TASK = """\
+You are working on the Genesis Protocol repository ({repo}), branch {branch}.
+
+The repository owner has given you a direct order. Carry it out:
+
+  {instruction}
+
+Rules:
+- Do exactly what the order asks — no more. Keep it to the smallest change that
+  fully satisfies it. Do NOT start a large refactor or add unrelated features.
+- Explore only what you need; do NOT read the whole repository.
+- Run the focused tests for what you touched, e.g.
+  `python3 -m pytest tests/ -q -k <area>` and `python3 -m ruff check scripts/ web/`.
+- As soon as the change passes, COMMIT it on a new branch and STOP.
+- Do NOT merge anything and do NOT push to `{branch}`.
+- You do NOT have push access and cannot open the pull request; the harness does
+  that. Do not run `git push`. Just leave one clean commit.
+
+When you are done, report the branch name, the commit sha, and a one-line
+summary of what changed and how you verified it.
+"""
+
+
+def _space_tasks() -> list[dict]:
+    raw = _space_get(f"{HF_SPACE_URL}/api/telegram/tasks")
+    if raw is None:
+        return []
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        return []
+    tasks = payload.get("tasks") if isinstance(payload, dict) else None
+    return [t for t in tasks if isinstance(t, dict)] if isinstance(tasks, list) else []
+
+
+def _space_patch_task(order_id: str, **changes) -> None:
+    _space_send(
+        "PATCH",
+        f"{HF_SPACE_URL}/api/telegram/tasks",
+        {"id": order_id, **changes},
+    )
+
+
+def process_work_orders() -> int:
+    """Run any queued owner order as an OpenHands conversation, then open a PR.
+
+    Returns the number of orders handled. The order's state is patched on the
+    Space so it is not run twice: queued -> running -> done/failed. The PR still
+    needs the owner's ``/approve`` before it merges — an order is not a bypass
+    of the human gate.
+    """
+    if not API_KEY:
+        return 0
+    orders = _space_tasks()
+    queued = [o for o in orders if str(o.get("state")) == "queued"]
+    if not queued:
+        return 0
+    handled = 0
+    for order in queued:
+        order_id = str(order.get("id", "")).strip()
+        instruction = str(order.get("instruction", "")).strip()
+        if not order_id or not instruction:
+            continue
+        _space_patch_task(order_id, state="running")
+        _log(f"work order #{order_id}: {instruction[:60]}")
+        try:
+            start = start_conversation_for_work(instruction)
+            if start is None:
+                _space_patch_task(order_id, state="failed", note="could not start agent")
+                _notify(f"⚠️ Work order #{order_id}: agent start nahi ho paya.")
+                handled += 1
+                continue
+            app_id = poll_until_ready(start)
+            if not app_id or not wait_until_finished(app_id):
+                _space_patch_task(order_id, state="failed", note="agent did not finish")
+                _notify(f"⚠️ Work order #{order_id}: agent finish nahi hua.")
+                handled += 1
+                continue
+            patch = get_patch(app_id)
+            if not patch:
+                _space_patch_task(order_id, state="failed", note="no change produced")
+                _notify(f"🛠️ Work order #{order_id}: koi change nahi bana.")
+                handled += 1
+                continue
+            pr_url = land_pr(patch, f"owner order: {instruction}", app_id)
+            if not pr_url:
+                _space_patch_task(order_id, state="failed", note="could not open PR")
+                _notify(f"⚠️ Work order #{order_id}: PR open nahi ho paya.")
+                handled += 1
+                continue
+            number = _pr_number(pr_url)
+            _space_patch_task(order_id, state="done", pr=pr_url)
+            _notify(
+                f"🛠️ Work order #{order_id} ready — PR #{number}\n{instruction[:120]}\n\n"
+                f"{pr_url}\n\n"
+                f"Approve + deploy: /approve {number}\n"
+                f"Reject: /reject {number}",
+                reply_markup=_approve_keyboard(number),
+            )
+            handled += 1
+        except Exception as exc:  # noqa: BLE001 - one bad order must not kill the loop
+            _log(f"work order #{order_id} failed: {type(exc).__name__}: {str(exc)[:200]}")
+            _space_patch_task(order_id, state="failed", note=type(exc).__name__)
+            handled += 1
+    return handled
+
+
+def start_conversation_for_work(instruction: str) -> dict | None:
+    """Start an OpenHands conversation that carries out the owner's order."""
+    payload: dict = {
+        "initial_message": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": WORK_TASK.format(repo=REPO, branch=BRANCH, instruction=instruction),
+                }
+            ]
+        },
+        "selected_repository": REPO,
+        "selected_branch": BRANCH,
+        "title": f"Genesis work order: {instruction[:40]}",
+    }
+    if MODEL:
+        payload["llm_model"] = MODEL
+    try:
+        return _api("POST", "/api/v1/app-conversations", payload)  # type: ignore[return-value]
+    except RuntimeError as exc:
+        _log(f"could not start work conversation: {exc}")
+        return None
+
+
+def _safe_process_work_orders() -> int:
+    try:
+        return process_work_orders()
+    except Exception as exc:  # noqa: BLE001 - a work-order hiccup must not stop the loop
+        _log(f"work order check failed: {type(exc).__name__}: {str(exc)[:200]}")
+        return 0
+
+
+def _requeue_stuck_orders() -> None:
+    """Return any order left in ``running`` to ``queued`` at loop start.
+
+    Only one harness runs at a time (the workflow concurrency group guarantees
+    it), so a ``running`` order at startup can only be a leftover from a run
+    that died mid-agent. Re-queue it instead of stranding it forever.
+    """
+    for order in _space_tasks():
+        if str(order.get("state")) == "running":
+            _space_patch_task(str(order.get("id")), state="queued", note="requeued after restart")
+
+
 def _dispatch_deploy() -> None:
     """Explicitly start the HF deploy workflow after a merge.
 
@@ -654,11 +818,17 @@ def main() -> int:
         # Land any pending owner decision; needs no OpenHands key.
         process_approvals()
         return 0
+    if "--tasks-only" in sys.argv:
+        # Run any parked owner order; needs the OpenHands key.
+        handled = _safe_process_work_orders()
+        _log(f"work orders handled: {handled}")
+        return 0
     if not API_KEY:
         _log("OPENHANDS_API_KEY is not set")
         return 1
     if "--once" in sys.argv:
-        run_cycle(int(time.time() // max(CYCLE_INTERVAL_SECONDS, 1)))
+        if _safe_process_work_orders() == 0:
+            run_cycle(int(time.time() // max(CYCLE_INTERVAL_SECONDS, 1)))
         process_approvals()
         return 0
     if not GITHUB_TOKEN:
@@ -673,17 +843,21 @@ def main() -> int:
     index = int(time.time() // max(CYCLE_INTERVAL_SECONDS, 1))
     # Handle any owner decision that arrived while we were away, before new work.
     _safe_process_approvals()
+    _requeue_stuck_orders()
     while time.monotonic() - started < RUN_SECONDS:
-        try:
-            run_cycle(index)
-        except Exception as exc:  # noqa: BLE001 - a bad cycle must not end the run
-            _log(f"cycle {index} failed: {type(exc).__name__}: {str(exc)[:200]}")
-        index += 1
+        # An explicit owner order takes priority over an autonomous cycle.
+        if _safe_process_work_orders() == 0:
+            try:
+                run_cycle(index)
+            except Exception as exc:  # noqa: BLE001 - a bad cycle must not end the run
+                _log(f"cycle {index} failed: {type(exc).__name__}: {str(exc)[:200]}")
+            index += 1
         # Between cycles, poll for an owner /approve every APPROVAL_TICK_SECONDS
         # so a decision lands in about a minute rather than in 45.
         cycle_due = time.monotonic() + CYCLE_INTERVAL_SECONDS
         while time.monotonic() < min(cycle_due, started + RUN_SECONDS):
             _safe_process_approvals()
+            _safe_process_work_orders()
             remaining = min(cycle_due, started + RUN_SECONDS) - time.monotonic()
             if remaining <= 0:
                 break
