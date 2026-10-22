@@ -581,9 +581,14 @@ def build_market_report() -> str | None:
     if len(movers) >= 2:
         movers.sort()
         worst, best = movers[0], movers[-1]
+        # Label by the sign of the move: on a day when everything falls, the
+        # "best" mover is still a loss, so it must not be called a gainer (and
+        # vice versa for the weakest mover on an all-green day).
+        best_head = "🏆 Top gainer" if best[0] >= 0 else "🟢 Best performer"
+        worst_head = "📉 Top loser" if worst[0] < 0 else "🔴 Weakest"
         report += (
-            f"\n\n🏆 Top gainer: {best[1]} (+{best[0]:.2f}%)"
-            f"\n📉 Top loser: {worst[1]} ({worst[0]:.2f}%)"
+            f"\n\n{best_head}: {best[1]} ({best[0]:+.2f}%)"
+            f"\n{worst_head}: {worst[1]} ({worst[0]:+.2f}%)"
         )
     return report + f"\n\n🕒 {stamp}"
 

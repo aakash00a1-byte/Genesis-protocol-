@@ -376,6 +376,38 @@ def test_build_market_report_none_when_no_quotes(monkeypatch, tmp_path) -> None:
     assert relay.build_market_report() is None
 
 
+def test_build_market_report_all_red_never_calls_a_loser_a_gainer(
+    monkeypatch, tmp_path
+) -> None:
+    # A day when every tracked market is down: the "best" mover is still a
+    # loss, so it must be labelled honestly and never print a double sign.
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    monkeypatch.setattr(relay, "MARKET_SYMBOLS", [("A", "A"), ("B", "B")])
+    quotes = {"A": (99.0, 100.0), "B": (95.0, 100.0)}
+    monkeypatch.setattr(relay, "_fetch_quote", lambda s: quotes.get(s))
+    report = relay.build_market_report()
+    assert report is not None
+    assert "+-" not in report
+    assert "Top gainer" not in report
+    assert "🟢 Best performer: A (-1.00%)" in report
+    assert "📉 Top loser: B (-5.00%)" in report
+
+
+def test_build_market_report_all_green_never_calls_a_winner_a_loser(
+    monkeypatch, tmp_path
+) -> None:
+    # Mirror case: on an all-green day the weakest mover is not a "loser".
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    monkeypatch.setattr(relay, "MARKET_SYMBOLS", [("A", "A"), ("B", "B")])
+    quotes = {"A": (101.0, 100.0), "B": (105.0, 100.0)}
+    monkeypatch.setattr(relay, "_fetch_quote", lambda s: quotes.get(s))
+    report = relay.build_market_report()
+    assert report is not None
+    assert "Top loser" not in report
+    assert "🏆 Top gainer: B (+5.00%)" in report
+    assert "🔴 Weakest: A (+1.00%)" in report
+
+
 def test_market_report_sends_to_news_chat(monkeypatch, tmp_path) -> None:
     relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok", TELEGRAM_ADMIN_ID="42")
     monkeypatch.setattr(relay, "build_market_report", lambda: "market-body")
