@@ -221,3 +221,25 @@ def test_transport_reject_closes_pr() -> None:
 def test_transport_approve_unknown_token() -> None:
     transport = GitHubPRTransport("o/r", "tok", http=lambda *a: [])
     assert "nahi mila" in transport.approve("99")
+
+
+def test_leaf_import_does_not_load_the_whole_app() -> None:
+    """Importing the update pipeline must stay stdlib-only.
+
+    The self-improvement harness runs with nothing but the standard library;
+    an eager ``genesis_protocol/__init__`` once pulled in python-dotenv through
+    ``config`` and broke every /approve with an ImportError.
+    """
+    import subprocess
+
+    root = str(Path(__file__).resolve().parent.parent)
+    code = (
+        f"import sys; sys.path.insert(0, r'{root}');"
+        "import genesis_protocol.updates;"
+        "print('dotenv' in sys.modules or 'genesis_protocol.config' in sys.modules)"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=30
+    )
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "False", out.stdout
