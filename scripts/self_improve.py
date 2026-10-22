@@ -297,35 +297,47 @@ def _slug(topic: str) -> str:
     return keep.strip("-")[:40].strip("-") or "improve"
 
 
-def evolution_topic() -> str | None:
-    """Highest-priority focus from the Genesis evolution backlog, if any.
+def evolution_topics() -> list[str]:
+    """Focuses from the Genesis evolution backlog, best first.
 
     The evolution agent (genesis_v5/genesis_evolve.py) writes a review-gated
-    backlog. When it exists, the newest record's top proposal is a better focus
-    than the static rotation. Absent or unreadable, this returns None and the
-    caller falls back to TOPICS — the backlog is an optimisation, never a
-    dependency.
+    backlog. When it exists, its proposals are a better focus than the static
+    rotation. Absent or unreadable, this returns an empty list and the caller
+    falls back to TOPICS — the backlog is an optimisation, never a dependency.
     """
     if not EVOLUTION_BACKLOG or not os.path.exists(EVOLUTION_BACKLOG):
-        return None
+        return []
     try:
         with open(EVOLUTION_BACKLOG, encoding="utf-8") as fh:
             records = [json.loads(line) for line in fh if line.strip()]
     except (OSError, json.JSONDecodeError):
-        return None
+        return []
+    titles: list[str] = []
     for record in reversed(records):
-        proposals = record.get("proposals") or []
-        if proposals:
-            best = max(proposals, key=lambda p: p.get("priority", 0.0))
-            title = str(best.get("title", "")).strip()
-            if title:
-                return title
-    return None
+        proposals = sorted(
+            record.get("proposals") or [], key=lambda p: p.get("priority", 0.0), reverse=True
+        )
+        for proposal in proposals:
+            title = str(proposal.get("title", "")).strip()
+            if title and title not in titles:
+                titles.append(title)
+    return titles
 
 
-def choose_topic(index: int) -> str:
-    """Prefer a real, evidence-backed focus; otherwise rotate the static list."""
-    return evolution_topic() or TOPICS[index % len(TOPICS)]
+def choose_topic(index: int, taken_slugs: set[str] | None = None) -> str:
+    """Prefer a real, evidence-backed focus; otherwise rotate the static list.
+
+    Skips focuses whose branch already has an open agent PR, so a re-run does
+    not collide with an existing pull request (GitHub rejects that with 422).
+    """
+    taken = taken_slugs or set()
+    candidates = evolution_topics() + [
+        TOPICS[(index + i) % len(TOPICS)] for i in range(len(TOPICS))
+    ]
+    for topic in candidates:
+        if topic and _slug(topic) not in taken:
+            return topic
+    return candidates[0] or TOPICS[index % len(TOPICS)]
 
 
 def _space_headers() -> dict[str, str]:
@@ -494,23 +506,40 @@ def land_pr(patch: str, topic: str, app_id: str) -> str | None:
         "`.github/workflows/deploy-space.yml`, which mirrors `main` to the live HF Space.\n\n"
         "---\n_This pull request was created by an AI agent (OpenHands) on behalf of the repository owner._"
     )
-    pr = _github(
-        "POST",
-        f"/repos/{REPO}/pulls",
-        {"title": f"chore(agent): {topic}", "head": branch, "base": BRANCH, "body": body},
-    )
+    pr = None
+    try:
+        pr = _github(
+            "POST",
+            f"/repos/{REPO}/pulls",
+            {"title": f"chore(agent): {topic}", "head": branch, "base": BRANCH, "body": body},
+        )
+    except RuntimeError as exc:
+        if "HTTP 422" not in str(exc):
+            raise
+        # A pull request for this branch already exists (same focus chosen
+        # twice). Reuse it instead of crashing the loop.
+        existing = _github("GET", f"/repos/{REPO}/pulls?head={REPO.split('/')[0]}:{branch}&state=open")
+        if isinstance(existing, list) and existing:
+            pr = existing[0]
+        else:
+            _log(f"could not open PR: {exc}")
+            return None
     if isinstance(pr, dict) and pr.get("html_url"):
         return pr["html_url"]
     return None
 
 
 def run_cycle(index: int) -> None:
-    topic = choose_topic(index)
     waiting = open_agent_prs()
     if len(waiting) >= MAX_OPEN_PRS:
         _log(f"{len(waiting)} agent PRs already await review; skipping this cycle")
         _notify(f"🧠 Genesis agent: {len(waiting)} PRs await review, pausing new work.")
         return
+    taken = {
+        str(p.get("head", {}).get("ref", "")).removeprefix("agent/self-improve-")
+        for p in waiting
+    }
+    topic = choose_topic(index, taken)
     _log(f"cycle {index}: {topic}")
     try:
         start = start_conversation(topic)
@@ -530,7 +559,12 @@ def run_cycle(index: int) -> None:
         _log("agent produced no patch")
         _notify(f"🧠 Genesis agent cycle '{topic[:50]}': no change produced.")
         return
-    pr_url = land_pr(patch, topic, app_id)
+    try:
+        pr_url = land_pr(patch, topic, app_id)
+    except Exception as exc:  # noqa: BLE001 - one bad cycle must not kill the loop
+        _log(f"land_pr failed: {type(exc).__name__}: {str(exc)[:200]}")
+        _notify(f"🧠 Genesis agent cycle '{topic[:50]}': could not land the patch.")
+        return
     if pr_url:
         _log(f"opened PR: {pr_url}")
         _notify(
@@ -575,13 +609,19 @@ def main() -> int:
     started = time.monotonic()
     index = int(time.time() // max(CYCLE_INTERVAL_SECONDS, 1))
     while time.monotonic() - started < RUN_SECONDS:
-        run_cycle(index)
+        try:
+            run_cycle(index)
+        except Exception as exc:  # noqa: BLE001 - a bad cycle must not end the run
+            _log(f"cycle {index} failed: {type(exc).__name__}: {str(exc)[:200]}")
         index += 1
         # Between cycles, poll for an owner /approve every APPROVAL_TICK_SECONDS
         # so a decision lands in about a minute rather than in 45.
         cycle_due = time.monotonic() + CYCLE_INTERVAL_SECONDS
         while time.monotonic() < min(cycle_due, started + RUN_SECONDS):
-            process_approvals()
+            try:
+                process_approvals()
+            except Exception as exc:  # noqa: BLE001 - keep polling on a transient error
+                _log(f"approval check failed: {type(exc).__name__}: {str(exc)[:200]}")
             remaining = min(cycle_due, started + RUN_SECONDS) - time.monotonic()
             if remaining <= 0:
                 break

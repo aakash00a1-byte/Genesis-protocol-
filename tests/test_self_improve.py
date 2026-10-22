@@ -132,6 +132,81 @@ def test_choose_topic_ignores_corrupt_backlog(monkeypatch, tmp_path) -> None:
     assert module.choose_topic(1) == module.TOPICS[1]
 
 
+def test_choose_topic_skips_focuses_with_an_open_pr(monkeypatch, tmp_path) -> None:
+    import json
+
+    module = _load()
+    backlog = tmp_path / "backlog.jsonl"
+    backlog.write_text(
+        json.dumps(
+            {
+                "proposals": [
+                    {"title": "top idea", "priority": 0.9},
+                    {"title": "second idea", "priority": 0.5},
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "EVOLUTION_BACKLOG", str(backlog))
+    taken = {module._slug("top idea")}
+    assert module.choose_topic(0, taken) == "second idea"
+
+
+def test_choose_topic_rotates_when_every_focus_is_taken(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setattr(module, "EVOLUTION_BACKLOG", "/nonexistent/backlog.jsonl")
+    taken = {module._slug(t) for t in module.TOPICS}
+    # Nothing left to pick, so it must still return a usable topic.
+    assert module.choose_topic(3, taken) in module.TOPICS
+
+
+def test_land_pr_reuses_existing_pr_on_422(monkeypatch, tmp_path) -> None:
+    module = _load()
+    calls = []
+
+    def fake_git(*args, **kwargs):
+        class R:
+            returncode = 0
+            stderr = ""
+
+        return R()
+
+    def fake_github(method, path, payload=None):
+        calls.append((method, path))
+        if method == "POST":
+            raise RuntimeError('POST /pulls -> HTTP 422: {"message":"Validation Failed"}')
+        return [{"html_url": "https://github.com/o/r/pull/7"}]
+
+    monkeypatch.setattr(module, "_git", fake_git)
+    monkeypatch.setattr(module, "_github", fake_github)
+    url = module.land_pr("diff --git a/x b/x\n", "some focus", "app123")
+    assert url == "https://github.com/o/r/pull/7"
+    assert any(m == "GET" and "pulls?head=" in p for m, p in calls)
+
+
+def test_land_pr_reraises_unexpected_http_error(monkeypatch) -> None:
+    module = _load()
+
+    def fake_git(*args, **kwargs):
+        class R:
+            returncode = 0
+            stderr = ""
+
+        return R()
+
+    def fake_github(method, path, payload=None):
+        raise RuntimeError("POST /pulls -> HTTP 500: boom")
+
+    monkeypatch.setattr(module, "_git", fake_git)
+    monkeypatch.setattr(module, "_github", fake_github)
+    import pytest
+
+    with pytest.raises(RuntimeError):
+        module.land_pr("diff --git a/x b/x\n", "some focus", "app123")
+
+
 def test_pr_number_extracts_trailing_id() -> None:
     module = _load()
     assert module._pr_number("https://github.com/o/r/pull/42") == "42"
