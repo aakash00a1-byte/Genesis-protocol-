@@ -133,6 +133,28 @@ def test_relay_log_redacts_token(monkeypatch, tmp_path, capsys) -> None:
     assert "SUPERSECRET" not in out
 
 
+def test_reason_reports_http_status_without_token(monkeypatch) -> None:
+    """A failed call logs *why* (status code) and never the bot token."""
+    import urllib.error
+
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="123456:SUPERSECRET")
+
+    http_error = urllib.error.HTTPError(
+        "https://api.telegram.org/bot123456:SUPERSECRET/sendMessage",
+        429,
+        "Too Many Requests",
+        {},
+        None,
+    )
+    reason = relay._reason(http_error)
+    assert "429" in reason
+    assert "HTTPError" in reason
+    assert "SUPERSECRET" not in reason
+
+    # A transport error without a status code keeps its type name.
+    assert relay._reason(TimeoutError("timed out")) == "TimeoutError"
+
+
 def test_heartbeat_reports_unreachable_honestly(monkeypatch, tmp_path, capsys) -> None:
     relay = _load(
         monkeypatch,

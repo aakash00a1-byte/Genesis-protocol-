@@ -203,6 +203,18 @@ def _redact(text: str) -> str:
     return re.sub(r"/bot[^/\s]+", "/bot***", text)
 
 
+def _reason(exc: BaseException) -> str:
+    """A redacted, actionable one-line reason for a failed HTTP call.
+
+    ``type(exc).__name__`` alone hides why a call failed; an HTTP error's
+    status code (429, 404, 500...) is what tells an operator whether to wait,
+    fix a URL, or redeploy.
+    """
+    code = getattr(exc, "code", None)
+    detail = f"{type(exc).__name__} (HTTP {code})" if code else type(exc).__name__
+    return _redact(detail)
+
+
 def _headers() -> dict[str, str]:
     headers = {"Accept": "application/json"}
     if HF_SHARED_SECRET:
@@ -216,7 +228,7 @@ def _get(url: str, timeout: int = 30) -> bytes | None:
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
             return resp.read()
     except Exception as exc:  # noqa: BLE001 - relay must never die on one call
-        _log(f"GET failed: {type(exc).__name__}")
+        _log(f"GET {_redact(url)} failed: {_reason(exc)}")
         return None
 
 
@@ -230,7 +242,7 @@ def _post(url: str, payload: dict, timeout: int = 60) -> bytes | None:
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
             return resp.read()
     except Exception as exc:  # noqa: BLE001 - relay must never die on one call
-        _log(f"POST failed: {type(exc).__name__}")
+        _log(f"POST {_redact(url)} failed: {_reason(exc)}")
         return None
 
 
@@ -296,7 +308,7 @@ def _telegram_send(chat_id: str, text: str) -> bool:
             ok = json.loads(resp.read()).get("ok", False)
         return bool(ok)
     except Exception as exc:  # noqa: BLE001
-        _log(f"telegram send failed: {_redact(type(exc).__name__)}")
+        _log(f"telegram send failed: {_reason(exc)}")
         return False
 
 
