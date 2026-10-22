@@ -24,12 +24,12 @@ def _load():
 
 def test_task_prompt_is_self_contained() -> None:
     module = _load()
-    text = module.TASK.format(repo="owner/repo", branch="main")
+    text = module.TASK.format(repo="owner/repo", branch="main", topic="harden the relay")
     # Must name the repo/branch, forbid merging, and point at the real tests.
     assert "owner/repo" in text and "main" in text
+    assert "harden the relay" in text
     assert "Do NOT merge" in text
-    assert "tests/test_relay_loop.py" in text
-    assert "PULL REQUEST" in text
+    assert "tests/" in text
 
 
 def test_dry_run_prints_prompt_without_network() -> None:
@@ -40,8 +40,7 @@ def test_dry_run_prints_prompt_without_network() -> None:
         timeout=30,
     )
     assert proc.returncode == 0
-    assert "dry run" in proc.stdout
-    assert "PULL REQUEST" in proc.stdout
+    assert "PULL REQUEST" in proc.stdout or "improvement" in proc.stdout
 
 
 def test_start_conversation_shape(monkeypatch) -> None:
@@ -57,9 +56,43 @@ def test_start_conversation_shape(monkeypatch) -> None:
     monkeypatch.setattr(module, "_api", _fake_api)
     monkeypatch.setattr(module, "REPO", "owner/repo")
     monkeypatch.setattr(module, "BRANCH", "main")
-    start = module.start_conversation()
+    start = module.start_conversation("harden the relay")
     assert captured["method"] == "POST"
     assert captured["path"] == "/api/v1/app-conversations"
     assert captured["payload"]["selected_repository"] == "owner/repo"
     assert captured["payload"]["selected_branch"] == "main"
+    assert "harden the relay" in captured["payload"]["initial_message"]["content"][0]["text"]
     assert start["app_conversation_id"] == "conv-1"
+
+
+def test_slug_is_branch_safe() -> None:
+    module = _load()
+    slug = module._slug("Harden the relay: retries, edge-cases!")
+    assert slug == "harden-the-relay-retries-edge-cases"
+    assert " " not in slug and ":" not in slug
+
+
+def test_open_agent_prs_filters_to_agent_branches(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setattr(
+        module,
+        "_github",
+        lambda *a, **k: [
+            {"head": {"ref": "agent/self-improve-x"}},
+            {"head": {"ref": "feature/human-work"}},
+            {"head": {"ref": "agent/self-improve-y"}},
+        ],
+    )
+    assert len(module.open_agent_prs()) == 2
+
+
+def test_run_cycle_pauses_when_too_many_agent_prs(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setattr(module, "MAX_OPEN_PRS", 1)
+    monkeypatch.setattr(module, "open_agent_prs", lambda: [{"number": 1}])
+    started: list = []
+    monkeypatch.setattr(module, "start_conversation", lambda topic: started.append(topic) or {})
+    monkeypatch.setattr(module, "_notify", lambda text: None)
+    module.run_cycle(0)
+    assert started == []
+

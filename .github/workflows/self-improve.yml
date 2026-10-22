@@ -1,47 +1,81 @@
 name: Genesis Self-Improvement
 
-# Gives the agent a real job: improve the Genesis repository itself.
+# Gives the agent a continuous job: keep improving the Genesis repository.
 #
-# This starts ONE OpenHands Cloud conversation that reviews the repo, makes a
-# single small safe change on its own branch, runs the tests, and opens a pull
-# request. It does NOT merge. A human reviews the PR; merging it then triggers
-# the normal auto-deploy workflow. Nothing reaches production without review.
+# A long-running loop (like the Telegram relay): each cycle starts ONE OpenHands
+# Cloud conversation that makes a single small, safe change on its own branch,
+# then this harness lands the result as a pull request and pings Telegram.
+# It does NOT merge. A human reviews the PR; merging it triggers the normal
+# auto-deploy workflow. Nothing reaches production without review.
 #
-# Requires the repo secret OPENHANDS_API_KEY. Without it the job fails loudly.
+# Requires the repo secrets OPENHANDS_API_KEY and GITHUB_TOKEN (contents:write).
+# A scheduled run lasts ~5h30m; cron fires every 4h so the loop is continuous.
 
 on:
   schedule:
-    # Once a week, Monday 04:00 UTC.
-    - cron: '0 4 * * 1'
+    # Every 4 hours, so the ~5h30m run overlaps and never leaves a gap.
+    - cron: '0 */4 * * *'
   workflow_dispatch:
+    inputs:
+      once:
+        description: 'Run exactly one improvement cycle and exit'
+        type: boolean
+        default: false
 
 concurrency:
   group: genesis-self-improve
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 jobs:
   self-improve:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 350
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check OPENHANDS_API_KEY is configured
+      - name: Configure git
+        run: |
+          git config user.name "openhands"
+          git config user.email "openhands@all-hands.dev"
+          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+
+      - name: Check required secrets
         env:
           OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -z "$OPENHANDS_API_KEY" ]; then
             echo "::error::OPENHANDS_API_KEY secret is not set; cannot start the agent."
             exit 1
           fi
+          if [ -z "$GITHUB_TOKEN" ]; then
+            echo "::error::GITHUB_TOKEN secret is not set; cannot open pull requests."
+            exit 1
+          fi
 
-      - name: Start a self-improvement conversation
+      - name: Run the continuous self-improvement loop
         env:
           OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SELF_IMPROVE_REPO: ${{ github.repository }}
           SELF_IMPROVE_BRANCH: main
-        run: python3 scripts/self_improve.py
+          SELF_IMPROVE_INTERVAL_SECONDS: "2700"
+          SELF_IMPROVE_RUN_SECONDS: "19800"
+          SELF_IMPROVE_MAX_OPEN_PRS: "5"
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ADMIN_ID: ${{ secrets.TELEGRAM_ADMIN_ID }}
+        run: |
+          if [ "${{ inputs.once }}" = "true" ]; then
+            python3 scripts/self_improve.py --once
+          else
+            python3 scripts/self_improve.py
+          fi
+
