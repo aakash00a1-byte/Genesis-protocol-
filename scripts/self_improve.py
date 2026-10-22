@@ -52,7 +52,9 @@ RUN_SECONDS = int(os.environ.get("SELF_IMPROVE_RUN_SECONDS", str(5 * 3600 + 30 *
 MAX_OPEN_PRS = int(os.environ.get("SELF_IMPROVE_MAX_OPEN_PRS", "5"))
 POLL_SECONDS = 15
 POLL_TIMEOUT_SECONDS = 900
-RUN_TIMEOUT_SECONDS = 1800
+# A conversation can take a while; the earlier one took ~50 minutes. Allow 45
+# minutes per cycle and make it tunable.
+RUN_TIMEOUT_SECONDS = int(os.environ.get("SELF_IMPROVE_CYCLE_TIMEOUT_SECONDS", "2700"))
 
 # Rotated by wall-clock so a fresh topic is picked each cycle without state.
 TOPICS: list[str] = [
