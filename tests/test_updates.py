@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from genesis_protocol.updates import (
     Update,
     handle_command,
-    newest,
     parse_command,
     render_list,
     resolve,
@@ -98,24 +97,25 @@ def test_handle_command_approve_and_reject() -> None:
     assert transport.rejected == ["8"]
 
 
-def test_newest_picks_highest_pr_number() -> None:
-    items = [Update(id="14", title="a"), Update(id="17", title="b"), Update(id="16", title="c")]
-    assert newest(items).id == "17"
-    assert newest([]) is None
-
-
-def test_bare_approve_targets_the_newest_update() -> None:
+def test_bare_approve_with_several_pending_asks_instead_of_guessing() -> None:
     """Tapping the command in a notification sends only ``/approve``.
 
-    That must land the newest proposal, not print a usage error and strand the
-    owner — the failure mode seen when #17 was tapped but never merged.
+    With more than one update pending that is ambiguous — merging "the newest"
+    could land the wrong one (this is exactly how #18 got merged when #17 was
+    tapped). It must list the options instead.
     """
     transport = FakeTransport([Update(id="14", title="older"), Update(id="17", title="newest")])
     reply = handle_command("/approve", transport)
-    assert "17" in reply
+    assert transport.approved == []
+    assert "kaunsa" in reply
+    assert "17" in reply and "14" in reply
+
+
+def test_bare_approve_with_one_pending_lands_it() -> None:
+    transport = FakeTransport([Update(id="17", title="only one")])
+    reply = handle_command("/approve", transport)
     assert transport.approved == ["17"]
-    # The older one is untouched.
-    assert [u.id for u in transport.list_open()] == ["14"]
+    assert "17" in reply
 
 
 def test_bare_approve_with_nothing_pending_is_honest() -> None:
@@ -123,11 +123,11 @@ def test_bare_approve_with_nothing_pending_is_honest() -> None:
     assert "Koi pending update nahi hai" in handle_command("/approve", transport)
 
 
-def test_bare_reject_targets_the_newest_update() -> None:
+def test_bare_reject_with_several_pending_asks_instead_of_guessing() -> None:
     transport = FakeTransport([Update(id="14", title="older"), Update(id="17", title="newest")])
     reply = handle_command("/reject", transport)
-    assert transport.rejected == ["17"]
-    assert "17" in reply
+    assert transport.rejected == []
+    assert "kaunsa" in reply
 
 
 

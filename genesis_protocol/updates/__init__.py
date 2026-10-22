@@ -112,21 +112,6 @@ def resolve(items: list[Update], token: str) -> Update | None:
     return matches[0] if len(matches) == 1 else None
 
 
-def newest(items: list[Update]) -> Update | None:
-    """The most recently opened update (highest PR number).
-
-    A bare ``/approve`` — e.g. a Telegram client that sends only ``/approve``
-    when the owner taps the command text in a notification — means "the newest
-    one". Picking by PR number (not list order) keeps that deterministic.
-    """
-    if not items:
-        return None
-    numeric = [item for item in items if str(item.id).isdigit()]
-    if numeric:
-        return max(numeric, key=lambda item: int(item.id))
-    return items[0]
-
-
 def handle_command(text: str, transport: UpdateTransport) -> str | None:
     """Handle an approval command and return the reply text, or None.
 
@@ -148,11 +133,19 @@ def handle_command(text: str, transport: UpdateTransport) -> str | None:
     if verb in {"approve", "reject"}:
         action = transport.approve if verb == "approve" else transport.reject
         if not arg:
-            # A bare /approve or /reject targets the newest pending update, so
-            # tapping the command in a notification still does the right thing.
-            target = newest(transport.list_open())
-            if target is None:
+            # A bare /approve or /reject — e.g. tapping the command text in a
+            # notification — is unambiguous only when exactly one update is
+            # pending. With several, merging "the newest" could land the wrong
+            # one, so ask instead of guessing.
+            items = transport.list_open()
+            if not items:
                 return "Koi pending update nahi hai."
+            if len(items) > 1:
+                return (
+                    f"{len(items)} updates pending — kaunsa? "
+                    f"Bhejo: /{verb} <number>\n\n{render_list(items)}"
+                )
+            target = items[0]
             try:
                 return f"Newest pending: #{target.id}\n{action(target.id, '')}"
             except Exception as exc:  # noqa: BLE001 - a failed action is reported, not hidden
