@@ -76,6 +76,7 @@ jobs:
 
       - name: Run the continuous self-improvement loop
         env:
+          PYTHONUNBUFFERED: "1"
           OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.AGENT_GH_TOKEN || secrets.GITHUB_TOKEN }}
           # Approval (merge) uses the same token as push. The default

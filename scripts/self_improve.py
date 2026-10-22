@@ -362,7 +362,8 @@ def _space_get(url: str, timeout: int = 20) -> bytes | None:
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
             return resp.read()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        _log(f"space GET {url} failed: {type(exc).__name__}: {str(exc)[:120]}")
         return None
 
 
@@ -420,10 +421,12 @@ def _incoming_commands() -> list[str]:
     """
     raw = _space_get(f"{HF_SPACE_URL}/api/telegram/commands")
     if raw is None:
+        _log("command queue unreachable; will retry next tick")
         return []
     try:
         payload = json.loads(raw)
     except ValueError:
+        _log("command queue returned non-JSON; ignoring")
         return []
     commands = payload.get("commands") if isinstance(payload, dict) else None
     if not isinstance(commands, list):
@@ -458,6 +461,7 @@ def process_approvals() -> None:
     texts = _incoming_commands()
     if not texts:
         return
+    _log(f"{len(texts)} owner command(s) pending")
     try:
         from genesis_protocol.updates import handle_command, parse_command
     except Exception:  # noqa: BLE001
