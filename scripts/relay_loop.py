@@ -301,7 +301,13 @@ def _telegram_send(chat_id: str, text: str) -> bool:
 
 
 def relay_once() -> int:
-    """Deliver every queued reply. Returns how many were sent."""
+    """Deliver queued replies. Returns how many were sent.
+
+    One tick sends at most ``MAX_QUEUE_ITEMS`` replies. The queue is cleared
+    only once every valid reply in the fetched payload has been delivered (or
+    was already delivered in an earlier tick); a longer queue is left for the
+    next tick so it drains instead of losing its tail.
+    """
     raw = _get(f"{HF_SPACE_URL}/api/telegram/queue")
     if raw is None:
         return 0
@@ -317,31 +323,41 @@ def relay_once() -> int:
 
     seen = _load_seen()
     sent = 0
-    for entry in replies[:MAX_QUEUE_ITEMS]:
+    pending = 0
+    for entry in replies:
         parsed = _valid_reply(entry)
         if parsed is None:
             continue
         reply_id, chat_id, text = parsed
         if reply_id in seen:
             continue
+        if sent >= MAX_QUEUE_ITEMS:
+            # Out of budget for this tick: leave the rest for the next tick.
+            pending += 1
+            continue
         if _telegram_send(chat_id, text):
             seen.add(reply_id)
             sent += 1
+        else:
+            pending += 1
 
     if sent:
         # Persist first, then clear: if the clear fails we still will not
         # re-send, because the ids are already recorded.
         _save_seen(seen)
-        req = urllib.request.Request(
-            f"{HF_SPACE_URL}/api/telegram/queue",
-            method="DELETE",
-            headers=_headers(),
-        )
-        try:
-            urllib.request.urlopen(req, timeout=20).read()  # noqa: S310
-        except Exception:  # noqa: BLE001
-            pass
+        if not pending:
+            req = urllib.request.Request(
+                f"{HF_SPACE_URL}/api/telegram/queue",
+                method="DELETE",
+                headers=_headers(),
+            )
+            try:
+                urllib.request.urlopen(req, timeout=20).read()  # noqa: S310
+            except Exception:  # noqa: BLE001
+                pass
     _log(f"relayed {sent}/{len(replies)} queued replies")
+    if pending:
+        _log(f"{pending} replies left queued for the next tick")
     return sent
 
 

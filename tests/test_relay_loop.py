@@ -448,3 +448,44 @@ def test_weather_report_sends_to_news_chat(monkeypatch, tmp_path) -> None:
     relay.weather_report()
     assert sent == [("42", "weather-body")]
 
+
+
+def test_relay_does_not_drop_replies_beyond_one_tick_budget(monkeypatch, tmp_path) -> None:
+    """A queue longer than one tick's send budget must drain, not be dropped.
+
+    The relay used to send only the first MAX_QUEUE_ITEMS replies and then clear
+    the whole queue, silently losing every reply past that budget.
+    """
+    relay = _load(
+        monkeypatch,
+        HF_SPACE_URL="https://space.invalid",
+        TELEGRAM_BOT_TOKEN="tok",
+        TELEGRAM_ADMIN_ID="1",
+        RELAY_STATE_FILE=str(tmp_path / "state.json"),
+    )
+    monkeypatch.setattr(relay, "MAX_QUEUE_ITEMS", 2)
+    queue = {
+        "replies": [
+            {"id": f"r{i}", "chat_id": "1", "text": f"m{i}"} for i in range(5)
+        ]
+    }
+    monkeypatch.setattr(relay, "_get", lambda url, timeout=30: json.dumps(queue).encode())
+    sent: list[str] = []
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: sent.append(text) or True
+    )
+    cleared = {"n": 0}
+    import urllib.request
+
+    def _urlopen(req, *a, **k):
+        if getattr(req, "method", "GET") == "DELETE":
+            cleared["n"] += 1
+        return _FakeResp(b"{}")
+
+    monkeypatch.setattr(urllib.request, "urlopen", _urlopen)
+
+    for _ in range(4):
+        relay.relay_once()
+
+    assert sent == ["m0", "m1", "m2", "m3", "m4"]  # nothing lost
+    assert cleared["n"] == 1  # cleared once, only after the queue was drained
