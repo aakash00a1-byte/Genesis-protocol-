@@ -36,6 +36,10 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  # Needed to dispatch deploy-space.yml explicitly after a merge: a push made
+  # with GITHUB_TOKEN does not trigger another workflow, so the loop asks for
+  # the deploy by name instead. Creating a workflow dispatch needs actions:write.
+  actions: write
 
 jobs:
   self-improve:
