@@ -100,31 +100,36 @@ genesis_protocol/
 
 ## API Endpoints (v1.3)
 
+Verified against the routes defined in `web/app.py`.
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/chat` | POST | Chat with AI |
-| `/api/modules` | GET | Module status |
-| `/api/state` | GET | Full autonomous state |
-| `/api/events` | GET | Event log |
 | `/api/health` | GET | Health check |
+| `/api/status` | GET | Status with metrics |
+| `/api/state` | GET | Full GLUTTONY state |
+| `/api/chat` | POST | Chat with AI |
+| `/api/diagnostics` | GET | Provider, memory, uptime and version diagnostics |
+| `/api/telegram/webhook` | POST | Telegram update webhook |
+| `/api/telegram/queue` | GET, DELETE | Read / clear parked Telegram replies |
 
-## /state Response
+See `web/app.py` for the full route list.
+
+## /api/state Response
 
 ```json
 {
-  "persona": "gluttony",
-  "mood": "playful",
-  "tasks_pending": 2,
-  "tasks_total": 15,
-  "memories": 47,
-  "uptime_seconds": 3600,
-  "health": {
-    "status": "ok",
-    "events_last_hour": 12,
-    "errors": 0
-  }
+  "entity": "gluttony",
+  "version": "1.3.0",
+  "layers": {},
+  "metrics": {},
+  "autonomy": {},
+  "survival": {}
 }
 ```
+
+Key names come from `GluttonyEntity.get_state()` in
+`genesis_protocol/gluttony/gluttony_core.py`; the contents of `layers`,
+`metrics`, `autonomy` and `survival` depend on which subsystems are loaded.
 
 ## Background Daemon Loops
 
