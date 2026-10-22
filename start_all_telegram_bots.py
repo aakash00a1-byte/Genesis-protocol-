@@ -304,13 +304,12 @@ def main():
     webhook_url = f"{space_url}/api/telegram/webhook"
     print(f"Webhook URL: {webhook_url}")
     
-    # Delete any existing webhook and set new one
+    # Register the webhook. On Hugging Face egress to Telegram is blocked, so
+    # this usually times out; GitHub Actions registers the webhook instead
+    # (scripts/register_telegram_webhook.py). Never delete the webhook here:
+    # that only risks wiping what Actions set up.
     import requests
     try:
-        # First delete webhook (clear polling mode if active)
-        requests.post(f"{api}/deleteWebhook", timeout=10)
-        time.sleep(1)
-        
         # Set new webhook
         resp = requests.post(f"{api}/setWebhook", json={
             "url": webhook_url,
