@@ -188,9 +188,11 @@ unset the job fails loudly instead of silently skipping.
   defined -> `NameError` on import -> any redeploy crash. Keep the optional
   flask-limiter setup (no-op fallback) intact.
 - **News digest runs in the relay, not the Space.** `scripts/relay_loop.py`
-  builds a tech/sports/markets digest from public RSS feeds (BBC Tech, The
-  Verge, BBC Sport, BBC Business, CNBC) and sends it to TELEGRAM_ADMIN_ID every
-  `NEWS_INTERVAL_SECONDS` (default 300s). Tune via `NEWS_ENABLED`,
+  builds a category digest (World, India, Tech, Sports, Markets, Crypto,
+  Obituaries) from public RSS feeds and sends it to TELEGRAM_ADMIN_ID every
+  `NEWS_INTERVAL_SECONDS`. The code default is 300s, but `keepalive.yml` sets
+  2700 (45 min), which is what runs in production; see the
+  "News, market and AI briefing" section above. Tune via `NEWS_ENABLED`,
   `NEWS_INTERVAL_SECONDS`, `NEWS_MAX_PER_CATEGORY`. By default each category
   is sent as its own message (`NEWS_SEPARATE_MESSAGES=1`); set it to `0` for one
   combined digest. `TELEGRAM_NEWS_CHAT_ID` posts to a channel instead of the DM. One-shot test:
