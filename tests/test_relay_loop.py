@@ -110,7 +110,7 @@ def test_relay_is_idempotent_across_ticks(monkeypatch, tmp_path) -> None:
 
 
 def test_relay_state_survives_corrupt_file_and_persists_before_clear(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, capsys
 ) -> None:
     """The sent ids must be on disk *before* the queue is cleared.
 
@@ -144,6 +144,8 @@ def test_relay_state_survives_corrupt_file_and_persists_before_clear(
 
     assert relay.relay_once() == 1
     assert json.loads(state_file.read_text(encoding="utf-8"))["sent_ids"] == ["x"]
+    # The failure is not fatal, but it must not be silent.
+    assert "queue clear failed: OSError" in capsys.readouterr().out
 
     # The queue still holds the reply, but the recorded id stops a re-send.
     assert relay.relay_once() == 0

@@ -352,8 +352,10 @@ def relay_once() -> int:
         )
         try:
             urllib.request.urlopen(req, timeout=20).read()  # noqa: S310
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001 - ids are persisted, so no re-send
+            # Not fatal (delivery is idempotent), but a queue that never clears
+            # is re-fetched every tick, so say why instead of hiding it.
+            _log(f"queue clear failed: {_reason(exc)}")
     _log(f"relayed {sent}/{len(replies)} queued replies")
     return sent
 
