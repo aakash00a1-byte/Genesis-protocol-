@@ -203,16 +203,19 @@ unset the job fails loudly instead of silently skipping.
   every Groq call 404s. Current production models: `openai/gpt-oss-120b`
   (default) and `openai/gpt-oss-20b` (fast). Check
   https://console.groq.com/docs/deprecations before pinning a model.
-- **Deploying:** GitHub push does NOT update the Space. Use
-  `HF_TOKEN=hf_... bash scripts/hf_deploy.sh` (the Space is a standalone git
-  repo; the script preserves README front-matter and maps Dockerfile.hf ->
-  Dockerfile).
-- **HF Space runs a frozen snapshot.** `GenesisNo/Genesis-Automaton` is
-  `sdk: docker` and is NOT auto-deployed from GitHub (no workflow uploads it);
-  its `lastModified` lags `main` by weeks. So the live Space can be running old
-  code regardless of what is merged. To run the current code live, start
-  `PORT=<port> python web/app.py` (routes: `/api/status`, `/api/health`,
-  `/api/telegram/webhook`, `/api/telegram/queue`).
+- **Deploying:** a push to `main` mirrors the repo into the Space via
+  `.github/workflows/deploy-space.yml` (`scripts/hf_deploy.sh`, `HF_TOKEN`
+  secret); see "Auto-deploy to the Space". If that run failed or `HF_TOKEN` is
+  unset, deploy by hand: `HF_TOKEN=hf_... bash scripts/hf_deploy.sh` (the Space
+  is a standalone git repo; the script preserves README front-matter and maps
+  Dockerfile.hf -> Dockerfile).
+- **The live Space can lag `main`.** `GenesisNo/Genesis-Automaton` is
+  `sdk: docker` and is deployed by `deploy-space.yml` on push to `main`. The
+  rebuild is not instant, and a failed or skipped run leaves the Space on older
+  code, so check the workflow run before assuming the live Space matches `main`.
+  To run the current code locally, start `PORT=<port> python web/app.py`
+  (routes: `/api/status`, `/api/health`, `/api/telegram/webhook`,
+  `/api/telegram/queue`).
 - **Legacy root `tests/` need** `python-dotenv`, `flask`, `httpx`, `structlog`
   (and the rest of `requirements.txt`); without them collection errors are the
   norm. With them installed: ~408 pass, 1 pre-existing unrelated failure
