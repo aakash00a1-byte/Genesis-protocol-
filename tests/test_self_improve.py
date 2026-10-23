@@ -276,3 +276,27 @@ def test_process_approvals_no_commands_is_noop(monkeypatch) -> None:
     module.process_approvals()
     assert called["clear"] is False
 
+
+def test_requeue_stuck_orders_requeues_only_running(monkeypatch) -> None:
+    """Regression: an order left ``running`` by a dead run must be requeued.
+
+    Otherwise the order is stranded forever: the loop only ever starts orders
+    in state ``queued``.
+    """
+    module = _load()
+    monkeypatch.setattr(
+        module,
+        "_space_tasks",
+        lambda: [
+            {"id": "1", "state": "running"},
+            {"id": "2", "state": "queued"},
+            {"id": "3", "state": "done"},
+        ],
+    )
+    patched: list[dict] = []
+    monkeypatch.setattr(module, "_space_patch_task", lambda order_id, **kw: patched.append({"id": order_id, **kw}))
+
+    module._requeue_stuck_orders()
+
+    assert patched == [{"id": "1", "state": "queued", "note": "requeued after restart"}]
+
