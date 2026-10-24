@@ -88,6 +88,11 @@ delivers them.
   from free RSS feeds, each category as its own message
   (`NEWS_SEPARATE_MESSAGES=1`). Toggle with `NEWS_ENABLED`,
   `NEWS_MAX_PER_CATEGORY`.
+- With `NEWS_TOP_STORY_ONLY=1` (what `keepalive.yml` sets) the cycle instead
+  sends exactly one message: the story the most distinct sources are carrying,
+  plus a short "Also today" list (`NEWS_TOP_STORY_ALSO`, default 3). Ranking is
+  cross-source corroboration -- measured from the feeds, no model call, nothing
+  invented. It takes precedence over `NEWS_SEPARATE_MESSAGES`.
 - A live market ticker (indices, commodities, FX, crypto) with price and
   percent change from the Yahoo Finance chart API. Toggle with
   `MARKET_ENABLED`.

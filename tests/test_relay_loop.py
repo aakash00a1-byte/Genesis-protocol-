@@ -545,3 +545,107 @@ def test_weather_report_sends_to_news_chat(monkeypatch, tmp_path) -> None:
     relay.weather_report()
     assert sent == [("42", "weather-body")]
 
+
+
+# --- top story (one important message per cycle) -------------------------
+
+
+def test_same_story_matches_shared_event(monkeypatch) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    a = relay._title_tokens("Tata wins the IPL final")
+    b = relay._title_tokens("IPL final: Tata wins")
+    assert relay._same_story(a, b)
+
+
+def test_same_story_rejects_unrelated_headlines(monkeypatch) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    a = relay._title_tokens("India signs new trade deal with Japan")
+    b = relay._title_tokens("Apple launches a foldable phone")
+    assert not relay._same_story(a, b)
+
+
+def test_pick_top_story_prefers_corroborated_story(monkeypatch) -> None:
+    """The story the most sources carry wins, not the first one seen."""
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    monkeypatch.setattr(
+        relay,
+        "NEWS_CATEGORIES",
+        {
+            "A": [("src1", "u1")],
+            "B": [("src2", "u2")],
+            "C": [("src3", "u3")],
+        },
+    )
+    feeds = {
+        "u1": ["Minor local story about a cat"],
+        "u2": ["Big quake hits the coast"],
+        "u3": ["Big quake hits the coast"],
+    }
+    monkeypatch.setattr(relay, "_fetch_feed_titles", lambda url: feeds[url])
+    top, also = relay.pick_top_story()
+    assert top is not None
+    _cat, title, _src, n_sources = top
+    assert "quake" in title.lower()
+    assert n_sources == 2  # carried by src2 and src3
+
+
+def test_pick_top_story_none_when_all_feeds_fail(monkeypatch) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    monkeypatch.setattr(relay, "_fetch_feed_titles", lambda url: [])
+    top, also = relay.pick_top_story()
+    assert top is None and also == []
+
+
+def test_top_story_digest_shape(monkeypatch) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    monkeypatch.setattr(
+        relay,
+        "NEWS_CATEGORIES",
+        {"A": [("src1", "u1")], "B": [("src2", "u2")]},
+    )
+    feeds = {
+        "u1": ["Big quake hits the coast"],
+        "u2": ["Big quake hits the coast", "Another story entirely"],
+    }
+    monkeypatch.setattr(relay, "_fetch_feed_titles", lambda url: feeds[url])
+    digest = relay.build_top_story_digest()
+    assert digest is not None
+    assert "top story" in digest
+    assert "Big quake hits the coast" in digest
+    assert "confirmed by 2 sources" in digest
+
+
+def test_news_digest_top_story_mode_sends_exactly_one(monkeypatch) -> None:
+    """NEWS_TOP_STORY_ONLY=1 must send one message, not one per category."""
+    relay = _load(
+        monkeypatch,
+        TELEGRAM_BOT_TOKEN="tok",
+        TELEGRAM_ADMIN_ID="42",
+        NEWS_TOP_STORY_ONLY="1",
+    )
+    monkeypatch.setattr(relay, "build_top_story_digest", lambda: "top-story-body")
+    sent: list[str] = []
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: sent.append(text) or True
+    )
+    relay.news_digest()
+    assert sent == ["top-story-body"]
+
+
+def test_top_story_mode_takes_precedence_over_separate(monkeypatch) -> None:
+    """Both flags set: one message, not seven."""
+    relay = _load(
+        monkeypatch,
+        TELEGRAM_BOT_TOKEN="tok",
+        TELEGRAM_ADMIN_ID="42",
+        NEWS_TOP_STORY_ONLY="1",
+        NEWS_SEPARATE_MESSAGES="1",
+    )
+    monkeypatch.setattr(relay, "build_top_story_digest", lambda: "only-one")
+    monkeypatch.setattr(relay, "build_news_sections", lambda: ["a", "b", "c"])
+    sent: list[str] = []
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: sent.append(text) or True
+    )
+    relay.news_digest()
+    assert sent == ["only-one"]
