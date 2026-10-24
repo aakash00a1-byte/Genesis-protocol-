@@ -81,3 +81,105 @@ def test_redact_hides_secrets(monkeypatch) -> None:
     module = _load()
     monkeypatch.setattr(module, "TELEGRAM_BOT_TOKEN", "123:ABC")
     assert "ABC" not in module._redact("token 123:ABC here")
+
+
+def test_workflows_header_is_truthful_for_non_success(monkeypatch) -> None:
+    """in_progress / action_required must never be reported as "all green"."""
+    module = _load()
+    monkeypatch.setattr(module, "GITHUB_TOKEN", "tok")
+
+    runs = {
+        "ci.yml": "action_required",
+        "deploy-space.yml": "success",
+        "self-improve.yml": "success",
+        "keepalive.yml": "in_progress",
+        "heartbeat.yml": "success",
+        "register-webhook.yml": "success",
+    }
+
+    def fake_github(path):
+        wf = path.split("/workflows/")[1].split("/")[0]
+        return {"workflow_runs": [{"conclusion": None if runs[wf] == "in_progress" else runs[wf],
+                                   "status": runs[wf]}]}
+
+    monkeypatch.setattr(module, "_github", fake_github)
+    ok, detail = module.check_workflows()
+    assert ok, "a non-failure must not page the owner"
+    assert "all green" not in detail
+    assert "not green" in detail
+    assert "ci.yml" in detail and "keepalive.yml" in detail
+
+
+def test_workflows_header_green_only_when_all_succeed(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setattr(module, "GITHUB_TOKEN", "tok")
+
+    def fake_github(path):
+        return {"workflow_runs": [{"conclusion": "success", "status": "completed"}]}
+
+    monkeypatch.setattr(module, "_github", fake_github)
+    ok, detail = module.check_workflows()
+    assert ok
+    assert "all green" in detail
+
+
+def test_workflows_failure_still_pages(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setattr(module, "GITHUB_TOKEN", "tok")
+
+    def fake_github(path):
+        wf = path.split("/workflows/")[1].split("/")[0]
+        conclusion = "failure" if wf == "deploy-space.yml" else "success"
+        return {"workflow_runs": [{"conclusion": conclusion, "status": "completed"}]}
+
+    monkeypatch.setattr(module, "_github", fake_github)
+    ok, detail = module.check_workflows()
+    assert not ok
+    assert "1 failing" in detail
+    assert "deploy-space.yml" in detail
+
+
+def test_space_cold_start_is_retried(monkeypatch) -> None:
+    """A first-attempt timeout must not be reported as unreachable."""
+    module = _load()
+    monkeypatch.setattr(module, "HF_SPACE_URL", "https://space.invalid")
+    monkeypatch.setattr(module.time, "sleep", lambda _s: None)
+
+    calls = {"n": 0}
+
+    class _Resp:
+        def read(self):
+            return b'{"status": "healthy"}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake_urlopen(req, timeout=0):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise TimeoutError("cold start")
+        return _Resp()
+
+    monkeypatch.setattr(module.urllib.request, "urlopen", fake_urlopen)
+    ok, detail = module.check_space(attempts=3, backoff_seconds=0)
+    assert ok, detail
+    assert "healthy" in detail
+    assert calls["n"] == 2
+
+
+def test_space_still_fails_when_really_down(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setattr(module, "HF_SPACE_URL", "https://space.invalid")
+    monkeypatch.setattr(module.time, "sleep", lambda _s: None)
+
+    def fake_urlopen(req, timeout=0):
+        raise TimeoutError("down")
+
+    monkeypatch.setattr(module.urllib.request, "urlopen", fake_urlopen)
+    ok, detail = module.check_space(attempts=2, backoff_seconds=0)
+    assert not ok
+    assert "unreachable" in detail
+    assert "2 attempts" in detail

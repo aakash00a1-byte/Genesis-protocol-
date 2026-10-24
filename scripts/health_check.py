@@ -92,18 +92,31 @@ def check_imports() -> tuple[bool, str]:
     return True, f"modules: {total}/{total} import OK"
 
 
-def check_space() -> tuple[bool, str]:
-    """Ping the live Space health endpoint."""
+def check_space(attempts: int = 3, backoff_seconds: float = 5.0) -> tuple[bool, str]:
+    """Ping the live Space health endpoint, tolerating a cold start.
+
+    HF free-tier Spaces sleep and restart, and the relay keeps them awake with
+    a long-running ping job, so the first request after a restart can time out
+    while the Space is still booting. A single attempt therefore produced a
+    false "unreachable" alarm. Retry a bounded number of times so a cold start
+    is absorbed but a genuinely dead Space still fails.
+    """
     url = f"{HF_SPACE_URL}/api/health"
-    try:
-        req = urllib.request.Request(url, headers=_space_headers())  # noqa: S310 - fixed host
-        with urllib.request.urlopen(req, timeout=25) as resp:  # noqa: S310
-            body = json.loads(resp.read() or b"{}")
-        status = body.get("status", "?") if isinstance(body, dict) else "?"
-        ok = status == "healthy"
-        return ok, f"space: {HF_SPACE_URL} -> {status}"
-    except Exception as exc:  # noqa: BLE001 - unreachable Space is the finding
-        return False, f"space: {HF_SPACE_URL} unreachable ({type(exc).__name__})"
+    last_error = "unknown"
+    for attempt in range(1, max(1, attempts) + 1):
+        try:
+            req = urllib.request.Request(url, headers=_space_headers())  # noqa: S310 - fixed host
+            with urllib.request.urlopen(req, timeout=25) as resp:  # noqa: S310
+                body = json.loads(resp.read() or b"{}")
+            status = body.get("status", "?") if isinstance(body, dict) else "?"
+            ok = status == "healthy"
+            suffix = f" (attempt {attempt}/{attempts})" if attempt > 1 else ""
+            return ok, f"space: {HF_SPACE_URL} -> {status}{suffix}"
+        except Exception as exc:  # noqa: BLE001 - unreachable Space is the finding
+            last_error = type(exc).__name__
+            if attempt < attempts:
+                time.sleep(backoff_seconds)
+    return False, f"space: {HF_SPACE_URL} unreachable ({last_error}, {attempts} attempts)"
 
 
 def _github(path: str) -> object | None:
@@ -123,23 +136,40 @@ def _github(path: str) -> object | None:
 
 
 def check_workflows() -> tuple[bool, str]:
-    """Report the latest run per workflow; red if the newest run failed."""
+    """Report the latest run per workflow; red if the newest run failed.
+
+    The header must reflect the conclusions it lists. Only "success" is green:
+    a run that is still ``in_progress`` (keepalive is a ~5h30m job by design)
+    or that sits at ``action_required`` is *not* green, and saying so would be
+    the exact false reassurance this check exists to prevent. Only a hard
+    ``failure`` pages the owner, so a long-running job does not look like an
+    incident.
+    """
     if not GITHUB_TOKEN:
         return True, "workflows: skipped (no GITHUB_TOKEN)"
     bad: list[str] = []
+    not_green: list[str] = []
     lines: list[str] = []
     for wf in WORKFLOWS:
         data = _github(f"/repos/{REPO}/actions/workflows/{wf}/runs?per_page=1")
         runs = data.get("workflow_runs") if isinstance(data, dict) else None
         if not runs:
             lines.append(f"  {wf}: no runs")
+            not_green.append(wf)
             continue
         run = runs[0]
         conclusion = run.get("conclusion") or run.get("status")
         lines.append(f"  {wf}: {conclusion}")
         if conclusion == "failure":
             bad.append(wf)
-    head = "workflows: " + ("all green" if not bad else f"{len(bad)} failing ({', '.join(bad)})")
+        if conclusion != "success":
+            not_green.append(wf)
+    if bad:
+        head = f"workflows: {len(bad)} failing ({', '.join(bad)})"
+    elif not_green:
+        head = f"workflows: {len(not_green)} not green ({', '.join(not_green)})"
+    else:
+        head = "workflows: all green"
     return not bad, head + "\n" + "\n".join(lines)
 
 

@@ -71,6 +71,11 @@ jobs:
           # Each category as its own message (1) or one combined digest (0).
           NEWS_SEPARATE_MESSAGES: "1"
           NEWS_SEND_GAP_SECONDS: "1.5"
+          # Send ONE message per cycle: the story the most sources are carrying,
+          # plus a short "also today" list. Takes precedence over
+          # NEWS_SEPARATE_MESSAGES.
+          NEWS_TOP_STORY_ONLY: "1"
+          NEWS_TOP_STORY_ALSO: "3"
           # Live market ticker (indices, commodities, crypto, FX).
           MARKET_ENABLED: "1"
           # Let the Space AI write its own Hinglish briefing from the news.

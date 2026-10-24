@@ -73,6 +73,13 @@ NEWS_SEPARATE_MESSAGES = os.environ.get(
 ).strip().lower() not in {"0", "false", "no", "off", ""}
 # Pause between category messages so they arrive as separate, ordered messages.
 NEWS_SEND_GAP_SECONDS = float(os.environ.get("NEWS_SEND_GAP_SECONDS", "1.5"))
+# Send ONE message per cycle: the single most important story plus a short
+# "also today" list. Takes precedence over NEWS_SEPARATE_MESSAGES.
+NEWS_TOP_STORY_ONLY = os.environ.get(
+    "NEWS_TOP_STORY_ONLY", "0"
+).strip().lower() not in {"0", "false", "no", "off", ""}
+# How many runner-up headlines to list under the top story.
+NEWS_TOP_STORY_ALSO = int(os.environ.get("NEWS_TOP_STORY_ALSO", "3"))
 # A live market ticker (indices, commodities, crypto, FX) sent as its own message.
 MARKET_ENABLED = os.environ.get("MARKET_ENABLED", "1").strip().lower() not in {
     "0",
@@ -448,6 +455,106 @@ def build_news_sections() -> list[str]:
             sections.append(label + "\n" + "\n".join(lines))
     return sections
 
+_STOPWORDS = {
+    "the", "a", "an", "and", "or", "of", "in", "on", "at", "to", "for", "with",
+    "as", "is", "are", "was", "were", "be", "by", "from", "that", "this", "it",
+    "its", "his", "her", "their", "after", "over", "into", "amid", "about",
+    "says", "said", "will", "has", "have", "had", "not", "but", "up", "out",
+    "new", "more", "than", "you", "your", "we", "our", "they", "he", "she",
+}
+
+
+def _title_tokens(title: str) -> set[str]:
+    """Significant lowercase words of a headline, for cross-source matching."""
+    words = re.findall(r"[a-z0-9]+", title.lower())
+    return {w for w in words if len(w) > 2 and w not in _STOPWORDS}
+
+
+def _same_story(a: set[str], b: set[str]) -> bool:
+    """True when two headlines share enough significant words to be one story.
+
+    Deliberately conservative: two of the smallest headlines on a shared event
+    ("X wins election") must match, while unrelated stories that merely share a
+    common noun must not.
+    """
+    if not a or not b:
+        return False
+    shared = a & b
+    if len(shared) < 2:
+        return False
+    return len(shared) / min(len(a), len(b)) >= 0.5
+
+
+def pick_top_story() -> tuple[tuple[str, str, str, int] | None, list[str]]:
+    """Rank headlines by cross-source corroboration and return the top story.
+
+    "Important" is measured, not guessed: a story carried by more independent
+    sources is the bigger story. No model is called and nothing is invented --
+    the score is the number of distinct sources reporting the same event, with
+    the first-seen category winning ties.
+
+    Returns ``(top, also)``. ``top`` is ``(category, title, source, n_sources)``
+    or None when every feed failed; ``also`` is a bounded list of runner-up
+    titles.
+    """
+    stories: list[tuple[str, str, str]] = []  # (category, title, source)
+    # Dedupe by (source, title), not title alone: the same event reported by two
+    # different sources must be counted twice, or corroboration never rises
+    # above one. The same feed listed under two categories still collapses.
+    seen: set[tuple[str, str]] = set()
+    for label, feeds in NEWS_CATEGORIES.items():
+        for source, url in feeds:
+            for title in _fetch_feed_titles(url):
+                key = (source, title.lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                stories.append((label, title, source))
+
+    if not stories:
+        return None, []
+
+    clusters: list[dict] = []
+    for category, title, source in stories:
+        tokens = _title_tokens(title)
+        for cluster in clusters:
+            if _same_story(tokens, cluster["tokens"]):
+                cluster["sources"].add(source)
+                break
+        else:
+            clusters.append(
+                {"category": category, "title": title, "tokens": tokens,
+                 "sources": {source}}
+            )
+
+    # More distinct sources first; first-seen order breaks ties, so the ranking
+    # is deterministic for the same feed contents.
+    clusters.sort(key=lambda c: -len(c["sources"]))
+    best = clusters[0]
+    top = (best["category"], best["title"], sorted(best["sources"])[0], len(best["sources"]))
+    also = [c["title"] for c in clusters[1:1 + max(0, NEWS_TOP_STORY_ALSO)]]
+    return top, also
+
+
+def build_top_story_digest() -> str | None:
+    """Build the single "most important story" message, or None if feeds failed."""
+    top, also = pick_top_story()
+    if top is None:
+        return None
+    category, title, source, n_sources = top
+
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    parts = [f"📰 {category} — top story", "", f"• {title}", f"   ({source})"]
+    if n_sources > 1:
+        parts.append(f"   confirmed by {n_sources} sources")
+    if also:
+        parts.append("")
+        parts.append("Also today:")
+        parts.extend(f"• {t}" for t in also)
+    parts.append("")
+    parts.append(f"🕒 {stamp}")
+    return _fit("\n".join(parts))
+
 
 def collect_headlines(limit: int = 30) -> list[str]:
     """Collect deduplicated headlines across all feeds for the AI briefing."""
@@ -501,11 +608,23 @@ def build_news_digest() -> str | None:
 def news_digest() -> None:
     """Send the news digest to the news chat (admin DM by default).
 
-    By default each category goes as its own message, sent one after another, so
-    the admin gets them one at a time instead of a single wall of text.
+    Three modes, in priority order:
+      * NEWS_TOP_STORY_ONLY=1 -- one message: the single story the most sources
+        are carrying, plus a short "also today" list.
+      * NEWS_SEPARATE_MESSAGES=1 -- each category as its own message.
+      * otherwise -- one combined digest of every category.
     """
     if not NEWS_CHAT_ID:
         _log("news skipped: no news chat id is set")
+        return
+
+    if NEWS_TOP_STORY_ONLY:
+        text = build_top_story_digest()
+        if text is None:
+            _log("news skipped: no feed returned headlines")
+            return
+        if _telegram_send(NEWS_CHAT_ID, text):
+            _log("news top story sent")
         return
 
     if NEWS_SEPARATE_MESSAGES:
