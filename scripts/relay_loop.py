@@ -41,6 +41,7 @@ import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 HF_SPACE_URL = os.environ.get(
@@ -498,6 +499,23 @@ def build_news_digest() -> str | None:
     return _fit("📰 Genesis news update\n" + "\n\n".join(sections) + f"\n\n🕒 {stamp}")
 
 
+def _send_report(label: str, build: Callable[[], str | None], reason: str, ok: str) -> None:
+    """Guard on the chat id, build the body, send it, and log the outcome.
+
+    Every recurring report (news, market, weather) has this shape; ``build``
+    returns None when there is nothing worth sending.
+    """
+    if not NEWS_CHAT_ID:
+        _log(f"{label} skipped: no news chat id is set")
+        return
+    text = build()
+    if text is None:
+        _log(f"{label} skipped: {reason}")
+        return
+    if _telegram_send(NEWS_CHAT_ID, text):
+        _log(ok)
+
+
 def news_digest() -> None:
     """Send the news digest to the news chat (admin DM by default).
 
@@ -610,15 +628,9 @@ def build_market_report() -> str | None:
 
 def market_report() -> None:
     """Send the live market ticker to the news chat."""
-    if not NEWS_CHAT_ID:
-        _log("market skipped: no news chat id is set")
-        return
-    text = build_market_report()
-    if text is None:
-        _log("market skipped: no quote returned a price")
-        return
-    if _telegram_send(NEWS_CHAT_ID, text):
-        _log("market report sent")
+    _send_report(
+        "market", build_market_report, "no quote returned a price", "market report sent"
+    )
 
 
 def _fetch_weather(lat: float, lon: float) -> dict | None:
@@ -678,15 +690,9 @@ def build_weather_report() -> str | None:
 
 def weather_report() -> None:
     """Send the weather to the news chat."""
-    if not NEWS_CHAT_ID:
-        _log("weather skipped: no news chat id is set")
-        return
-    text = build_weather_report()
-    if text is None:
-        _log("weather skipped: no city returned data")
-        return
-    if _telegram_send(NEWS_CHAT_ID, text):
-        _log("weather report sent")
+    _send_report(
+        "weather", build_weather_report, "no city returned data", "weather report sent"
+    )
 
 
 def agent_briefing() -> None:
@@ -724,7 +730,6 @@ def agent_briefing() -> None:
     text = f"🧠 Genesis AI briefing\n\n{briefing.strip()}\n\n🕒 {stamp}"
     if _telegram_send(NEWS_CHAT_ID, _fit(text)):
         _log("agent briefing sent")
-
 
 
 def main() -> int:
