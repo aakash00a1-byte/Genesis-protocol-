@@ -124,6 +124,17 @@ def get_db():
     return conn
 
 
+def json_body() -> Dict[str, Any]:
+    """Parse the request body as a JSON object.
+
+    A malformed, missing or non-object body (e.g. a JSON array or string)
+    yields an empty dict instead of raising, so callers can validate fields
+    and return a 400 rather than crashing with a 500.
+    """
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
 def init_db():
     """Initialize database tables."""
     conn = get_db()
@@ -243,7 +254,7 @@ def admin_required(f):
 @app.route('/api/auth/login', methods=['POST'])
 def api_auth_login():
     """Mobile API login endpoint."""
-    data = request.get_json() or {}
+    data = json_body()
     username = data.get('username')
     password = data.get('password')
     
@@ -292,7 +303,7 @@ def api_auth_login():
 @app.route('/api/auth/register', methods=['POST'])
 def api_auth_register():
     """Mobile API registration endpoint."""
-    data = request.get_json() or {}
+    data = json_body()
     username = data.get('username')
     email = data.get('email')
     password = data.get('password')
@@ -475,7 +486,7 @@ def api_chat_history_by_id(chat_id):
 def login():
     """User login."""
     if request.method == 'POST':
-        data = request.get_json() if request.is_json else request.form
+        data = json_body() if request.is_json else request.form
         username = data.get('username')
         password = data.get('password')
         
@@ -527,7 +538,7 @@ def login():
 def register():
     """User registration."""
     if request.method == 'POST':
-        data = request.get_json() if request.is_json else request.form
+        data = json_body() if request.is_json else request.form
         username = data.get('username')
         email = data.get('email')
         password = data.get('password')
