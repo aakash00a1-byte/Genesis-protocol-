@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import time
+from pathlib import Path
 
 import pytest
 
@@ -53,7 +54,7 @@ def test_allowed_via_kernel_role(gateway: ToolGateway) -> None:
     result = gateway.execute(
         ToolRequest(
             tool="file.read",
-            args={"path": "/workspace/project/README.md"},
+            args={"path": str(Path(__file__).resolve().parents[2] / "README.md")},
             role="kernel",
         )
     )
