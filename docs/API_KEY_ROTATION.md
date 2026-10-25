@@ -20,7 +20,7 @@
 | Variable | Default | Description |
 |----------|---------|-------------|
 | GROQ_API_KEY | - | Required: Groq API key |
-| GROQ_MODEL | llama-3.3-70b-versatile | Model name |
+| GROQ_MODEL | openai/gpt-oss-120b | Model name (see the Groq deprecation note in `AGENTS.md`) |
 | CHROMA_DB_PATH | ./data/chroma_db | Vector DB path |
 | REDIS_HOST | localhost | Redis host |
 | REDIS_PORT | 6379 | Redis port |
