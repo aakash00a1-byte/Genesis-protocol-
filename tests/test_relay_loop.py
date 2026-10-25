@@ -198,6 +198,27 @@ def test_reason_reports_http_status_without_token(monkeypatch) -> None:
     assert relay._reason(TimeoutError("timed out")) == "TimeoutError"
 
 
+def test_feed_and_quote_failures_log_the_reason(monkeypatch, tmp_path, capsys) -> None:
+    """A dead feed/quote names the failing host/symbol *and* why (status code)."""
+    import urllib.error
+
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="123456:SUPERSECRET")
+
+    def _boom(req, timeout=15):
+        raise urllib.error.HTTPError(
+            "https://api.telegram.org/bot123456:SUPERSECRET", 429, "Too Many", {}, None
+        )
+
+    monkeypatch.setattr(relay.urllib.request, "urlopen", _boom)
+    assert relay._fetch_feed_titles("https://feeds.example.com/rss") == []
+    assert relay._fetch_quote("^NSEI") is None
+
+    out = capsys.readouterr().out
+    assert "feed failed (feeds.example.com): HTTPError (HTTP 429)" in out
+    assert "quote failed (^NSEI): HTTPError (HTTP 429)" in out
+    assert "SUPERSECRET" not in out
+
+
 def test_heartbeat_reports_unreachable_honestly(monkeypatch, tmp_path, capsys) -> None:
     relay = _load(
         monkeypatch,
