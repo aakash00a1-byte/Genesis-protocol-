@@ -300,3 +300,80 @@ def test_requeue_stuck_orders_requeues_only_running(monkeypatch) -> None:
 
     assert patched == [{"id": "1", "state": "queued", "note": "requeued after restart"}]
 
+
+
+# ----------------------------------------------------------------------
+# The shipped V6 evolution backlog (genesis_v5/data/evolution/backlog.jsonl)
+# ----------------------------------------------------------------------
+# Exactly the keys EvolutionReport.to_dict() emits; the relay/loop contract.
+REPORT_KEYS = {
+    "cycle_id",
+    "verdict",
+    "ok",
+    "counts",
+    "proposals",
+    "signals",
+    "notes",
+    "requires_review",
+    "bypass_available",
+    "ts_ms",
+}
+PROPOSAL_KEYS = {
+    "title",
+    "area",
+    "kind",
+    "rationale",
+    "evidence",
+    "priority",
+    "severity",
+    "status",
+    "requires_review",
+    "requires_authority",
+}
+
+
+def _backlog_records() -> list[dict]:
+    import json
+
+    path = ROOT / "genesis_v5" / "data" / "evolution" / "backlog.jsonl"
+    assert path.exists(), f"the V6 evolution backlog is missing: {path}"
+    lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    return [json.loads(ln) for ln in lines]
+
+
+def test_shipped_backlog_matches_evolution_report_schema() -> None:
+    """Every line must be a report the evolution agent itself could have written."""
+    records = _backlog_records()
+    assert records, "the backlog must carry at least one cycle"
+    for record in records:
+        assert set(record) == REPORT_KEYS, set(record) ^ REPORT_KEYS
+        assert isinstance(record["counts"], dict)
+        assert isinstance(record["signals"], list)
+        assert record["requires_review"] is True
+        assert record["bypass_available"] is False
+        assert record["ok"] is (record["verdict"] == "all_clear")
+
+
+def test_shipped_backlog_holds_the_v6_open_work() -> None:
+    """5-8 real, review-gated proposals; nothing may auto-apply."""
+    records = _backlog_records()
+    proposals = [p for r in records for p in r["proposals"]]
+    assert 5 <= len(proposals) <= 8, len(proposals)
+    for proposal in proposals:
+        assert PROPOSAL_KEYS <= set(proposal), PROPOSAL_KEYS - set(proposal)
+        assert proposal["title"].strip()
+        assert proposal["kind"] in {"fix", "investigate", "improve"}
+        assert 0.0 <= proposal["priority"] <= 1.0
+        assert proposal["severity"] in {"low", "medium", "high", "critical"}
+        assert proposal["status"] == "proposed"
+        assert proposal["requires_review"] is True
+        assert proposal["requires_authority"] is True
+        assert isinstance(proposal["evidence"], list)
+
+
+def test_shipped_backlog_steers_evolution_topics() -> None:
+    """The loop's default path must actually resolve to these proposals."""
+    module = _load()
+    titles = module.evolution_topics()
+    assert titles, "evolution_topics() must read the shipped backlog"
+    assert module.choose_topic(0) == titles[0]
