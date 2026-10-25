@@ -687,11 +687,42 @@ def _git(*args: str) -> subprocess.CompletedProcess:
     )
 
 
+def _can_merge(pr: dict) -> bool:
+    """False only when GitHub says the PR cannot merge (e.g. conflicts)."""
+    if pr.get("mergeable") is False:
+        return False
+    return str(pr.get("mergeable_state", "")).lower() != "dirty"
+
+
 def open_agent_prs() -> list[dict]:
+    """Open ``agent/`` PRs that can still merge, i.e. that still occupy a slot.
+
+    A PR with conflicts (``mergeable=false`` / ``mergeable_state=dirty``) can
+    never be merged as-is, so counting it would let one stuck PR block every
+    future cycle. The list endpoint omits mergeability, so it is read per PR
+    only when missing; if that read fails the PR is kept in the count.
+    """
     prs = _github("GET", f"/repos/{REPO}/pulls?state=open&per_page=100")
     if not isinstance(prs, list):
         return []
-    return [p for p in prs if str(p.get("head", {}).get("ref", "")).startswith("agent/")]
+    agent_prs = [
+        p for p in prs if str(p.get("head", {}).get("ref", "")).startswith("agent/")
+    ]
+    for pr in agent_prs:
+        if "mergeable" in pr and "mergeable_state" in pr:
+            continue
+        number = pr.get("number")
+        if not number:
+            continue
+        try:
+            detail = _github("GET", f"/repos/{REPO}/pulls/{number}")
+        except RuntimeError as exc:
+            _log(f"could not read mergeability of PR #{number}: {exc}")
+            continue
+        if isinstance(detail, dict):
+            pr["mergeable"] = detail.get("mergeable")
+            pr["mergeable_state"] = detail.get("mergeable_state")
+    return [p for p in agent_prs if _can_merge(p)]
 
 
 def land_pr(patch: str, topic: str, app_id: str) -> str | None:

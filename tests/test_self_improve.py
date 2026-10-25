@@ -114,6 +114,62 @@ def test_run_cycle_pauses_when_too_many_agent_prs(monkeypatch) -> None:
     assert started == []
 
 
+def _github_with_mergeability(prs: list[dict], detail: dict[int, dict]):
+    def _fake(method, path, payload=None):
+        if "?" in path:
+            return prs
+        return detail[int(path.rsplit("/", 1)[-1])]
+
+    return _fake
+
+
+def test_open_agent_prs_excludes_prs_that_cannot_merge(monkeypatch) -> None:
+    """Regression: a conflicted PR must not hold a review slot forever.
+
+    PR #15 sat at mergeable=false / mergeable_state=dirty and the loop logged
+    "5 agent PRs already await review; skipping this cycle" for two days.
+    """
+    module = _load()
+    prs = [
+        {"number": 15, "head": {"ref": "agent/self-improve-conflicted"}},
+        {"number": 16, "head": {"ref": "agent/self-improve-clean"}},
+        {"number": 17, "head": {"ref": "agent/self-improve-stale"}},
+        {"number": 18, "head": {"ref": "feature/human-work"}},
+    ]
+    detail = {
+        15: {"mergeable": False, "mergeable_state": "dirty"},
+        16: {"mergeable": True, "mergeable_state": "unstable"},
+        17: {"mergeable": True, "mergeable_state": "dirty"},
+    }
+    monkeypatch.setattr(module, "_github", _github_with_mergeability(prs, detail))
+    assert [p["number"] for p in module.open_agent_prs()] == [16]
+
+
+def test_open_agent_prs_keeps_prs_with_unknown_mergeability(monkeypatch) -> None:
+    module = _load()
+    prs = [{"number": 5, "head": {"ref": "agent/self-improve-x"}}]
+    monkeypatch.setattr(module, "_github", _github_with_mergeability(prs, {5: {}}))
+    assert len(module.open_agent_prs()) == 1
+
+
+def test_run_cycle_not_blocked_by_unmergeable_agent_pr(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setattr(module, "MAX_OPEN_PRS", 1)
+    prs = [{"number": 15, "head": {"ref": "agent/self-improve-conflicted"}}]
+    detail = {15: {"mergeable": False, "mergeable_state": "dirty"}}
+    monkeypatch.setattr(module, "_github", _github_with_mergeability(prs, detail))
+    started: list = []
+
+    def _start(topic: str) -> dict:
+        started.append(topic)
+        raise RuntimeError("stop after the slot check")
+
+    monkeypatch.setattr(module, "start_conversation", _start)
+    monkeypatch.setattr(module, "_notify", lambda text: None)
+    module.run_cycle(0)
+    assert started, "a conflicted PR must not pause the loop"
+
+
 def test_choose_topic_falls_back_to_rotation_without_backlog(monkeypatch) -> None:
     module = _load()
     monkeypatch.setattr(module, "EVOLUTION_BACKLOG", "/nonexistent/backlog.jsonl")
