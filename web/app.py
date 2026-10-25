@@ -1155,12 +1155,27 @@ TELEGRAM_TASK_QUEUE = '/tmp/telegram_task_queue.json'
 
 
 def _read_queue(path):
+    """Load a queue file, treating a missing file as an empty queue.
+
+    A corrupt or unreadable file is not silently treated as empty: that would
+    look like "no messages" and hide a dropped reply, so it is logged with the
+    file name and reason. Callers still get [] so one bad file cannot take the
+    webhook down.
+    """
     try:
         with open(path) as f:
             queue = json.load(f)
-        return queue if isinstance(queue, list) else []
-    except Exception:
+    except FileNotFoundError:
         return []
+    except Exception as e:
+        logger.warning("queue read failed (%s): %s: %s", path, type(e).__name__, e)
+        return []
+    if not isinstance(queue, list):
+        logger.warning(
+            "queue read failed (%s): expected a list, got %s", path, type(queue).__name__
+        )
+        return []
+    return queue
 
 
 def _append_queue(path, chat_id, text):
