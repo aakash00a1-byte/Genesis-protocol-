@@ -385,3 +385,41 @@ def test_tool_categories_registered() -> None:
     assert "search" in categories
     assert "docker" in categories
     assert "apis" in categories
+
+# ------------------------------------------------------------------
+# forbidden tools: a hard gate rule, not only the autonomy pre-check
+# ------------------------------------------------------------------
+def test_forbidden_tool_denied_even_when_auto_granted() -> None:
+    audit = AuditLogger()
+    gateway = ToolGateway(
+        build_default_registry(),
+        policy_engine=PolicyEngine(RoleCatalog),
+        audit=audit,
+        auto_grant_actor="agent",
+        auto_grant_permissions=["docker.exec"],
+        auto_grant_max_risk=RiskLevel.CRITICAL,
+    )
+    gateway.forbid_tools(["docker.exec"])
+    result = gateway.execute(
+        ToolRequest(tool="docker.exec", args={}, actor="agent", role="admin"),
+        max_risk=RiskLevel.CRITICAL,
+    )
+    assert result.status == ToolStatus.DENIED
+    assert result.audit_event.details["reason"] == "forbidden_tool"
+    assert audit.count("tool_denied") == 1
+
+
+def test_forbid_tools_ignores_blanks_and_spares_other_tools() -> None:
+    gateway = ToolGateway(
+        build_default_registry(), policy_engine=PolicyEngine(RoleCatalog)
+    )
+    gateway.forbid_tools(["", "  ", "docker.exec", "docker.exec"])
+    assert gateway.execute(
+        ToolRequest(tool="file.list", args={"path": "/workspace"}, role="coder")
+    ).ok
+    denied = gateway.execute(
+        ToolRequest(tool="docker.exec", args={}, role="admin"),
+        max_risk=RiskLevel.CRITICAL,
+    )
+    assert denied.status == ToolStatus.DENIED
+    assert denied.audit_event.details["reason"] == "forbidden_tool"
