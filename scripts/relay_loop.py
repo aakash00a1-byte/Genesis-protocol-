@@ -330,13 +330,21 @@ def relay_once() -> int:
 
     seen = _load_seen()
     sent = 0
-    for entry in replies[:MAX_QUEUE_ITEMS]:
+    attempted = 0
+    for entry in replies:
         parsed = _valid_reply(entry)
         if parsed is None:
             continue
         reply_id, chat_id, text = parsed
         if reply_id in seen:
             continue
+        # Apply the batch cap to *new* replies only. The queue is oldest-first,
+        # so capping the raw list would let a burst of already-delivered
+        # entries at the head consume the whole batch and starve everything
+        # behind them (nothing new would ever be sent until the queue clears).
+        if attempted >= MAX_QUEUE_ITEMS:
+            break
+        attempted += 1
         if _telegram_send(chat_id, text):
             seen.add(reply_id)
             sent += 1
