@@ -356,3 +356,48 @@ def test_requeue_stuck_orders_requeues_only_running(monkeypatch) -> None:
 
     assert patched == [{"id": "1", "state": "queued", "note": "requeued after restart"}]
 
+
+
+def test_open_agent_prs_fails_safe_on_unexpected_body(monkeypatch) -> None:
+    """A non-list /pulls body must not read as 'no open PRs'.
+
+    Failing open here would let the loop open a PR past the review cap; the
+    count must fail closed instead.
+    """
+    import pytest
+
+    module = _load()
+    monkeypatch.setattr(module, "_github", lambda *a, **k: {"message": "Bad credentials"})
+    with pytest.raises(RuntimeError):
+        module.open_agent_prs()
+
+
+def test_run_cycle_skips_when_pr_count_is_unavailable(monkeypatch) -> None:
+    """An unreadable count skips the cycle instead of starting new work."""
+    module = _load()
+
+    def _boom():
+        raise RuntimeError("GET /pulls -> HTTP 403")
+
+    monkeypatch.setattr(module, "open_agent_prs", _boom)
+    started: list = []
+    monkeypatch.setattr(module, "start_conversation", lambda topic: started.append(topic) or {})
+    module.run_cycle(0)
+    assert started == []
+
+
+def test_github_transport_error_is_a_runtime_error(monkeypatch) -> None:
+    """A DNS/timeout failure must not surface as a bare None."""
+    import urllib.error
+    import urllib.request
+
+    import pytest
+
+    module = _load()
+
+    def _fail(*a, **k):
+        raise urllib.error.URLError("name resolution failed")
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fail)
+    with pytest.raises(RuntimeError):
+        module._github("GET", "/repos/x/y/pulls")

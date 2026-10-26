@@ -1382,12 +1382,15 @@ def _handle_callback_query(callback):
     allowed = {'approve', 'reject', 'list', 'updates', 'pending', 'status', 'help'}
     if verb not in allowed:
         return jsonify({'ok': True})
-    command = f'/{verb}' + (f' {arg}' if arg else '')
     message = callback.get('message') or {}
     chat = message.get('chat') or {}
     chat_id = chat.get('id') if isinstance(chat, dict) else None
     if not isinstance(chat_id, (int, str)) or not str(chat_id).strip():
         return jsonify({'ok': True})
+    # A button tap is a privileged approval: only a configured owner may use it.
+    if not _is_owner_sender(callback):
+        return jsonify({'ok': True, 'denied': 'not-owner'})
+    command = f'/{verb}' + (f' {arg}' if arg else '')
     try:
         _append_command(chat_id, command)
     except Exception as e:
@@ -1409,6 +1412,40 @@ def _telegram_secret_ok():
     supplied = request.headers.get('X-Telegram-Bot-Api-Secret-Token', '')
     import hmac
     return hmac.compare_digest(str(supplied), str(expected))
+
+
+def _telegram_admin_ids():
+    """Owner Telegram ids from TELEGRAM_ADMIN_IDS (comma or semicolon separated)."""
+    raw = os.environ.get('TELEGRAM_ADMIN_IDS', '')
+    ids = set()
+    for part in str(raw).replace(';', ',').split(','):
+        part = part.strip()
+        if part:
+            ids.add(part)
+    return ids
+
+
+def _is_owner_sender(msg):
+    """True only when the message sender is a configured owner id.
+
+    Fails closed: an unset TELEGRAM_ADMIN_IDS authorises nobody, so a privileged
+    command is never accepted just because the webhook secret is also unset.
+    """
+    admins = _telegram_admin_ids()
+    if not admins:
+        return False
+    sender = msg.get('from') if isinstance(msg, dict) else None
+    sender_id = sender.get('id') if isinstance(sender, dict) else None
+    if sender_id is None:
+        return False
+    return str(sender_id).strip() in admins
+
+
+# Commands the self-improvement harness must act on, so they are parked on the
+# command queue rather than answered here. Bare /status and /help are NOT in
+# this set: they are answered by this app, and only "/status <id>" (an update
+# lookup) is parked, so a user never loses the bot-status reply.
+_OWNER_QUEUE_COMMANDS = frozenset({'approve', 'reject', 'list', 'updates', 'pending'})
 
 
 def _read_reply_queue():
@@ -1453,35 +1490,49 @@ def telegram_webhook():
     if not isinstance(text, str):
         return jsonify({'ok': True})
     text = text[:4000]
-    user = msg.get('from', {})
-    
+    is_owner = _is_owner_sender(msg)
+
     # Owner work orders (/do, /cancel, /tasks) are handled here: the order is
     # parked on the task queue for the harness, and the owner gets an immediate
-    # acknowledgement. These are not approval commands.
+    # acknowledgement. These are not approval commands. They are privileged, so
+    # only a configured owner id may reach them.
     try:
         from genesis_protocol.updates import is_tasks_command, parse_work_order
         work = parse_work_order(text)
         if work is not None:
+            if not is_owner:
+                _append_reply(chat_id, "🚫 Ye command sirf owner ke liye hai.")
+                return jsonify({'ok': True, 'denied': 'not-owner'})
             return _handle_work_order(chat_id, work[0], work[1])
         if is_tasks_command(text):
+            if not is_owner:
+                _append_reply(chat_id, "🚫 Ye command sirf owner ke liye hai.")
+                return jsonify({'ok': True, 'denied': 'not-owner'})
             return _handle_tasks_list(chat_id)
     except Exception as e:
         print(f"Work-order routing error: {e}")
 
     # Owner update commands are parked for the self-improvement harness, which
     # is the only thing that may act on them. They get no immediate reply; the
-    # harness replies after it merges or rejects.
+    # harness replies after it merges or rejects. Only the harness-owned verbs
+    # are parked: bare /status and /help are answered below, so they are never
+    # silently swallowed. A non-owner is refused outright.
     try:
         from genesis_protocol.updates import parse_command
-        is_command = parse_command(text) is not None
+        parsed = parse_command(text)
     except Exception:
-        is_command = False
-    if is_command:
-        try:
-            _append_command(chat_id, text)
-        except Exception as e:
-            print(f"Command queue store error: {e}")
-        return jsonify({'ok': True, 'queued': 'command'})
+        parsed = None
+    if parsed is not None:
+        verb, arg = parsed
+        if verb in _OWNER_QUEUE_COMMANDS or (verb == 'status' and arg):
+            if not is_owner:
+                _append_reply(chat_id, "🚫 Ye command sirf owner ke liye hai.")
+                return jsonify({'ok': True, 'denied': 'not-owner'})
+            try:
+                _append_command(chat_id, text)
+            except Exception as e:
+                print(f"Command queue store error: {e}")
+            return jsonify({'ok': True, 'queued': 'command'})
 
     # Multi-LLM council: /council <question> asks several models at once and
     # reconciles their answers, so a hard question does not depend on one model
@@ -1491,9 +1542,12 @@ def telegram_webhook():
 
     # Build reply text
     if text == '/start':
-        reply = "🤖 *Genesis Protocol* online!\n\nI'm your autonomous AI. Send me any message or question!\n\nCommands:\n/start - Welcome\n/status - Bot status\n/ask <question> - Ask AI\n/council <question> - Ask several models at once"
+        reply = "🤖 *Genesis Protocol* online!\n\nI'm your autonomous AI. Send me any message or question!\n\nCommands:\n/start - Welcome\n/status - Bot status\n/help - Help\n/ask <question> - Ask AI\n/council <question> - Ask several models at once"
     elif text == '/status':
         reply = "✅ Genesis bot running (webhook + relay mode)\n🚀 HF Space: LIVE\n🧠 AI: Groq-powered\n📡 Replies relayed via GitHub Actions"
+    elif text == '/help':
+        from genesis_protocol.updates import HELP_TEXT
+        reply = HELP_TEXT
     elif text.startswith('/ask '):
         question = text[5:].strip()
         reply = None

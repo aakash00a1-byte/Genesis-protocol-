@@ -62,3 +62,36 @@ def test_relay_script_present_and_heartbeat_mode() -> None:
     text = script.read_text(encoding="utf-8")
     assert '"heartbeat"' in text or "'heartbeat'" in text
     assert "TELEGRAM_ADMIN_ID" in text
+
+
+def test_heartbeat_runs_on_a_daily_schedule() -> None:
+    """Regression: the daily heartbeat did not exist.
+
+    It relied on an in-run interval (RELAY_HEARTBEAT_HOURS=24) inside a run that
+    lasts only 5h30m, so the interval never elapsed, and heartbeat.yml had no
+    cron either. A daily schedule must exist somewhere.
+    """
+    text = HEARTBEAT.read_text(encoding="utf-8")
+    match = re.search(r"^on:\n(?:.*\n)*?\s*- cron:\s*'([^']+)'", text, re.M)
+    assert match, "heartbeat.yml must declare a schedule cron"
+    minute, hour, dom, month, dow = match.group(1).split()
+    assert dom == "*" and month == "*" and dow == "*", "must be a daily cron"
+    assert hour != "*", "must run once a day, not hourly"
+
+
+def test_keepalive_does_not_claim_an_unreachable_heartbeat() -> None:
+    """The in-run heartbeat interval must not exceed the run length."""
+    text = KEEPALIVE.read_text(encoding="utf-8")
+
+    def _env(name: str) -> float:
+        m = re.search(rf"{name}:\s*\"([0-9.]+)\"", text)
+        assert m, f"{name} must be set explicitly"
+        return float(m.group(1))
+
+    run_seconds = _env("RELAY_RUN_SECONDS")
+    heartbeat_hours = _env("RELAY_HEARTBEAT_HOURS")
+    if heartbeat_hours > 0:
+        assert heartbeat_hours * 3600 < run_seconds, (
+            "an in-run heartbeat interval that cannot elapse inside one run "
+            "silently sends nothing"
+        )

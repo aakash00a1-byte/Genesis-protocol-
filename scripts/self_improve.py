@@ -160,6 +160,11 @@ def _github(method: str, path: str, payload: dict | None = None) -> object:
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode(errors="replace")[:500]
         raise RuntimeError(f"{method} {path} -> HTTP {exc.code}: {detail}") from exc
+    except (urllib.error.URLError, OSError, TimeoutError) as exc:
+        # A transport failure (DNS, TLS, timeout) is not an HTTP answer. Surface
+        # it as a RuntimeError so callers fail safe instead of reading a silent
+        # None as "nothing to see".
+        raise RuntimeError(f"{method} {path} -> {type(exc).__name__}: {exc}") from exc
     return json.loads(body or b"{}")
 
 
@@ -704,7 +709,12 @@ def open_agent_prs() -> list[dict]:
     """
     prs = _github("GET", f"/repos/{REPO}/pulls?state=open&per_page=100")
     if not isinstance(prs, list):
-        return []
+        # An unexpected body (an error object, a proxy page) means we do NOT
+        # know the open-PR count. Treat it as full capacity so the caller skips
+        # new work rather than opening a PR past the review cap.
+        raise RuntimeError(
+            f"unexpected /pulls response: {type(prs).__name__}"
+        )
     agent_prs = [
         p for p in prs if str(p.get("head", {}).get("ref", "")).startswith("agent/")
     ]
@@ -772,7 +782,13 @@ def land_pr(patch: str, topic: str, app_id: str) -> str | None:
 
 
 def run_cycle(index: int) -> None:
-    waiting = open_agent_prs()
+    try:
+        waiting = open_agent_prs()
+    except RuntimeError as exc:
+        # We could not read the open-PR count. Fail safe: skip this cycle
+        # rather than risk opening a PR past the review cap.
+        _log(f"could not count open agent PRs; skipping cycle {index}: {exc}")
+        return
     if len(waiting) >= MAX_OPEN_PRS:
         _log(f"{len(waiting)} agent PRs already await review; skipping this cycle")
         _notify(f"🧠 Genesis agent: {len(waiting)} PRs await review, pausing new work.")
