@@ -416,7 +416,7 @@ def _fetch_feed_titles(url: str) -> list[str]:
         with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
             data = resp.read(MAX_FEED_BYTES)
     except Exception as exc:  # noqa: BLE001 - one dead feed must not stop the rest
-        _log(f"feed failed ({url.split('/')[2]}): {type(exc).__name__}")
+        _log(f"feed failed ({url.split('/')[2]}): {_reason(exc)}")
         return []
     try:
         root = ET.fromstring(data)
@@ -582,7 +582,7 @@ def _fetch_quote(symbol: str) -> tuple[float, float] | None:
         with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
             data = json.loads(resp.read(MAX_FEED_BYTES))
     except Exception as exc:  # noqa: BLE001 - one bad symbol must not stop the rest
-        _log(f"quote failed ({symbol}): {type(exc).__name__}")
+        _log(f"quote failed ({symbol}): {_reason(exc)}")
         return None
     try:
         meta = data["chart"]["result"][0]["meta"]
@@ -657,7 +657,7 @@ def _fetch_weather(lat: float, lon: float) -> dict | None:
         with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
             data = json.loads(resp.read(MAX_FEED_BYTES))
     except Exception as exc:  # noqa: BLE001 - weather must never stop the relay
-        _log(f"weather failed: {type(exc).__name__}")
+        _log(f"weather failed ({lat},{lon}): {_reason(exc)}")
         return None
     try:
         current = data["current"]
