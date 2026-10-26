@@ -160,6 +160,11 @@ def _github(method: str, path: str, payload: dict | None = None) -> object:
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode(errors="replace")[:500]
         raise RuntimeError(f"{method} {path} -> HTTP {exc.code}: {detail}") from exc
+    except (urllib.error.URLError, OSError, TimeoutError) as exc:
+        # A transport failure (DNS, TLS, timeout) is not an HTTP answer. Surface
+        # it as a RuntimeError so callers fail safe instead of reading a silent
+        # None as "nothing to see".
+        raise RuntimeError(f"{method} {path} -> {type(exc).__name__}: {exc}") from exc
     return json.loads(body or b"{}")
 
 
@@ -563,18 +568,18 @@ def _requeue_stuck_orders() -> None:
             _space_patch_task(str(order.get("id")), state="queued", note="requeued after restart")
 
 
-def _dispatch_deploy() -> None:
-    """Explicitly start the HF deploy workflow after a merge.
+def _dispatch_workflow(workflow: str, ref: str, why: str) -> bool:
+    """Start a workflow by name, because the token cannot trigger it by event.
 
-    A push made with GITHUB_TOKEN does not trigger another workflow (GitHub
-    blocks it to prevent loops), so ``on: push`` on deploy-space.yml would be
-    skipped when we merge with the default token. ``workflow_dispatch`` is the
-    documented exception: it always creates a run, token or not. So we ask for
-    the deploy directly instead of relying on the push event.
+    GitHub suppresses the events a workflow creates when it authenticates with
+    the default GITHUB_TOKEN (to prevent loops). ``workflow_dispatch`` is the
+    documented exception that always creates a run, token or not, so the harness
+    asks for a workflow directly instead of relying on ``on: push`` /
+    ``on: pull_request``. Returns True when the dispatch was accepted.
     """
     req = urllib.request.Request(  # noqa: S310 - fixed GitHub host
-        f"https://api.github.com/repos/{REPO}/actions/workflows/deploy-space.yml/dispatches",
-        data=json.dumps({"ref": BRANCH}).encode(),
+        f"https://api.github.com/repos/{REPO}/actions/workflows/{workflow}/dispatches",
+        data=json.dumps({"ref": ref}).encode(),
         method="POST",
         headers={
             "Authorization": f"Bearer {GH_MERGE_TOKEN or GITHUB_TOKEN}",
@@ -584,9 +589,25 @@ def _dispatch_deploy() -> None:
     )
     try:
         with urllib.request.urlopen(req, timeout=30):  # noqa: S310
-            _log("deploy workflow dispatched")
-    except Exception as exc:  # noqa: BLE001 - the merge already succeeded
-        _log(f"deploy dispatch failed: {type(exc).__name__}")
+            _log(f"{workflow} dispatched for {ref} ({why})")
+            return True
+    except Exception as exc:  # noqa: BLE001 - a dispatch is best effort
+        _log(f"{workflow} dispatch failed for {ref} ({why}): {type(exc).__name__}")
+        return False
+
+
+def _dispatch_deploy() -> None:
+    """Explicitly start the HF deploy workflow after a merge."""
+    _dispatch_workflow("deploy-space.yml", BRANCH, "after merge")
+
+
+def _dispatch_ci(ref: str) -> None:
+    """Ask CI to run for a branch whose events the token cannot trigger.
+
+    An agent PR opened with the default GITHUB_TOKEN shows no checks at all, so
+    a reviewer has nothing to go on. Dispatch CI at the PR head instead.
+    """
+    _dispatch_workflow("ci.yml", ref, "agent PR opened")
 
 
 def _transport():
@@ -704,7 +725,12 @@ def open_agent_prs() -> list[dict]:
     """
     prs = _github("GET", f"/repos/{REPO}/pulls?state=open&per_page=100")
     if not isinstance(prs, list):
-        return []
+        # An unexpected body (an error object, a proxy page) means we do NOT
+        # know the open-PR count. Treat it as full capacity so the caller skips
+        # new work rather than opening a PR past the review cap.
+        raise RuntimeError(
+            f"unexpected /pulls response: {type(prs).__name__}"
+        )
     agent_prs = [
         p for p in prs if str(p.get("head", {}).get("ref", "")).startswith("agent/")
     ]
@@ -767,12 +793,23 @@ def land_pr(patch: str, topic: str, app_id: str) -> str | None:
             _log(f"could not open PR: {exc}")
             return None
     if isinstance(pr, dict) and pr.get("html_url"):
+        # The PR was opened with a token whose events GitHub suppresses, so
+        # `on: pull_request` never fired and the PR would show no checks. Ask CI
+        # to run against the pushed branch; best effort, never fatal.
+        if pr.get("head", {}).get("ref"):
+            _dispatch_ci(str(pr["head"]["ref"]))
         return pr["html_url"]
     return None
 
 
 def run_cycle(index: int) -> None:
-    waiting = open_agent_prs()
+    try:
+        waiting = open_agent_prs()
+    except RuntimeError as exc:
+        # We could not read the open-PR count. Fail safe: skip this cycle
+        # rather than risk opening a PR past the review cap.
+        _log(f"could not count open agent PRs; skipping cycle {index}: {exc}")
+        return
     if len(waiting) >= MAX_OPEN_PRS:
         _log(f"{len(waiting)} agent PRs already await review; skipping this cycle")
         _notify(f"🧠 Genesis agent: {len(waiting)} PRs await review, pausing new work.")

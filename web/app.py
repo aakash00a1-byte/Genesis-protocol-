@@ -9,8 +9,9 @@ import os
 import sys
 import json
 import logging
-import time
+import tempfile
 import threading
+import time
 from datetime import datetime, timedelta
 from functools import wraps
 from typing import Optional, Dict, Any
@@ -1160,16 +1161,43 @@ def api_debug_telegram():
     })
 
 
-TELEGRAM_REPLY_QUEUE = '/tmp/telegram_reply_queue.json'
+def _queue_dir() -> str:
+    """Directory for the three Telegram queues.
+
+    Defaults to /tmp, which is what the Space has always used, so behaviour is
+    unchanged unless an operator points TELEGRAM_QUEUE_DIR at a mounted volume.
+    The HF Space has no persistent disk on the free tier, so a restart still
+    discards the queues; this only lets a deployment that *does* provide durable
+    storage opt in without a code change. Created if missing so a bad path fails
+    loudly here rather than silently dropping a queued reply later.
+    """
+    path = os.environ.get('TELEGRAM_QUEUE_DIR', '/tmp').strip() or '/tmp'
+    try:
+        os.makedirs(path, exist_ok=True)
+    except OSError as e:
+        print(f"queue dir {path} unusable ({e}); falling back to /tmp")
+        return '/tmp'
+    return path
+
+
+_QUEUE_DIR = _queue_dir()
+
+TELEGRAM_REPLY_QUEUE = os.path.join(_QUEUE_DIR, 'telegram_reply_queue.json')
 TELEGRAM_QUEUE_MAX = 200  # bound so the file cannot grow without limit
 # Owner commands (/approve, /reject, /updates) are parked here, separate from
 # the reply queue: the relay sends replies, but only the self-improvement
 # harness acts on commands, so a command must not be rendered as a reply.
-TELEGRAM_COMMAND_QUEUE = '/tmp/telegram_command_queue.json'
+TELEGRAM_COMMAND_QUEUE = os.path.join(_QUEUE_DIR, 'telegram_command_queue.json')
 
 # Owner work orders (/do <instruction>) are parked here. The self-improvement
 # harness drains it, runs the agent, and opens a PR — then asks for /approve.
-TELEGRAM_TASK_QUEUE = '/tmp/telegram_task_queue.json'
+TELEGRAM_TASK_QUEUE = os.path.join(_QUEUE_DIR, 'telegram_task_queue.json')
+
+# Flask serves the webhook on threads, and two concurrent appends would both
+# read the same queue and the second write would drop the first entry. The
+# lock covers read-modify-write on one process; the atomic replace keeps a
+# reader from ever seeing a half-written file.
+_QUEUE_LOCK = threading.RLock()
 
 
 def _read_queue(path):
@@ -1196,21 +1224,45 @@ def _read_queue(path):
     return queue
 
 
+def _write_queue(path, queue):
+    """Replace a queue file atomically.
+
+    A plain open()+json.dump truncates the file first, so a crash or a full disk
+    mid-write leaves invalid JSON and the whole queue is then discarded by
+    _read_queue. Writing a sibling temp file and os.replace()-ing it means a
+    reader always sees either the old queue or the new one, never a half file.
+    """
+    directory = os.path.dirname(path) or '.'
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix='.queue-', suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(queue, f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def _append_queue(path, chat_id, text):
     """Append one bounded entry, tagged with an id so the relay can dedup."""
-    queue = _read_queue(path)
-    queue.append({
-        'id': f'{chat_id}:{int(time.time() * 1000)}:{len(queue)}',
-        'chat_id': chat_id,
-        'text': str(text)[:4000],
-    })
-    with open(path, 'w') as f:
-        json.dump(queue[-TELEGRAM_QUEUE_MAX:], f)
+    with _QUEUE_LOCK:
+        queue = _read_queue(path)
+        queue.append({
+            'id': f'{chat_id}:{int(time.time() * 1000)}:{len(queue)}',
+            'chat_id': chat_id,
+            'text': str(text)[:4000],
+        })
+        _write_queue(path, queue[-TELEGRAM_QUEUE_MAX:])
 
 
 def _clear_queue(path):
-    with open(path, 'w') as f:
-        json.dump([], f)
+    with _QUEUE_LOCK:
+        _write_queue(path, [])
 
 
 def _read_command_queue():
@@ -1226,25 +1278,25 @@ def _read_task_queue():
 
 
 def _append_task(order):
-    queue = _read_task_queue()
-    queue.append(order)
-    with open(TELEGRAM_TASK_QUEUE, 'w') as f:
-        json.dump(queue[-TELEGRAM_QUEUE_MAX:], f)
+    with _QUEUE_LOCK:
+        queue = _read_task_queue()
+        queue.append(order)
+        _write_queue(TELEGRAM_TASK_QUEUE, queue[-TELEGRAM_QUEUE_MAX:])
 
 
 def _update_task(order_id, **changes):
     """Patch one work order in place; returns the updated order or None."""
-    queue = _read_task_queue()
-    updated = None
-    for order in queue:
-        if isinstance(order, dict) and str(order.get('id')) == str(order_id):
-            order.update({k: v for k, v in changes.items() if v is not None})
-            updated = order
-            break
-    if updated is not None:
-        with open(TELEGRAM_TASK_QUEUE, 'w') as f:
-            json.dump(queue[-TELEGRAM_QUEUE_MAX:], f)
-    return updated
+    with _QUEUE_LOCK:
+        queue = _read_task_queue()
+        updated = None
+        for order in queue:
+            if isinstance(order, dict) and str(order.get('id')) == str(order_id):
+                order.update({k: v for k, v in changes.items() if v is not None})
+                updated = order
+                break
+        if updated is not None:
+            _write_queue(TELEGRAM_TASK_QUEUE, queue[-TELEGRAM_QUEUE_MAX:])
+        return updated
 
 
 def _handle_work_order(chat_id, verb, arg):
@@ -1382,12 +1434,15 @@ def _handle_callback_query(callback):
     allowed = {'approve', 'reject', 'list', 'updates', 'pending', 'status', 'help'}
     if verb not in allowed:
         return jsonify({'ok': True})
-    command = f'/{verb}' + (f' {arg}' if arg else '')
     message = callback.get('message') or {}
     chat = message.get('chat') or {}
     chat_id = chat.get('id') if isinstance(chat, dict) else None
     if not isinstance(chat_id, (int, str)) or not str(chat_id).strip():
         return jsonify({'ok': True})
+    # A button tap is a privileged approval: only a configured owner may use it.
+    if not _is_owner_sender(callback):
+        return jsonify({'ok': True, 'denied': 'not-owner'})
+    command = f'/{verb}' + (f' {arg}' if arg else '')
     try:
         _append_command(chat_id, command)
     except Exception as e:
@@ -1409,6 +1464,40 @@ def _telegram_secret_ok():
     supplied = request.headers.get('X-Telegram-Bot-Api-Secret-Token', '')
     import hmac
     return hmac.compare_digest(str(supplied), str(expected))
+
+
+def _telegram_admin_ids():
+    """Owner Telegram ids from TELEGRAM_ADMIN_IDS (comma or semicolon separated)."""
+    raw = os.environ.get('TELEGRAM_ADMIN_IDS', '')
+    ids = set()
+    for part in str(raw).replace(';', ',').split(','):
+        part = part.strip()
+        if part:
+            ids.add(part)
+    return ids
+
+
+def _is_owner_sender(msg):
+    """True only when the message sender is a configured owner id.
+
+    Fails closed: an unset TELEGRAM_ADMIN_IDS authorises nobody, so a privileged
+    command is never accepted just because the webhook secret is also unset.
+    """
+    admins = _telegram_admin_ids()
+    if not admins:
+        return False
+    sender = msg.get('from') if isinstance(msg, dict) else None
+    sender_id = sender.get('id') if isinstance(sender, dict) else None
+    if sender_id is None:
+        return False
+    return str(sender_id).strip() in admins
+
+
+# Commands the self-improvement harness must act on, so they are parked on the
+# command queue rather than answered here. Bare /status and /help are NOT in
+# this set: they are answered by this app, and only "/status <id>" (an update
+# lookup) is parked, so a user never loses the bot-status reply.
+_OWNER_QUEUE_COMMANDS = frozenset({'approve', 'reject', 'list', 'updates', 'pending'})
 
 
 def _read_reply_queue():
@@ -1453,35 +1542,49 @@ def telegram_webhook():
     if not isinstance(text, str):
         return jsonify({'ok': True})
     text = text[:4000]
-    user = msg.get('from', {})
-    
+    is_owner = _is_owner_sender(msg)
+
     # Owner work orders (/do, /cancel, /tasks) are handled here: the order is
     # parked on the task queue for the harness, and the owner gets an immediate
-    # acknowledgement. These are not approval commands.
+    # acknowledgement. These are not approval commands. They are privileged, so
+    # only a configured owner id may reach them.
     try:
         from genesis_protocol.updates import is_tasks_command, parse_work_order
         work = parse_work_order(text)
         if work is not None:
+            if not is_owner:
+                _append_reply(chat_id, "🚫 Ye command sirf owner ke liye hai.")
+                return jsonify({'ok': True, 'denied': 'not-owner'})
             return _handle_work_order(chat_id, work[0], work[1])
         if is_tasks_command(text):
+            if not is_owner:
+                _append_reply(chat_id, "🚫 Ye command sirf owner ke liye hai.")
+                return jsonify({'ok': True, 'denied': 'not-owner'})
             return _handle_tasks_list(chat_id)
     except Exception as e:
         print(f"Work-order routing error: {e}")
 
     # Owner update commands are parked for the self-improvement harness, which
     # is the only thing that may act on them. They get no immediate reply; the
-    # harness replies after it merges or rejects.
+    # harness replies after it merges or rejects. Only the harness-owned verbs
+    # are parked: bare /status and /help are answered below, so they are never
+    # silently swallowed. A non-owner is refused outright.
     try:
         from genesis_protocol.updates import parse_command
-        is_command = parse_command(text) is not None
+        parsed = parse_command(text)
     except Exception:
-        is_command = False
-    if is_command:
-        try:
-            _append_command(chat_id, text)
-        except Exception as e:
-            print(f"Command queue store error: {e}")
-        return jsonify({'ok': True, 'queued': 'command'})
+        parsed = None
+    if parsed is not None:
+        verb, arg = parsed
+        if verb in _OWNER_QUEUE_COMMANDS or (verb == 'status' and arg):
+            if not is_owner:
+                _append_reply(chat_id, "🚫 Ye command sirf owner ke liye hai.")
+                return jsonify({'ok': True, 'denied': 'not-owner'})
+            try:
+                _append_command(chat_id, text)
+            except Exception as e:
+                print(f"Command queue store error: {e}")
+            return jsonify({'ok': True, 'queued': 'command'})
 
     # Multi-LLM council: /council <question> asks several models at once and
     # reconciles their answers, so a hard question does not depend on one model
@@ -1491,9 +1594,12 @@ def telegram_webhook():
 
     # Build reply text
     if text == '/start':
-        reply = "🤖 *Genesis Protocol* online!\n\nI'm your autonomous AI. Send me any message or question!\n\nCommands:\n/start - Welcome\n/status - Bot status\n/ask <question> - Ask AI\n/council <question> - Ask several models at once"
+        reply = "🤖 *Genesis Protocol* online!\n\nI'm your autonomous AI. Send me any message or question!\n\nCommands:\n/start - Welcome\n/status - Bot status\n/help - Help\n/ask <question> - Ask AI\n/council <question> - Ask several models at once"
     elif text == '/status':
         reply = "✅ Genesis bot running (webhook + relay mode)\n🚀 HF Space: LIVE\n🧠 AI: Groq-powered\n📡 Replies relayed via GitHub Actions"
+    elif text == '/help':
+        from genesis_protocol.updates import HELP_TEXT
+        reply = HELP_TEXT
     elif text.startswith('/ask '):
         question = text[5:].strip()
         reply = None
