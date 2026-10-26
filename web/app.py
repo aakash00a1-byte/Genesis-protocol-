@@ -135,6 +135,24 @@ def json_body() -> Dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+MAX_FIELD_LENGTH = 254
+
+
+def string_field(data: dict, key: str,
+                 max_length: int = MAX_FIELD_LENGTH):
+    """Return a non-empty string field, or None.
+
+    A JSON body can carry a number, list or object where a string is
+    expected. Rejecting it here keeps the bad type away from ``len()`` and
+    the database driver, which would otherwise answer with a 500 instead of
+    a 400.
+    """
+    value = data.get(key)
+    if not isinstance(value, str) or not value or len(value) > max_length:
+        return None
+    return value
+
+
 def init_db():
     """Initialize database tables."""
     conn = get_db()
@@ -255,8 +273,8 @@ def admin_required(f):
 def api_auth_login():
     """Mobile API login endpoint."""
     data = json_body()
-    username = data.get('username')
-    password = data.get('password')
+    username = string_field(data, 'username')
+    password = string_field(data, 'password', max_length=1024)
     
     if not username or not password:
         return jsonify({'error': 'Username and password required'}), 400
@@ -304,9 +322,9 @@ def api_auth_login():
 def api_auth_register():
     """Mobile API registration endpoint."""
     data = json_body()
-    username = data.get('username')
-    email = data.get('email')
-    password = data.get('password')
+    username = string_field(data, 'username')
+    email = string_field(data, 'email')
+    password = string_field(data, 'password', max_length=1024)
     
     if not username or not email or not password:
         return jsonify({'error': 'All fields required'}), 400
@@ -487,8 +505,8 @@ def login():
     """User login."""
     if request.method == 'POST':
         data = json_body() if request.is_json else request.form
-        username = data.get('username')
-        password = data.get('password')
+        username = string_field(data, 'username')
+        password = string_field(data, 'password', max_length=1024)
         
         if not username or not password:
             return jsonify({'error': 'Username and password required'}), 400
@@ -539,9 +557,9 @@ def register():
     """User registration."""
     if request.method == 'POST':
         data = json_body() if request.is_json else request.form
-        username = data.get('username')
-        email = data.get('email')
-        password = data.get('password')
+        username = string_field(data, 'username')
+        email = string_field(data, 'email')
+        password = string_field(data, 'password', max_length=1024)
         
         if not username or not email or not password:
             return jsonify({'error': 'All fields required'}), 400

@@ -50,3 +50,40 @@ def test_register_rejects_short_password(client):
         'username': 'u1', 'email': 'u1@example.com', 'password': 'short',
     })
     assert r.status_code == 400
+
+
+WRONG_TYPE_FIELDS = [
+    {'username': 123, 'password': 'longenough1'},
+    {'username': ['a'], 'password': 'longenough1'},
+    {'username': {'a': 1}, 'password': 'longenough1'},
+    {'username': 'u1', 'password': 12345},
+    {'username': 'u1', 'password': ['x']},
+    {'username': 'u1', 'password': None},
+]
+
+
+@pytest.mark.parametrize("endpoint", ["/api/auth/login", "/login"])
+@pytest.mark.parametrize("body", WRONG_TYPE_FIELDS)
+def test_auth_rejects_non_string_fields(client, endpoint, body):
+    r = client.post(endpoint, json=body)
+    assert r.status_code == 400
+    assert 'error' in r.get_json()
+
+
+@pytest.mark.parametrize("endpoint", ["/api/auth/register", "/register"])
+@pytest.mark.parametrize("body", WRONG_TYPE_FIELDS)
+def test_register_rejects_non_string_fields(client, endpoint, body):
+    payload = {'email': 'u1@example.com'}
+    payload.update(body)
+    r = client.post(endpoint, json=payload)
+    assert r.status_code == 400
+    assert 'error' in r.get_json()
+
+
+@pytest.mark.parametrize("endpoint", ["/api/auth/login", "/api/auth/register"])
+def test_auth_rejects_overlong_username(client, endpoint):
+    r = client.post(endpoint, json={
+        'username': 'u' * 300, 'email': 'u1@example.com', 'password': 'longenough1',
+    })
+    assert r.status_code == 400
+    assert 'error' in r.get_json()
