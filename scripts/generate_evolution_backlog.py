@@ -262,9 +262,12 @@ def main(argv: list[str] | None = None) -> int:
         print("evolution agent is not enabled", file=sys.stderr)
         return 2
 
-    # Force the store even in dry-run so nothing is written to disk.
-    if args.dry_run:
-        agent.store = None
+    # The store appends to its own backlog.jsonl inside store_dir, which is not
+    # necessarily args.out. Two consequences, both bad: a caller asking for
+    # --out elsewhere (a test, a dry run) still mutates the real backlog, and
+    # main() writes the authoritative single-line snapshot anyway. So the store
+    # is always disabled and main() is the only writer.
+    agent.store = None
 
     report = agent.observe(AgentTask(instruction="audit findings", metadata={"signals": _signals()}))
     payload = _stable_ids(report.to_dict())

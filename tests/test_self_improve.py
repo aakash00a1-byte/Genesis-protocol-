@@ -566,13 +566,13 @@ def test_choose_topic_falls_back_when_the_backlog_is_absent(monkeypatch) -> None
     assert module.choose_topic(0, set()) in module.TOPICS
 
 
-def test_evolution_backlog_generator_is_reproducible() -> None:
+def test_evolution_backlog_generator_is_reproducible(tmp_path) -> None:
     """The committed snapshot must not churn: random ids would rewrite it."""
     gen = ROOT / "scripts" / "generate_evolution_backlog.py"
     assert gen.is_file()
     outs = []
-    for _ in range(2):
-        out = ROOT / "genesis_v5" / "data" / "evolution" / "_repro_check.jsonl"
+    for i in range(2):
+        out = tmp_path / f"run{i}.jsonl"
         proc = subprocess.run(
             [sys.executable, str(gen), "--out", str(out)],
             capture_output=True,
@@ -582,5 +582,35 @@ def test_evolution_backlog_generator_is_reproducible() -> None:
         )
         assert proc.returncode == 0, proc.stdout + proc.stderr
         outs.append(out.read_bytes())
-        out.unlink()
     assert outs[0] == outs[1], "the generator must be deterministic"
+
+
+def test_generator_does_not_touch_the_real_backlog(tmp_path) -> None:
+    """Regression: the evolution store appended to its own backlog.jsonl.
+
+    `--out` only moved the snapshot main() writes; the agent's ProposalStore
+    still wrote store_dir/backlog.jsonl, so pointing --out at a temp file (as
+    the reproducibility test does) still mutated the committed backlog and grew
+    it by one cycle per run. The generator must write exactly the requested
+    path and nothing else.
+    """
+    gen = ROOT / "scripts" / "generate_evolution_backlog.py"
+    real = ROOT / "genesis_v5" / "data" / "evolution" / "backlog.jsonl"
+    before = real.read_bytes()
+
+    out = tmp_path / "elsewhere.jsonl"
+    proc = subprocess.run(
+        [sys.executable, str(gen), "--out", str(out)],
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+        timeout=120,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+    assert real.read_bytes() == before, "the committed backlog was modified"
+    assert out.is_file(), "the requested output was not written"
+    # A snapshot, not an append log: one cycle, one line.
+    assert len(out.read_text(encoding="utf-8").strip().splitlines()) == 1
+    # The store's own file must not appear next to the requested output either.
+    assert not (tmp_path / "backlog.jsonl").exists()
