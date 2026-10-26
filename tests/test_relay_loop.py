@@ -152,6 +152,43 @@ def test_relay_state_survives_corrupt_file_and_persists_before_clear(
     assert sent == ["once"]
 
 
+def test_relay_batch_cap_does_not_starve_new_replies(monkeypatch, tmp_path) -> None:
+    """A head of already-sent entries must not consume the whole batch.
+
+    The queue is oldest-first and bounded (200), while a tick delivers at most
+    MAX_QUEUE_ITEMS (50). If the cap were applied to the raw list, a burst of
+    already-delivered entries at the head would starve every newer reply until
+    the queue happened to clear.
+    """
+    relay = _load(
+        monkeypatch,
+        HF_SPACE_URL="https://space.invalid",
+        TELEGRAM_BOT_TOKEN="tok",
+        TELEGRAM_ADMIN_ID="1",
+        RELAY_STATE_FILE=str(tmp_path / "state.json"),
+    )
+    monkeypatch.setattr(relay, "MAX_QUEUE_ITEMS", 5)
+    relay._save_seen({f"old-{i}" for i in range(5)})
+    queue = {
+        "replies": [
+            {"id": f"old-{i}", "chat_id": "1", "text": "already sent"}
+            for i in range(5)
+        ]
+        + [{"id": "new", "chat_id": "1", "text": "fresh"}]
+    }
+    sent: list[str] = []
+    monkeypatch.setattr(relay, "_get", lambda url, timeout=30: json.dumps(queue).encode())
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: sent.append(text) or True
+    )
+    import urllib.request
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _FakeResp(b"{}"))
+
+    assert relay.relay_once() == 1
+    assert sent == ["fresh"]
+
+
 def test_relay_log_redacts_token(monkeypatch, tmp_path, capsys) -> None:
     relay = _load(
         monkeypatch,
