@@ -95,3 +95,30 @@ def test_keepalive_does_not_claim_an_unreachable_heartbeat() -> None:
             "an in-run heartbeat interval that cannot elapse inside one run "
             "silently sends nothing"
         )
+
+
+def test_ci_can_be_dispatched_by_name() -> None:
+    """Regression: agent PRs showed no CI checks.
+
+    The harness opens PRs with the default GITHUB_TOKEN, whose events GitHub
+    suppresses, so `on: pull_request` never fires for them. `workflow_dispatch`
+    is the documented exception that always creates a run, so ci.yml must accept
+    it and the harness must be able to name it.
+    """
+    ci = WORKFLOWS / "ci.yml"
+    text = ci.read_text(encoding="utf-8")
+    assert re.search(r"^on:", text, re.M)
+    assert re.search(r"^\s{2}workflow_dispatch:", text, re.M), (
+        "ci.yml must accept workflow_dispatch, or an agent PR can never get checks"
+    )
+    # The pull_request trigger must stay for human PRs.
+    assert re.search(r"^\s{2}pull_request:", text, re.M)
+
+
+def test_self_improve_can_dispatch_ci_and_deploy() -> None:
+    """The harness needs actions:write and both workflow names."""
+    text = (WORKFLOWS / "self-improve.yml").read_text(encoding="utf-8")
+    assert re.search(r"^\s{2}actions:\s*write", text, re.M)
+    script = (WORKFLOWS.parent.parent / "scripts" / "self_improve.py").read_text(encoding="utf-8")
+    assert '"ci.yml"' in script
+    assert '"deploy-space.yml"' in script

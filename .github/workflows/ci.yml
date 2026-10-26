@@ -1,10 +1,19 @@
 name: CI/CD
 
+# `workflow_dispatch` is not a convenience here, it is required. When the
+# self-improvement harness opens a PR it authenticates with the default
+# GITHUB_TOKEN, and GitHub suppresses the events that token creates to prevent
+# workflow loops. So `pull_request` never fires for an agent PR and the PR shows
+# no checks at all (verified: every github-actions[bot] PR had 0 check runs,
+# every human PR had 2). `workflow_dispatch` is the documented exception that
+# always creates a run regardless of which token asked, so the harness asks for
+# CI by name. Keep this trigger.
 on:
   push:
     branches: [main, develop]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   lint:

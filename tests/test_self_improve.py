@@ -7,8 +7,10 @@ prints the prompt without touching the network.
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -401,3 +403,184 @@ def test_github_transport_error_is_a_runtime_error(monkeypatch) -> None:
     monkeypatch.setattr(urllib.request, "urlopen", _fail)
     with pytest.raises(RuntimeError):
         module._github("GET", "/repos/x/y/pulls")
+
+
+def test_dispatch_ci_posts_to_the_ci_workflow(monkeypatch) -> None:
+    """CI must be dispatched by name for an agent PR.
+
+    An agent PR is opened with the default GITHUB_TOKEN, whose events GitHub
+    suppresses, so `on: pull_request` never fires. The harness must ask CI to
+    run against the branch instead.
+    """
+    module = _load()
+    seen: dict = {}
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def _urlopen(req, timeout=30):
+        seen["url"] = req.full_url
+        seen["method"] = req.get_method()
+        seen["ref"] = json.loads(req.data.decode())["ref"]
+        return _Resp()
+
+    monkeypatch.setattr(urllib.request, "urlopen", _urlopen)
+    module._dispatch_ci("agent/self-improve-x")
+
+    assert seen["url"].endswith("/actions/workflows/ci.yml/dispatches")
+    assert seen["method"] == "POST"
+    assert seen["ref"] == "agent/self-improve-x"
+
+
+def test_dispatch_ci_never_raises_when_the_call_fails(monkeypatch) -> None:
+    """CI dispatch is best effort: a failure must not break the PR landing."""
+    import urllib.error
+    import urllib.request
+
+    module = _load()
+
+    def _fail(*a, **k):
+        raise urllib.error.HTTPError("u", 403, "no", {}, None)
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fail)
+    module._dispatch_ci("agent/self-improve-x")  # must not raise
+
+
+def test_land_pr_dispatches_ci_for_the_new_branch(monkeypatch) -> None:
+    """Opening a PR must also ask for its CI."""
+    module = _load()
+    monkeypatch.setattr(module, "_git", lambda *a: subprocess.CompletedProcess(a, 0, "", ""))
+    monkeypatch.setattr(module, "_github", lambda *a, **k: {
+        "html_url": "https://github.com/x/y/pull/1",
+        "head": {"ref": "agent/self-improve-x"},
+    })
+    dispatched: list = []
+    monkeypatch.setattr(module, "_dispatch_ci", lambda ref: dispatched.append(ref))
+
+    url = module.land_pr("diff --git a/x b/x\n", "topic", "app-1")
+    assert url == "https://github.com/x/y/pull/1"
+    assert dispatched == ["agent/self-improve-x"]
+
+
+# ---------------------------------------------------------------------------
+# Evolution backlog: the committed file must be real, and the harness must
+# actually consume it (SELF_IMPROVE_EVOLUTION_BACKLOG -> evolution_topics()).
+# ---------------------------------------------------------------------------
+BACKLOG = ROOT / "genesis_v5" / "data" / "evolution" / "backlog.jsonl"
+
+
+def test_committed_evolution_backlog_exists_and_is_tracked() -> None:
+    """The backlog must be in the repo, not ignored.
+
+    `.gitignore` has a broad `data/` rule, which silently excluded
+    genesis_v5/data/evolution/backlog.jsonl from the branch entirely.
+    """
+    assert BACKLOG.is_file(), f"{BACKLOG} must be committed"
+    ignore = subprocess.run(
+        ["git", "check-ignore", "-v", str(BACKLOG)],
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+    )
+    # `git check-ignore` exits 1 (and prints nothing) when the path is tracked.
+    assert "backlog.jsonl" not in ignore.stdout or "!" in ignore.stdout, (
+        f"backlog is still ignored by {ignore.stdout.strip()}"
+    )
+
+
+def test_committed_evolution_backlog_is_well_formed() -> None:
+    """Follow the schema the agent writes: real proposals, not placeholders."""
+    records = [json.loads(line) for line in BACKLOG.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert records, "the backlog must not be empty"
+    for record in records:
+        for key in ("cycle_id", "verdict", "signals", "proposals"):
+            assert key in record, f"missing {key}"
+        assert record["proposals"], "a record with no proposals is a placeholder"
+        for proposal in record["proposals"]:
+            for key in (
+                "proposal_id",
+                "title",
+                "area",
+                "kind",
+                "priority",
+                "severity",
+                "source_signal_id",
+                "requires_review",
+                "requires_authority",
+            ):
+                assert key in proposal, f"proposal missing {key}"
+            # Every proposal must be review-gated: the agent changes nothing.
+            assert proposal["requires_review"] is True
+            assert proposal["requires_authority"] is True
+            assert proposal["title"].strip()
+            assert 0.0 <= proposal["priority"] <= 1.0
+
+
+def test_backlog_proposals_reference_a_real_signal() -> None:
+    """Evidence-backed: each proposal points at a signal in the same record."""
+    for line in BACKLOG.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        signal_ids = {s["signal_id"] for s in record["signals"]}
+        for proposal in record["proposals"]:
+            assert proposal["source_signal_id"] in signal_ids, (
+                f"{proposal['proposal_id']} points at a signal that is not in the record"
+            )
+
+
+def test_evolution_topics_loads_the_committed_backlog(monkeypatch) -> None:
+    """The real workflow path: the committed file drives the focus rotation."""
+    module = _load()
+    monkeypatch.setattr(module, "EVOLUTION_BACKLOG", str(BACKLOG))
+    topics = module.evolution_topics()
+    assert topics, "the harness must read focuses from the committed backlog"
+
+    committed = json.loads(BACKLOG.read_text(encoding="utf-8").splitlines()[0])
+    titles = {p["title"] for p in committed["proposals"]}
+    assert set(topics) <= titles, "evolution_topics returned a title not in the backlog"
+
+
+def test_choose_topic_prefers_the_backlog_over_the_static_rotation(monkeypatch) -> None:
+    """An evidence-backed focus must win over a generic rotation entry."""
+    module = _load()
+    monkeypatch.setattr(module, "EVOLUTION_BACKLOG", str(BACKLOG))
+    topics = module.evolution_topics()
+    assert topics
+    # The best proposal (highest priority) must be chosen first.
+    assert module.choose_topic(0, set()) == topics[0]
+    # A taken slug is skipped in favour of the next real one.
+    taken = {module._slug(topics[0])}
+    assert module.choose_topic(0, taken) == topics[1]
+
+
+def test_choose_topic_falls_back_when_the_backlog_is_absent(monkeypatch) -> None:
+    """The backlog is an optimisation, never a dependency."""
+    module = _load()
+    monkeypatch.setattr(module, "EVOLUTION_BACKLOG", "/nonexistent/backlog.jsonl")
+    assert module.evolution_topics() == []
+    assert module.choose_topic(0, set()) in module.TOPICS
+
+
+def test_evolution_backlog_generator_is_reproducible() -> None:
+    """The committed snapshot must not churn: random ids would rewrite it."""
+    gen = ROOT / "scripts" / "generate_evolution_backlog.py"
+    assert gen.is_file()
+    outs = []
+    for _ in range(2):
+        out = ROOT / "genesis_v5" / "data" / "evolution" / "_repro_check.jsonl"
+        proc = subprocess.run(
+            [sys.executable, str(gen), "--out", str(out)],
+            capture_output=True,
+            text=True,
+            cwd=str(ROOT),
+            timeout=120,
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        outs.append(out.read_bytes())
+        out.unlink()
+    assert outs[0] == outs[1], "the generator must be deterministic"
