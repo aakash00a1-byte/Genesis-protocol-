@@ -603,3 +603,71 @@ def test_weather_report_sends_to_news_chat(monkeypatch, tmp_path) -> None:
     relay.weather_report()
     assert sent == [("42", "weather-body")]
 
+
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def test_batch_cap_applies_to_new_replies_only() -> None:
+    """Regression: the queue cap must not let a delivered head starve the rest.
+
+    main applies MAX_QUEUE_ITEMS to *new* replies. PR #27 replaced that with
+    `replies[:MAX_QUEUE_ITEMS]`, which caps the raw (oldest-first) list, so a
+    burst of already-delivered entries at the head consumes the whole batch and
+    nothing behind them is ever sent. Extracting only the news changes from that
+    PR must not bring this back.
+    """
+    src = (ROOT / "scripts" / "relay_loop.py").read_text(encoding="utf-8")
+    assert "attempted >= MAX_QUEUE_ITEMS" in src, "the new-reply cap is missing"
+    assert "replies[:MAX_QUEUE_ITEMS]" not in src, "the raw-list cap is back"
+
+
+def test_top_story_only_mode_is_available() -> None:
+    """The single-message news mode from PR #27 is a real, wired option."""
+    src = (ROOT / "scripts" / "relay_loop.py").read_text(encoding="utf-8")
+    assert "NEWS_TOP_STORY_ONLY" in src
+    assert "NEWS_TOP_STORY_ALSO" in src
+
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("relay_loop", ROOT / "scripts" / "relay_loop.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert isinstance(module.NEWS_TOP_STORY_ONLY, bool)
+    assert module.NEWS_TOP_STORY_ALSO >= 0
+
+
+def test_top_story_ranking_uses_cross_source_corroboration() -> None:
+    """The top story must be measured from the feeds, not invented."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("relay_loop", ROOT / "scripts" / "relay_loop.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert hasattr(module, "pick_top_story"), "the top-story ranking helper is missing"
+
+    # Two outlets carrying the same event must cluster into one story with a
+    # source count of two; an unrelated headline must not join it.
+    a = module._title_tokens("India wins the cricket final in Mumbai")
+    b = module._title_tokens("India wins cricket final in Mumbai")
+    c = module._title_tokens("Oil prices rise after supply cut")
+    assert module._same_story(a, b) is True
+    assert module._same_story(a, c) is False
+
+
+def test_top_story_digest_reports_the_source_count(monkeypatch) -> None:
+    """A corroborated story must say how many sources carry it."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("relay_loop", ROOT / "scripts" / "relay_loop.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    monkeypatch.setattr(module, "NEWS_CATEGORIES", {
+        "World": [("A", "http://a"), ("B", "http://b")],
+    })
+    monkeypatch.setattr(
+        module, "_fetch_feed_titles",
+        lambda url: ["India wins the cricket final in Mumbai"],
+    )
+    text = module.build_top_story_digest()
+    assert text is not None
+    assert "confirmed by 2 sources" in text
+    assert "top story" in text

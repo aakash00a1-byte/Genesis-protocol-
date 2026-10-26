@@ -9,8 +9,9 @@ import os
 import sys
 import json
 import logging
-import time
+import tempfile
 import threading
+import time
 from datetime import datetime, timedelta
 from functools import wraps
 from typing import Optional, Dict, Any
@@ -1160,16 +1161,43 @@ def api_debug_telegram():
     })
 
 
-TELEGRAM_REPLY_QUEUE = '/tmp/telegram_reply_queue.json'
+def _queue_dir() -> str:
+    """Directory for the three Telegram queues.
+
+    Defaults to /tmp, which is what the Space has always used, so behaviour is
+    unchanged unless an operator points TELEGRAM_QUEUE_DIR at a mounted volume.
+    The HF Space has no persistent disk on the free tier, so a restart still
+    discards the queues; this only lets a deployment that *does* provide durable
+    storage opt in without a code change. Created if missing so a bad path fails
+    loudly here rather than silently dropping a queued reply later.
+    """
+    path = os.environ.get('TELEGRAM_QUEUE_DIR', '/tmp').strip() or '/tmp'
+    try:
+        os.makedirs(path, exist_ok=True)
+    except OSError as e:
+        print(f"queue dir {path} unusable ({e}); falling back to /tmp")
+        return '/tmp'
+    return path
+
+
+_QUEUE_DIR = _queue_dir()
+
+TELEGRAM_REPLY_QUEUE = os.path.join(_QUEUE_DIR, 'telegram_reply_queue.json')
 TELEGRAM_QUEUE_MAX = 200  # bound so the file cannot grow without limit
 # Owner commands (/approve, /reject, /updates) are parked here, separate from
 # the reply queue: the relay sends replies, but only the self-improvement
 # harness acts on commands, so a command must not be rendered as a reply.
-TELEGRAM_COMMAND_QUEUE = '/tmp/telegram_command_queue.json'
+TELEGRAM_COMMAND_QUEUE = os.path.join(_QUEUE_DIR, 'telegram_command_queue.json')
 
 # Owner work orders (/do <instruction>) are parked here. The self-improvement
 # harness drains it, runs the agent, and opens a PR — then asks for /approve.
-TELEGRAM_TASK_QUEUE = '/tmp/telegram_task_queue.json'
+TELEGRAM_TASK_QUEUE = os.path.join(_QUEUE_DIR, 'telegram_task_queue.json')
+
+# Flask serves the webhook on threads, and two concurrent appends would both
+# read the same queue and the second write would drop the first entry. The
+# lock covers read-modify-write on one process; the atomic replace keeps a
+# reader from ever seeing a half-written file.
+_QUEUE_LOCK = threading.RLock()
 
 
 def _read_queue(path):
@@ -1196,21 +1224,45 @@ def _read_queue(path):
     return queue
 
 
+def _write_queue(path, queue):
+    """Replace a queue file atomically.
+
+    A plain open()+json.dump truncates the file first, so a crash or a full disk
+    mid-write leaves invalid JSON and the whole queue is then discarded by
+    _read_queue. Writing a sibling temp file and os.replace()-ing it means a
+    reader always sees either the old queue or the new one, never a half file.
+    """
+    directory = os.path.dirname(path) or '.'
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix='.queue-', suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(queue, f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def _append_queue(path, chat_id, text):
     """Append one bounded entry, tagged with an id so the relay can dedup."""
-    queue = _read_queue(path)
-    queue.append({
-        'id': f'{chat_id}:{int(time.time() * 1000)}:{len(queue)}',
-        'chat_id': chat_id,
-        'text': str(text)[:4000],
-    })
-    with open(path, 'w') as f:
-        json.dump(queue[-TELEGRAM_QUEUE_MAX:], f)
+    with _QUEUE_LOCK:
+        queue = _read_queue(path)
+        queue.append({
+            'id': f'{chat_id}:{int(time.time() * 1000)}:{len(queue)}',
+            'chat_id': chat_id,
+            'text': str(text)[:4000],
+        })
+        _write_queue(path, queue[-TELEGRAM_QUEUE_MAX:])
 
 
 def _clear_queue(path):
-    with open(path, 'w') as f:
-        json.dump([], f)
+    with _QUEUE_LOCK:
+        _write_queue(path, [])
 
 
 def _read_command_queue():
@@ -1226,25 +1278,25 @@ def _read_task_queue():
 
 
 def _append_task(order):
-    queue = _read_task_queue()
-    queue.append(order)
-    with open(TELEGRAM_TASK_QUEUE, 'w') as f:
-        json.dump(queue[-TELEGRAM_QUEUE_MAX:], f)
+    with _QUEUE_LOCK:
+        queue = _read_task_queue()
+        queue.append(order)
+        _write_queue(TELEGRAM_TASK_QUEUE, queue[-TELEGRAM_QUEUE_MAX:])
 
 
 def _update_task(order_id, **changes):
     """Patch one work order in place; returns the updated order or None."""
-    queue = _read_task_queue()
-    updated = None
-    for order in queue:
-        if isinstance(order, dict) and str(order.get('id')) == str(order_id):
-            order.update({k: v for k, v in changes.items() if v is not None})
-            updated = order
-            break
-    if updated is not None:
-        with open(TELEGRAM_TASK_QUEUE, 'w') as f:
-            json.dump(queue[-TELEGRAM_QUEUE_MAX:], f)
-    return updated
+    with _QUEUE_LOCK:
+        queue = _read_task_queue()
+        updated = None
+        for order in queue:
+            if isinstance(order, dict) and str(order.get('id')) == str(order_id):
+                order.update({k: v for k, v in changes.items() if v is not None})
+                updated = order
+                break
+        if updated is not None:
+            _write_queue(TELEGRAM_TASK_QUEUE, queue[-TELEGRAM_QUEUE_MAX:])
+        return updated
 
 
 def _handle_work_order(chat_id, verb, arg):
