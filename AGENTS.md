@@ -81,8 +81,9 @@ delivers them.
 
 ### News, market and AI briefing (every 45 minutes)
 
-`scripts/relay_loop.py` sends three things to the admin on a 45-minute cadence
-(`NEWS_INTERVAL_SECONDS=2700`):
+`scripts/relay_loop.py` sends four things to the admin on a 45-minute cadence
+(`NEWS_INTERVAL_SECONDS=2700`, set in `keepalive.yml`; the code default is
+300s):
 
 - News categories (World, India, Tech, Sports, Markets, Crypto, Obituaries)
   from free RSS feeds, each category as its own message
