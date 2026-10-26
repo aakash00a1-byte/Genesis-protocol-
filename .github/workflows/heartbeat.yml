@@ -5,12 +5,18 @@ name: Genesis Daily Heartbeat
 # through scripts/relay_loop.py's heartbeat mode (the HF Space itself cannot
 # reach api.telegram.org).
 #
-# The daily heartbeat is normally sent from inside the long keep-alive run
-# (RELAY_HEARTBEAT_HOURS=24). This workflow is a manual fallback so the admin
-# can trigger one on demand; it does not run on a schedule, which avoids a
-# duplicate heartbeat landing next to the in-run one.
-
+# The daily heartbeat is sent by this workflow's schedule. It used to rely on
+# the in-run heartbeat (RELAY_HEARTBEAT_HOURS=24) inside keepalive.yml, but a
+# relay run lasts only RELAY_RUN_SECONDS=19800 (5h30m), so a 24h interval could
+# never elapse and no heartbeat was ever sent. With no cron here either, the
+# documented daily heartbeat did not exist at all.
+#
+# GitHub Actions cron is UTC, so 03:30 UTC matches the documented time.
+# `concurrency` below serialises sends, so a manual dispatch cannot land next to
+# the scheduled one.
 on:
+  schedule:
+    - cron: '30 3 * * *'
   workflow_dispatch:
 
 # Serialise heartbeat sends so two triggers cannot fire at the same moment.

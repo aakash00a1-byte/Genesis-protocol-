@@ -61,9 +61,10 @@ jobs:
           RELAY_STATE_FILE: relay-state.json
           RELAY_TICK_SECONDS: "60"
           RELAY_RUN_SECONDS: "19800"
-          # Send the proactive heartbeat from inside the long run instead of a
-          # separate schedule, so it cannot be delayed by the scheduler.
-          RELAY_HEARTBEAT_HOURS: "24"
+          # Heartbeat is owned by heartbeat.yml (a daily cron). Leave this off:
+          # a relay run is only RELAY_RUN_SECONDS long, so any interval at or
+          # above 6h could never elapse and silently sent nothing.
+          RELAY_HEARTBEAT_HOURS: "0"
           # News, market and AI briefing every 45 minutes.
           NEWS_ENABLED: "1"
           NEWS_INTERVAL_SECONDS: "2700"
