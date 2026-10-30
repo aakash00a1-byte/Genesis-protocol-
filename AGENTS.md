@@ -169,7 +169,14 @@ unset the job fails loudly instead of silently skipping.
   (4000) before the guard or a command parser sees them.
 - Relay delivery is idempotent: each queued reply carries an `id`, and the
   worker persists sent ids in `RELAY_STATE_FILE` (restored via actions/cache)
-  before clearing the queue. Do not reintroduce a bare "clear after send".
+  before acknowledging. Do not reintroduce a bare "clear after send".
+- **Drains acknowledge by id, never DELETE-all.** The harness (self_improve)
+  and relay run in Actions on a different host, so they cannot take the Space's
+  `fcntl` lock. Every drain therefore does GET -> act -> `DELETE {"ids": [...]}`,
+  and the Space removes exactly those entries under `_queue_lock`
+  (`_ack_queue`). DELETE-all (`_clear_queue`) stays only for the owner `/clear`
+  path. A GET -> act -> DELETE-all would wipe an entry appended mid-drain: a
+  lost command or reply. Keep new drains on the ack-by-id path.
 - The webhook and reply-queue endpoints accept an optional shared secret
   (`TELEGRAM_WEBHOOK_SECRET`, header `X-Telegram-Bot-Api-Secret-Token`); the
   relay sends it. Set the same value on the Space and as a repo secret to turn
