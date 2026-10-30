@@ -9,7 +9,6 @@ import os
 import sys
 import json
 import hmac
-import base64
 import hashlib
 import logging
 import time
@@ -27,6 +26,7 @@ import sqlite3
 
 # Import channel isolation
 from genesis_protocol.core.channel import Channel, get_channel_isolation
+from web import security_config
 
 # ============================================================================
 # VERSION & METRICS
@@ -87,44 +87,80 @@ def get_metrics() -> Dict[str, Any]:
 app = Flask(__name__, 
             template_folder='templates',
             static_folder='static')
-app.secret_key = os.environ.get('SECRET_KEY', 'genesis-secret-key-change-in-production')
+app.secret_key = security_config.resolve_secret_key()
 app.permanent_session_lifetime = timedelta(days=7)
 
-# Mobile Bearer tokens are signed with HMAC so the server can verify it issued
-# them. A token that only *looks* like "genesis_mobile_{id}_{ts}" must not
-# authenticate anyone: without a signature, naming another user's id is enough
-# to act as that user.
-_INSECURE_SECRET_KEY = 'genesis-secret-key-change-in-production'
-_MOBILE_TOKEN_FALLBACK_KEY = base64.urlsafe_b64encode(os.urandom(32)).decode('ascii')
+# Validate the token-signing secret at import so a misconfigured production
+# deploy fails fast instead of at the first login. Resolution stays lazy (see
+# _token_signing_key) so a rotation takes effect without a restart.
+security_config.resolve_mobile_token_secret()
+
+# Mobile Bearer tokens are HMAC-signed so the server can verify it issued them.
+# A token that only *looks* like "genesis_mobile_{id}_{ts}_{sig}" must not
+# authenticate anyone: without a valid signature, naming another user's id is
+# enough to act as that user.
 
 
 def _token_signing_key() -> bytes:
     """Resolve the HMAC key for mobile tokens.
 
-    Prefer a dedicated secret. Fall back to SECRET_KEY, but never to the
-    shipped placeholder: if that is all we have, use a per-process random key
-    so a token can never be forged from a public default. Tokens then simply
-    do not survive a restart, which fails closed.
+    Production requires a dedicated, strong GENESIS_MOBILE_TOKEN_SECRET; a
+    missing one raises at import so the app fails closed rather than signing
+    with a guessable key.
     """
-    secret = os.environ.get('GENESIS_MOBILE_TOKEN_SECRET') or os.environ.get('SECRET_KEY')
-    if not secret or secret == _INSECURE_SECRET_KEY:
-        secret = _MOBILE_TOKEN_FALLBACK_KEY
-    return secret.encode()
+    return security_config.resolve_mobile_token_secret().encode()
+
+
+# Mobile tokens expire. The window is short enough to bound a leaked token and
+# long enough for a normal app session.
+MOBILE_TOKEN_TTL_SECONDS = int(os.environ.get('GENESIS_MOBILE_TOKEN_TTL', 7 * 24 * 3600))
+
+# Session invalidation epoch. A token is only accepted if it was issued at or
+# after the user's epoch. Rotation (secret change) and revocation both move the
+# epoch forward, invalidating every token minted earlier.
+_token_epochs: dict[int, int] = {}
+_epoch_lock = threading.Lock()
+
+
+def _token_epoch(user_id: int) -> int:
+    with _epoch_lock:
+        return _token_epochs.get(user_id, 0)
+
+
+def invalidate_user_tokens(user_id: int) -> int:
+    """Revoke every mobile token for ``user_id`` issued before now."""
+    epoch = int(time.time())
+    with _epoch_lock:
+        _token_epochs[user_id] = epoch
+    return epoch
+
+
+def rotate_token_epoch() -> None:
+    """Invalidate all outstanding mobile tokens after a secret rotation."""
+    now = int(time.time())
+    with _epoch_lock:
+        for uid in list(_token_epochs):
+            _token_epochs[uid] = now
 
 
 def _sign_token(user_id: int, issued_at: int) -> str:
-    """Return an unforgeable mobile token for ``user_id``."""
+    """Return an unforgeable mobile token for ``user_id``.
+
+    The signature is hex-encoded (not base64) because the token is delimited by
+    underscores: a base64url signature can itself contain ``_`` and would be
+    split into the wrong number of parts.
+    """
     payload = f"{user_id}:{issued_at}"
-    sig = hmac.new(_token_signing_key(), payload.encode(), hashlib.sha256).digest()
-    token_sig = base64.urlsafe_b64encode(sig).decode('ascii').rstrip('=')
+    token_sig = hmac.new(_token_signing_key(), payload.encode(), hashlib.sha256).hexdigest()
     return f"genesis_mobile_{user_id}_{issued_at}_{token_sig}"
 
 
-def _verify_token(token: str) -> "int | None":
+def _verify_token(token: str, now: int | None = None) -> int | None:
     """Return the user_id for a valid token, else None.
 
-    Verifies the HMAC in constant time. A token with a missing or wrong
-    signature is rejected, so a guessed id can never authenticate.
+    Rejects a token whose signature is missing/wrong (checked in constant
+    time), that is older than the TTL, or that predates the user's revocation
+    epoch. Callers still check ``is_active`` before serving the request.
     """
     if not token.startswith('genesis_mobile_'):
         return None
@@ -132,18 +168,41 @@ def _verify_token(token: str) -> "int | None":
     parts = rest.split('_')
     if len(parts) != 3:
         return None
-    user_id_str, issued_at, token_sig = parts
+    user_id_str, issued_at_str, token_sig = parts
     try:
         user_id = int(user_id_str)
+        issued_at = int(issued_at_str)
     except ValueError:
         return None
-    expected = base64.urlsafe_b64encode(
-        hmac.new(_token_signing_key(), f"{user_id}:{issued_at}".encode(),
-                 hashlib.sha256).digest()
-    ).decode('ascii').rstrip('=')
+    expected = hmac.new(_token_signing_key(), f"{user_id}:{issued_at}".encode(),
+                        hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, token_sig):
         return None
+    current = int(time.time()) if now is None else now
+    if issued_at > current:
+        return None  # clock-skewed or forged timestamp
+    if current - issued_at > MOBILE_TOKEN_TTL_SECONDS:
+        return None
+    if issued_at <= _token_epoch(user_id):
+        return None  # revoked (issued at or before the revocation epoch)
     return user_id
+
+
+def _user_is_active(user_id: int) -> bool:
+    """True only if the user exists and is active.
+
+    A revoked/deactivated account must not authenticate, even with a token that
+    was valid when it was minted.
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT is_active FROM users WHERE id = ?', (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+    except sqlite3.Error:
+        return False
+    return bool(row) and bool(row['is_active'])
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -263,15 +322,23 @@ def init_db():
         )
     ''')
     
-    # Create default admin user if not exists
+    # Provision a first administrator only from an explicit, non-default
+    # ADMIN_PASSWORD. In production a missing/default password raises instead of
+    # creating a guessable admin. An existing admin is never overwritten.
     cursor.execute('SELECT id FROM users WHERE role = "admin"')
     if not cursor.fetchone():
-        admin_hash = generate_password_hash(os.environ.get('ADMIN_PASSWORD', 'genesis-admin-2024'))
-        cursor.execute('''
-            INSERT INTO users (username, email, password_hash, role)
-            VALUES (?, ?, ?, ?)
-        ''', ('admin', 'admin@genesis.ai', admin_hash, 'admin'))
-        logger.info("Default admin user created")
+        admin_password = security_config.resolve_admin_bootstrap_password()
+        if admin_password:
+            admin_hash = generate_password_hash(admin_password)
+            cursor.execute('''
+                INSERT INTO users (username, email, password_hash, role)
+                VALUES (?, ?, ?, ?)
+            ''', ('admin', 'admin@genesis.ai', admin_hash, 'admin'))
+            logger.info("Administrator account provisioned from ADMIN_PASSWORD")
+        else:
+            logger.warning(
+                "No administrator provisioned: set ADMIN_PASSWORD to create one."
+            )
     
     conn.commit()
     conn.close()
@@ -288,7 +355,7 @@ def login_required(f):
         if auth_header.startswith('Bearer '):
             token = auth_header[7:]
             user_id = _verify_token(token)
-            if user_id is not None:
+            if user_id is not None and _user_is_active(user_id):
                 session['user_id'] = user_id
                 return f(*args, **kwargs)
         
@@ -420,6 +487,9 @@ def api_auth_register():
 @app.route('/api/auth/logout', methods=['POST'])
 def api_auth_logout():
     """Mobile API logout endpoint."""
+    # Revoke this user's outstanding tokens, then clear the session.
+    if 'user_id' in session:
+        invalidate_user_tokens(session['user_id'])
     session.clear()
     return jsonify({'success': True})
 
@@ -923,8 +993,13 @@ def api_admin_toggle_user(user_id):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('UPDATE users SET is_active = NOT is_active WHERE id = ?', (user_id,))
+    cursor.execute('SELECT is_active FROM users WHERE id = ?', (user_id,))
+    row = cursor.fetchone()
     conn.commit()
     conn.close()
+    # Deactivating an account must revoke its outstanding mobile tokens.
+    if row and not row['is_active']:
+        invalidate_user_tokens(user_id)
     return jsonify({'success': True})
 
 

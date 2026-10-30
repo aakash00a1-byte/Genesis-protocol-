@@ -11,10 +11,14 @@ services:
     region: singapore
     plan: free
     envVars:
+      - key: GENESIS_ENV
+        value: production
       - key: SECRET_KEY
         generateValue: true
+      - key: GENESIS_MOBILE_TOKEN_SECRET
+        generateValue: true
       - key: ADMIN_PASSWORD
-        value: genesis-admin-2024
+        sync: false
       - key: PORT
         value: "10000"
       - key: PYTHONUNBUFFERED

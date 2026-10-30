@@ -37,8 +37,9 @@ services:
       
       # App
       - APP_ENV=production
+      - GENESIS_ENV=production
       - APP_DEBUG=false
-      - SECRET_KEY=${SECRET_KEY:-genesis-autonomous-key}
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set to a strong random value}
       - AUTONOMOUS_MODE=true
     volumes:
       - ./data:/data

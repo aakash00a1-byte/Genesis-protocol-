@@ -17,6 +17,11 @@ from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import Flask, request, jsonify, session, render_template, redirect, url_for, Response
 
+# Make the repository root importable so the shared security configuration can
+# be loaded whether this file is run from the repo root or from web/.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from web import security_config  # noqa: E402
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -68,7 +73,7 @@ def get_metrics() -> dict:
 app = Flask(__name__, 
             template_folder='templates',
             static_folder='static')
-app.secret_key = os.environ.get('SECRET_KEY', 'genesis-secret-key-2024')
+app.secret_key = security_config.resolve_secret_key()
 app.permanent_session_lifetime = timedelta(days=7)
 
 # Database setup
@@ -118,15 +123,21 @@ def init_db():
         )
     ''')
     
-    # Create default admin user if not exists
+    # Provision a first administrator only from an explicit, non-default
+    # ADMIN_PASSWORD. In production a missing/default password raises instead of
+    # creating a guessable admin. An existing admin is never overwritten.
     cursor.execute('SELECT id FROM users WHERE role = "admin"')
     if not cursor.fetchone():
-        admin_hash = generate_password_hash(os.environ.get('ADMIN_PASSWORD', 'genesis-admin-2024'))
-        cursor.execute('''
-            INSERT INTO users (username, email, password_hash, role)
-            VALUES (?, ?, ?, ?)
-        ''', ('admin', 'admin@genesis.ai', admin_hash, 'admin'))
-        logger.info("Default admin user created")
+        admin_password = security_config.resolve_admin_bootstrap_password()
+        if admin_password:
+            admin_hash = generate_password_hash(admin_password)
+            cursor.execute('''
+                INSERT INTO users (username, email, password_hash, role)
+                VALUES (?, ?, ?, ?)
+            ''', ('admin', 'admin@genesis.ai', admin_hash, 'admin'))
+            logger.info("Administrator account provisioned from ADMIN_PASSWORD")
+        else:
+            logger.warning("No administrator provisioned: set ADMIN_PASSWORD to create one.")
     
     conn.commit()
     conn.close()
