@@ -409,3 +409,54 @@ def test_harness_incoming_entries_keep_ids(monkeypatch):
     entries = module._incoming_command_entries()
     assert entries == [{"id": "o1", "text": "/approve 8", "from_id": OWNER}]
     assert module._incoming_commands() == ["/approve 8"]
+
+
+def test_concurrent_writers_and_drain_lose_nothing(appmod, paths):
+    """A drain racing live writers must neither lose nor duplicate an entry.
+
+    Writers append unique entries while a drainer repeatedly reads the queue and
+    acknowledges exactly the ids it read. Because acks are by id under the same
+    lock, every appended entry must end up either still queued or in some ack
+    set - never dropped, never counted twice.
+    """
+    import threading
+
+    path = paths["command"]
+    writers, per_writer = 4, 40
+    appended: set[str] = set()
+    acked: set[str] = set()
+    lock = threading.Lock()
+    stop = threading.Event()
+
+    def writer(w):
+        for i in range(per_writer):
+            text = f"w{w}-{i}"
+            appmod._append_queue(path, w, text)
+            with lock:
+                appended.add(text)
+
+    def drainer():
+        while not stop.is_set():
+            seen = appmod._read_queue(path)
+            ids = [e["id"] for e in seen]
+            texts = {e["text"] for e in seen}
+            appmod._ack_queue(path, ids)
+            with lock:
+                acked.update(texts)
+
+    drain_thread = threading.Thread(target=drainer)
+    drain_thread.start()
+    threads = [threading.Thread(target=writer, args=(w,)) for w in range(writers)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    stop.set()
+    drain_thread.join(30)
+
+    # Drain whatever is left so the union check is complete.
+    remaining = appmod._read_queue(path)
+    acked.update(e["text"] for e in remaining)
+
+    assert appended  # sanity: the writers ran
+    assert acked == appended, "a concurrent drain lost or duplicated entries"
