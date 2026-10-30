@@ -1406,6 +1406,51 @@ TELEGRAM_COMMAND_QUEUE = '/tmp/telegram_command_queue.json'
 TELEGRAM_TASK_QUEUE = '/tmp/telegram_task_queue.json'
 
 
+def _configured_owner_ids():
+    """Owner Telegram user ids from TELEGRAM_ADMIN_ID. Never a default.
+
+    Comma- or semicolon-separated, so more than one owner can be configured.
+    An unset value authorises nobody.
+    """
+    raw = os.environ.get('TELEGRAM_ADMIN_ID', '')
+    return frozenset(
+        part.strip()
+        for part in raw.replace(';', ',').split(',')
+        if part.strip()
+    )
+
+
+def _sender_identity(sender):
+    """The verified Telegram user id from a message/callback ``from`` object.
+
+    Only the numeric ``id`` Telegram itself delivers is trusted. A value
+    supplied inside message text or callback data is never consulted.
+    """
+    if not isinstance(sender, dict):
+        return ''
+    sender_id = sender.get('id')
+    if isinstance(sender_id, bool):
+        return ''
+    if isinstance(sender_id, int):
+        return str(sender_id)
+    if isinstance(sender_id, str) and sender_id.strip():
+        return sender_id.strip()
+    return ''
+
+
+def _is_owner(sender):
+    """True only when the sender's verified id is a configured owner.
+
+    Fails closed: with no configured owner id nobody is an owner, so a
+    privileged command is never accepted merely because another check (such as
+    the webhook secret) is also unset.
+    """
+    identity = _sender_identity(sender)
+    if not identity:
+        return False
+    return identity in _configured_owner_ids()
+
+
 def _read_queue(path):
     """Load a queue file, treating a missing file as an empty queue.
 
@@ -1430,14 +1475,22 @@ def _read_queue(path):
     return queue
 
 
-def _append_queue(path, chat_id, text):
-    """Append one bounded entry, tagged with an id so the relay can dedup."""
+def _append_queue(path, chat_id, text, from_id=None):
+    """Append one bounded entry, tagged with an id so the relay can dedup.
+
+    ``from_id`` records the verified sender of a privileged command so a
+    downstream consumer (the self-improvement harness) can re-check it before
+    acting, without trusting the queue contents alone.
+    """
     queue = _read_queue(path)
-    queue.append({
+    entry = {
         'id': f'{chat_id}:{int(time.time() * 1000)}:{len(queue)}',
         'chat_id': chat_id,
         'text': str(text)[:4000],
-    })
+    }
+    if from_id is not None:
+        entry['from_id'] = from_id
+    queue.append(entry)
     with open(path, 'w') as f:
         json.dump(queue[-TELEGRAM_QUEUE_MAX:], f)
 
@@ -1451,8 +1504,21 @@ def _read_command_queue():
     return _read_queue(TELEGRAM_COMMAND_QUEUE)
 
 
-def _append_command(chat_id, text):
-    _append_queue(TELEGRAM_COMMAND_QUEUE, chat_id, text)
+def _append_command(chat_id, text, from_id=None):
+    """Park an owner command, re-checking the sender id at the boundary.
+
+    The webhook authorises the sender before it gets here, but this is the one
+    function every privileged command passes through, so it refuses to park a
+    command unless ``from_id`` is a configured owner. A future caller therefore
+    cannot enqueue a privileged command while skipping the check.
+    """
+    if not _is_owner({'id': from_id}):
+        logger.warning(
+            "refused to queue a privileged command: sender is not a configured owner"
+        )
+        return False
+    _append_queue(TELEGRAM_COMMAND_QUEUE, chat_id, text, from_id=from_id)
+    return True
 
 
 def _read_task_queue():
@@ -1622,8 +1688,12 @@ def _handle_callback_query(callback):
     chat_id = chat.get('id') if isinstance(chat, dict) else None
     if not isinstance(chat_id, (int, str)) or not str(chat_id).strip():
         return jsonify({'ok': True})
+    # A button tap is a privileged action: only a configured owner may use it.
+    # The sender id comes from callback.from, never from the button payload.
+    if not _is_owner(callback.get('from')):
+        return jsonify({'ok': True, 'denied': 'not-owner'})
     try:
-        _append_command(chat_id, command)
+        _append_command(chat_id, command, from_id=_sender_identity(callback.get('from')))
     except Exception as e:
         print(f"Callback command store error: {e}")
     return jsonify({'ok': True, 'queued': 'callback', 'command': command})
@@ -1633,15 +1703,17 @@ def _telegram_secret_ok():
     """Shared-secret check for the Telegram webhook and the reply queue.
 
     Set TELEGRAM_WEBHOOK_SECRET in the Space env and register it with Telegram
-    (setWebhook secret_token). If it is not configured we allow the request so
-    an existing deployment does not break, but we never trust the payload more
-    than we have to.
+    (setWebhook secret_token). This authenticates *Telegram* as the caller; it
+    is separate from owner identity, which is checked per request in the
+    webhook handler. In production the secret is required: an unset secret fails
+    closed (401) rather than leaving the endpoint open. Outside production an
+    unset secret keeps the endpoint open so an existing deployment does not
+    break.
     """
     expected = os.environ.get('TELEGRAM_WEBHOOK_SECRET', '')
     if not expected:
-        return True
+        return not security_config.is_production()
     supplied = request.headers.get('X-Telegram-Bot-Api-Secret-Token', '')
-    import hmac
     return hmac.compare_digest(str(supplied), str(expected))
 
 
@@ -1688,7 +1760,12 @@ def telegram_webhook():
         return jsonify({'ok': True})
     text = text[:4000]
     user = msg.get('from', {})
-    
+    # Owner identity is the verified sender id from the update, checked against
+    # the explicitly configured TELEGRAM_ADMIN_ID. It is never taken from the
+    # message text. A missing or non-owner sender fails closed, so no
+    # privileged command (work order or approval) is ever parked on a queue.
+    is_owner = _is_owner(user)
+
     # Owner work orders (/do, /cancel, /tasks) are handled here: the order is
     # parked on the task queue for the harness, and the owner gets an immediate
     # acknowledgement. These are not approval commands.
@@ -1696,8 +1773,12 @@ def telegram_webhook():
         from genesis_protocol.updates import is_tasks_command, parse_work_order
         work = parse_work_order(text)
         if work is not None:
+            if not is_owner:
+                return jsonify({'ok': True, 'denied': 'not-owner'})
             return _handle_work_order(chat_id, work[0], work[1])
         if is_tasks_command(text):
+            if not is_owner:
+                return jsonify({'ok': True, 'denied': 'not-owner'})
             return _handle_tasks_list(chat_id)
     except Exception as e:
         print(f"Work-order routing error: {e}")
@@ -1711,8 +1792,10 @@ def telegram_webhook():
     except Exception:
         is_command = False
     if is_command:
+        if not is_owner:
+            return jsonify({'ok': True, 'denied': 'not-owner'})
         try:
-            _append_command(chat_id, text)
+            _append_command(chat_id, text, from_id=_sender_identity(user))
         except Exception as e:
             print(f"Command queue store error: {e}")
         return jsonify({'ok': True, 'queued': 'command'})

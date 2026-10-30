@@ -22,6 +22,9 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(appmod, "TELEGRAM_TASK_QUEUE", str(tmp_path / "tasks.json"))
     monkeypatch.setattr(appmod, "TELEGRAM_REPLY_QUEUE", str(tmp_path / "replies.json"))
     monkeypatch.setattr(appmod, "TELEGRAM_COMMAND_QUEUE", str(tmp_path / "commands.json"))
+    # Work orders are privileged: only a configured owner may park one. The
+    # sender in _msg below is the owner, so these tests exercise the owner path.
+    monkeypatch.setenv("TELEGRAM_ADMIN_ID", "1863492058")
     appmod.app.config["TESTING"] = True
     return appmod.app.test_client()
 

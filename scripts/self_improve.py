@@ -608,12 +608,45 @@ def _transport():
         return None
 
 
+def _configured_owner_ids() -> set[str]:
+    """Owner Telegram user ids from TELEGRAM_ADMIN_ID. An unset value is empty."""
+    raw = os.environ.get("TELEGRAM_ADMIN_ID", "")
+    return {
+        part.strip()
+        for part in raw.replace(";", ",").split(",")
+        if part.strip()
+    }
+
+
+def _entry_is_owner(entry: object) -> bool:
+    """True only when a queued command carries a configured owner sender id.
+
+    Defence in depth: the Space webhook already authorises the sender before it
+    parks a command, but the harness owns the queue and must not act on an entry
+    that does not carry a verified owner id. An entry with no recorded sender,
+    or one that is not a configured owner, is refused here as well.
+    """
+    if not isinstance(entry, dict):
+        return False
+    sender = entry.get("from_id")
+    if isinstance(sender, bool):
+        return False
+    if isinstance(sender, int):
+        sender = str(sender)
+    elif not isinstance(sender, str):
+        return False
+    sender = sender.strip()
+    return bool(sender) and sender in _configured_owner_ids()
+
+
 def _incoming_commands() -> list[str]:
     """Owner commands parked by the Space webhook, without consuming them.
 
     The webhook routes ``/approve``-style text to the command queue and the
     harness owns that queue: it reads here, acts, then clears. The reply queue
-    is untouched (the relay still delivers ordinary replies).
+    is untouched (the relay still delivers ordinary replies). Only entries that
+    carry a configured owner sender id are returned; anything else is refused
+    and never reaches the approval/merge path.
     """
     raw = _space_get(f"{HF_SPACE_URL}/api/telegram/commands")
     if raw is None:
@@ -627,11 +660,15 @@ def _incoming_commands() -> list[str]:
     commands = payload.get("commands") if isinstance(payload, dict) else None
     if not isinstance(commands, list):
         return []
-    return [
-        entry["text"]
-        for entry in commands
-        if isinstance(entry, dict) and isinstance(entry.get("text"), str)
-    ]
+    texts: list[str] = []
+    for entry in commands:
+        if not isinstance(entry, dict) or not isinstance(entry.get("text"), str):
+            continue
+        if not _entry_is_owner(entry):
+            _log("refused a queued command without a configured owner sender")
+            continue
+        texts.append(entry["text"])
+    return texts
 
 
 def _clear_commands() -> None:
