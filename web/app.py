@@ -13,6 +13,10 @@ import hashlib
 import logging
 import time
 import threading
+import contextlib
+import errno
+import fcntl
+import tempfile
 from datetime import datetime, timedelta
 from functools import wraps
 from typing import Optional, Dict, Any
@@ -1396,6 +1400,11 @@ def api_debug_telegram():
 
 TELEGRAM_REPLY_QUEUE = '/tmp/telegram_reply_queue.json'
 TELEGRAM_QUEUE_MAX = 200  # bound so the file cannot grow without limit
+# How long a writer waits for the cross-process queue lock before it refuses to
+# write. Bounded so a stuck holder cannot hang a request thread indefinitely; a
+# timeout surfaces as a raised error (never a silent success). Tests shrink this
+# to exercise the timeout path.
+TELEGRAM_QUEUE_LOCK_TIMEOUT = 5.0
 # Owner commands (/approve, /reject, /updates) are parked here, separate from
 # the reply queue: the relay sends replies, but only the self-improvement
 # harness acts on commands, so a command must not be rendered as a reply.
@@ -1475,29 +1484,165 @@ def _read_queue(path):
     return queue
 
 
+def _quarantine_corrupt_queue(path):
+    """Move an unreadable queue aside so its bytes are preserved, not lost.
+
+    Returns the backup path. Raises OSError if it cannot be moved, so a caller
+    refuses to overwrite data it could not preserve rather than discarding it.
+    """
+    backup = f'{path}.corrupt-{int(time.time())}'
+    os.replace(path, backup)
+    return backup
+
+
+def _load_queue_for_write(path):
+    """Load a queue for a read-modify-write without discarding bad data.
+
+    Unlike :func:`_read_queue` (which returns [] so a GET cannot take the app
+    down), a corrupt file here is not quietly overwritten: its bytes are moved
+    aside to a ``.corrupt-<ts>`` sibling and logged, then the queue restarts
+    empty. A missing file is simply an empty queue. If the corrupt file cannot
+    be moved aside, the error propagates so the caller refuses to clobber it.
+    """
+    try:
+        with open(path) as f:
+            queue = json.load(f)
+    except FileNotFoundError:
+        return []
+    except Exception as e:
+        backup = _quarantine_corrupt_queue(path)
+        logger.error(
+            "queue %s unreadable (%s: %s); moved aside to %s",
+            path, type(e).__name__, e, backup,
+        )
+        return []
+    if not isinstance(queue, list):
+        backup = _quarantine_corrupt_queue(path)
+        logger.error(
+            "queue %s was not a list (%s); moved aside to %s",
+            path, type(queue).__name__, backup,
+        )
+        return []
+    return queue
+
+
+class QueueLockError(RuntimeError):
+    """Raised when the cross-process queue lock cannot be acquired in time."""
+
+
+# Serialises read-modify-write on one queue inside this process. The file lock
+# below is the cross-process guard; this lock is the thread guard, so two
+# threads do not both race for the file lock and a re-entrant call cannot
+# deadlock on the same thread.
+_QUEUE_LOCKS = {}
+_QUEUE_LOCKS_GUARD = threading.Lock()
+
+
+def _thread_lock(path):
+    with _QUEUE_LOCKS_GUARD:
+        lock = _QUEUE_LOCKS.get(path)
+        if lock is None:
+            lock = threading.RLock()
+            _QUEUE_LOCKS[path] = lock
+        return lock
+
+
+@contextlib.contextmanager
+def _queue_lock(path, timeout=None):
+    """Hold an exclusive lock on ``path.lock`` across a read-modify-write.
+
+    fcntl.flock is advisory and released automatically when the process dies,
+    so a crashed writer cannot leave the queue permanently locked. The
+    thread-level lock is taken first so threads in this process queue up
+    before they contend for the file lock.
+
+    A timeout raises QueueLockError rather than proceeding, so a caller can
+    never mistake a failed lock for a successful write.
+    """
+    if timeout is None:
+        timeout = TELEGRAM_QUEUE_LOCK_TIMEOUT
+    with _thread_lock(path):
+        lock_path = path + '.lock'
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        except OSError as e:
+            raise QueueLockError(f'cannot open queue lock {lock_path}: {e}') from e
+        acquired = False
+        try:
+            deadline = time.monotonic() + timeout
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    acquired = True
+                    break
+                except OSError as e:
+                    if e.errno not in (errno.EACCES, errno.EAGAIN):
+                        raise QueueLockError(
+                            f'cannot lock queue {lock_path}: {e}'
+                        ) from e
+                    if time.monotonic() >= deadline:
+                        raise QueueLockError(
+                            f'timed out after {timeout}s waiting for {lock_path}'
+                        ) from e
+                    time.sleep(0.02)
+            yield
+        finally:
+            if acquired:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                except OSError:
+                    pass
+            os.close(fd)
+
+
+def _write_queue(path, queue):
+    """Replace a queue file atomically, never exposing a partial file.
+
+    A plain open(path, 'w') truncates first, so a crash or a full disk mid-write
+    leaves invalid JSON that the next read discards. Writing a sibling temp file
+    in the same directory, flushing and fsync-ing it, then os.replace()-ing it
+    onto the target means a reader sees either the whole old queue or the whole
+    new one. os.replace is atomic within a filesystem, hence "same directory".
+    """
+    directory = os.path.dirname(path) or '.'
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix='.queue-', suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(queue, f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def _append_queue(path, chat_id, text, from_id=None):
-    """Append one bounded entry, tagged with an id so the relay can dedup.
+    """Append one bounded entry under the lock, tagged with an id to dedup.
 
     ``from_id`` records the verified sender of a privileged command so a
     downstream consumer (the self-improvement harness) can re-check it before
     acting, without trusting the queue contents alone.
     """
-    queue = _read_queue(path)
-    entry = {
-        'id': f'{chat_id}:{int(time.time() * 1000)}:{len(queue)}',
-        'chat_id': chat_id,
-        'text': str(text)[:4000],
-    }
-    if from_id is not None:
-        entry['from_id'] = from_id
-    queue.append(entry)
-    with open(path, 'w') as f:
-        json.dump(queue[-TELEGRAM_QUEUE_MAX:], f)
+    with _queue_lock(path):
+        queue = _load_queue_for_write(path)
+        entry = {
+            'id': f'{chat_id}:{int(time.time() * 1000)}:{len(queue)}',
+            'chat_id': chat_id,
+            'text': str(text)[:4000],
+        }
+        if from_id is not None:
+            entry['from_id'] = from_id
+        queue.append(entry)
+        _write_queue(path, queue[-TELEGRAM_QUEUE_MAX:])
 
 
 def _clear_queue(path):
-    with open(path, 'w') as f:
-        json.dump([], f)
+    with _queue_lock(path):
+        _write_queue(path, [])
 
 
 def _read_command_queue():
@@ -1526,25 +1671,25 @@ def _read_task_queue():
 
 
 def _append_task(order):
-    queue = _read_task_queue()
-    queue.append(order)
-    with open(TELEGRAM_TASK_QUEUE, 'w') as f:
-        json.dump(queue[-TELEGRAM_QUEUE_MAX:], f)
+    with _queue_lock(TELEGRAM_TASK_QUEUE):
+        queue = _load_queue_for_write(TELEGRAM_TASK_QUEUE)
+        queue.append(order)
+        _write_queue(TELEGRAM_TASK_QUEUE, queue[-TELEGRAM_QUEUE_MAX:])
 
 
 def _update_task(order_id, **changes):
     """Patch one work order in place; returns the updated order or None."""
-    queue = _read_task_queue()
-    updated = None
-    for order in queue:
-        if isinstance(order, dict) and str(order.get('id')) == str(order_id):
-            order.update({k: v for k, v in changes.items() if v is not None})
-            updated = order
-            break
-    if updated is not None:
-        with open(TELEGRAM_TASK_QUEUE, 'w') as f:
-            json.dump(queue[-TELEGRAM_QUEUE_MAX:], f)
-    return updated
+    with _queue_lock(TELEGRAM_TASK_QUEUE):
+        queue = _load_queue_for_write(TELEGRAM_TASK_QUEUE)
+        updated = None
+        for order in queue:
+            if isinstance(order, dict) and str(order.get('id')) == str(order_id):
+                order.update({k: v for k, v in changes.items() if v is not None})
+                updated = order
+                break
+        if updated is not None:
+            _write_queue(TELEGRAM_TASK_QUEUE, queue[-TELEGRAM_QUEUE_MAX:])
+        return updated
 
 
 def _handle_work_order(chat_id, verb, arg):
@@ -1569,8 +1714,9 @@ def _handle_work_order(chat_id, verb, arg):
         try:
             _append_task(order.to_dict())
         except Exception as e:
+            # The order was not durably parked; do not acknowledge it as queued.
             print(f"Task queue store error: {e}")
-            return jsonify({'ok': True})
+            return jsonify({'ok': False, 'error': 'work order not queued'}), 500
         _append_reply(
             chat_id,
             f"🛠️ Work order #{order_id} mil gaya. Genesis agent ispe kaam karega "
@@ -1586,7 +1732,11 @@ def _handle_work_order(chat_id, verb, arg):
     if target is None:
         _append_reply(chat_id, f"Work order '{arg}' nahi mila. /tasks se dekho.")
         return jsonify({'ok': True})
-    _update_task(target.id, state='cancelled')
+    try:
+        _update_task(target.id, state='cancelled')
+    except Exception as e:
+        print(f"Task queue store error: {e}")
+        return jsonify({'ok': False, 'error': 'cancel not stored'}), 500
     _append_reply(chat_id, f"🚫 Work order #{target.id} cancel kar diya.")
     return jsonify({'ok': True, 'queued': 'cancel'})
 
@@ -1696,6 +1846,7 @@ def _handle_callback_query(callback):
         _append_command(chat_id, command, from_id=_sender_identity(callback.get('from')))
     except Exception as e:
         print(f"Callback command store error: {e}")
+        return jsonify({'ok': False, 'error': 'callback not queued'}), 500
     return jsonify({'ok': True, 'queued': 'callback', 'command': command})
 
 
@@ -1722,8 +1873,17 @@ def _read_reply_queue():
 
 
 def _append_reply(chat_id, text):
-    """Append one validated reply, bounded, tagged with an id for dedup."""
-    _append_queue(TELEGRAM_REPLY_QUEUE, chat_id, text)
+    """Append one validated reply, bounded, tagged with an id for dedup.
+
+    Replies are best-effort: a reply that cannot be stored (for example a lock
+    timeout) must not fail the request that already stored the authoritative
+    command, so a write error is logged and swallowed here. Command and task
+    queues do not swallow errors.
+    """
+    try:
+        _append_queue(TELEGRAM_REPLY_QUEUE, chat_id, text)
+    except Exception as e:  # noqa: BLE001 - a lost reply must not 500 a handled request
+        print(f"Reply queue store error: {e}")
 
 
 @app.route('/api/telegram/webhook', methods=['POST'])
@@ -1797,7 +1957,10 @@ def telegram_webhook():
         try:
             _append_command(chat_id, text, from_id=_sender_identity(user))
         except Exception as e:
+            # Never report a queued command that was not durably stored: a lost
+            # /approve must surface as an error, not a silent success.
             print(f"Command queue store error: {e}")
+            return jsonify({'ok': False, 'error': 'command not queued'}), 500
         return jsonify({'ok': True, 'queued': 'command'})
 
     # Multi-LLM council: /council <question> asks several models at once and
