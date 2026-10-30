@@ -8,6 +8,9 @@ Channel isolation: Web users ONLY receive web responses.
 import os
 import sys
 import json
+import hmac
+import base64
+import hashlib
 import logging
 import time
 import threading
@@ -86,6 +89,61 @@ app = Flask(__name__,
             static_folder='static')
 app.secret_key = os.environ.get('SECRET_KEY', 'genesis-secret-key-change-in-production')
 app.permanent_session_lifetime = timedelta(days=7)
+
+# Mobile Bearer tokens are signed with HMAC so the server can verify it issued
+# them. A token that only *looks* like "genesis_mobile_{id}_{ts}" must not
+# authenticate anyone: without a signature, naming another user's id is enough
+# to act as that user.
+_INSECURE_SECRET_KEY = 'genesis-secret-key-change-in-production'
+_MOBILE_TOKEN_FALLBACK_KEY = base64.urlsafe_b64encode(os.urandom(32)).decode('ascii')
+
+
+def _token_signing_key() -> bytes:
+    """Resolve the HMAC key for mobile tokens.
+
+    Prefer a dedicated secret. Fall back to SECRET_KEY, but never to the
+    shipped placeholder: if that is all we have, use a per-process random key
+    so a token can never be forged from a public default. Tokens then simply
+    do not survive a restart, which fails closed.
+    """
+    secret = os.environ.get('GENESIS_MOBILE_TOKEN_SECRET') or os.environ.get('SECRET_KEY')
+    if not secret or secret == _INSECURE_SECRET_KEY:
+        secret = _MOBILE_TOKEN_FALLBACK_KEY
+    return secret.encode()
+
+
+def _sign_token(user_id: int, issued_at: int) -> str:
+    """Return an unforgeable mobile token for ``user_id``."""
+    payload = f"{user_id}:{issued_at}"
+    sig = hmac.new(_token_signing_key(), payload.encode(), hashlib.sha256).digest()
+    token_sig = base64.urlsafe_b64encode(sig).decode('ascii').rstrip('=')
+    return f"genesis_mobile_{user_id}_{issued_at}_{token_sig}"
+
+
+def _verify_token(token: str) -> "int | None":
+    """Return the user_id for a valid token, else None.
+
+    Verifies the HMAC in constant time. A token with a missing or wrong
+    signature is rejected, so a guessed id can never authenticate.
+    """
+    if not token.startswith('genesis_mobile_'):
+        return None
+    rest = token[len('genesis_mobile_'):]
+    parts = rest.split('_')
+    if len(parts) != 3:
+        return None
+    user_id_str, issued_at, token_sig = parts
+    try:
+        user_id = int(user_id_str)
+    except ValueError:
+        return None
+    expected = base64.urlsafe_b64encode(
+        hmac.new(_token_signing_key(), f"{user_id}:{issued_at}".encode(),
+                 hashlib.sha256).digest()
+    ).decode('ascii').rstrip('=')
+    if not hmac.compare_digest(expected, token_sig):
+        return None
+    return user_id
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -229,17 +287,10 @@ def login_required(f):
         auth_header = request.headers.get('Authorization', '')
         if auth_header.startswith('Bearer '):
             token = auth_header[7:]
-            # Validate token format: genesis_mobile_{user_id}_{timestamp}
-            if token.startswith('genesis_mobile_'):
-                parts = token.split('_')
-                if len(parts) >= 3:
-                    try:
-                        user_id = int(parts[2])
-                        # Set session user_id for downstream code
-                        session['user_id'] = user_id
-                        return f(*args, **kwargs)
-                    except ValueError:
-                        pass
+            user_id = _verify_token(token)
+            if user_id is not None:
+                session['user_id'] = user_id
+                return f(*args, **kwargs)
         
         # Fall back to session check
         if 'user_id' not in session:
@@ -304,7 +355,7 @@ def api_auth_login():
     session['role'] = user['role']
     
     # Generate token for mobile auth
-    token = f"genesis_mobile_{user['id']}_{int(time.time())}"
+    token = _sign_token(user['id'], int(time.time()))
     
     return jsonify({
         'success': True,
@@ -350,7 +401,7 @@ def api_auth_register():
         session['username'] = username
         session['role'] = 'user'
         
-        token = f"genesis_mobile_{user_id}_{int(time.time())}"
+        token = _sign_token(user_id, int(time.time()))
         
         return jsonify({
             'success': True,
