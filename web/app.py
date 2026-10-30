@@ -115,32 +115,87 @@ def _token_signing_key() -> bytes:
 # long enough for a normal app session.
 MOBILE_TOKEN_TTL_SECONDS = int(os.environ.get('GENESIS_MOBILE_TOKEN_TTL', 7 * 24 * 3600))
 
-# Session invalidation epoch. A token is only accepted if it was issued at or
-# after the user's epoch. Rotation (secret change) and revocation both move the
-# epoch forward, invalidating every token minted earlier.
+# Token invalidation epoch. A token is only accepted if it was issued strictly
+# after the user's epoch, so revocation (logout, deactivation) and a global
+# secret rotation move the epoch forward and invalidate every token minted
+# earlier. The epoch is persisted in the database so revocation survives a
+# restart; an in-memory cache keeps the common read path off the database.
 _token_epochs: dict[int, int] = {}
 _epoch_lock = threading.Lock()
+_global_epoch = 0
+
+
+def _epoch_from_db(user_id: int) -> "int | None":
+    """Read a persisted revocation epoch, or None if absent/unreadable."""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT invalid_before FROM token_epochs WHERE user_id = ?', (user_id,)
+        )
+        row = cursor.fetchone()
+        conn.close()
+    except sqlite3.Error:
+        return None
+    return int(row['invalid_before']) if row is not None else None
 
 
 def _token_epoch(user_id: int) -> int:
+    """Return the user's revocation epoch, preferring the durable value."""
+    stored = _epoch_from_db(user_id)
+    if stored is not None:
+        return stored
     with _epoch_lock:
         return _token_epochs.get(user_id, 0)
 
 
+def _global_token_epoch() -> int:
+    """Return the global revocation epoch, preferring the durable value."""
+    stored = _epoch_from_db(-1)
+    return stored if stored is not None else _global_epoch
+
+
 def invalidate_user_tokens(user_id: int) -> int:
-    """Revoke every mobile token for ``user_id`` issued before now."""
+    """Revoke every mobile token for ``user_id`` issued before now.
+
+    Persisted so the revocation outlives the process.
+    """
     epoch = int(time.time())
     with _epoch_lock:
         _token_epochs[user_id] = epoch
+    try:
+        conn = get_db()
+        conn.execute(
+            'INSERT INTO token_epochs (user_id, invalid_before) VALUES (?, ?) '
+            'ON CONFLICT(user_id) DO UPDATE SET invalid_before = excluded.invalid_before',
+            (user_id, epoch),
+        )
+        conn.commit()
+        conn.close()
+    except sqlite3.Error:
+        logger.warning("Token revocation for user %s could not be persisted", user_id)
     return epoch
 
 
 def rotate_token_epoch() -> None:
     """Invalidate all outstanding mobile tokens after a secret rotation."""
+    global _global_epoch
     now = int(time.time())
     with _epoch_lock:
+        _global_epoch = now
         for uid in list(_token_epochs):
             _token_epochs[uid] = now
+    try:
+        conn = get_db()
+        conn.execute(
+            'INSERT INTO token_epochs (user_id, invalid_before) VALUES (-1, ?) '
+            'ON CONFLICT(user_id) DO UPDATE SET invalid_before = excluded.invalid_before',
+            (now,),
+        )
+        conn.commit()
+        conn.close()
+    except sqlite3.Error:
+        logger.warning("Global token epoch rotation could not be persisted")
 
 
 def _sign_token(user_id: int, issued_at: int) -> str:
@@ -185,24 +240,32 @@ def _verify_token(token: str, now: int | None = None) -> int | None:
         return None
     if issued_at <= _token_epoch(user_id):
         return None  # revoked (issued at or before the revocation epoch)
+    if issued_at <= _global_token_epoch():
+        return None  # invalidated by a global token-epoch rotation
     return user_id
 
 
-def _user_is_active(user_id: int) -> bool:
-    """True only if the user exists and is active.
+def _user_auth_state(user_id: int) -> "sqlite3.Row | None":
+    """Return the authenticated user's server-side row, or None.
 
-    A revoked/deactivated account must not authenticate, even with a token that
-    was valid when it was minted.
+    A token is only an identity claim. The role and active flag must come from
+    the database, never from the token or the request, so a caller cannot grant
+    itself privileges by changing what it sends. Any lookup error fails closed.
     """
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT is_active FROM users WHERE id = ?', (user_id,))
+        cursor.execute(
+            'SELECT id, username, role, is_active FROM users WHERE id = ?',
+            (user_id,),
+        )
         row = cursor.fetchone()
         conn.close()
     except sqlite3.Error:
-        return False
-    return bool(row) and bool(row['is_active'])
+        return None
+    if row is None or not row['is_active']:
+        return None
+    return row
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -321,6 +384,16 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     ''')
+
+    # Token revocation epochs. Persisting these makes revocation survive a
+    # restart: an in-memory-only set would silently un-revoke every token when
+    # the process restarts.
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS token_epochs (
+            user_id INTEGER PRIMARY KEY,
+            invalid_before INTEGER NOT NULL
+        )
+    ''')
     
     # Provision a first administrator only from an explicit, non-default
     # ADMIN_PASSWORD. In production a missing/default password raises instead of
@@ -350,15 +423,25 @@ def login_required(f):
     """Decorator to require login - supports both session and Bearer token auth."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # Check for Bearer token in Authorization header
+        # A Bearer token is authoritative when present. The caller is identified
+        # and authorised from the token plus the database, never from a cookie
+        # that may belong to a different user. A bad token is a hard failure,
+        # not a silent fallback to the session.
         auth_header = request.headers.get('Authorization', '')
         if auth_header.startswith('Bearer '):
             token = auth_header[7:]
             user_id = _verify_token(token)
-            if user_id is not None and _user_is_active(user_id):
-                session['user_id'] = user_id
-                return f(*args, **kwargs)
-        
+            user = _user_auth_state(user_id) if user_id is not None else None
+            if user is None:
+                if request.is_json or request.path.startswith('/api/'):
+                    return jsonify({'error': 'Unauthorized', 'login_required': True}), 401
+                return redirect(url_for('login'))
+            session.clear()
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['role'] = user['role']
+            return f(*args, **kwargs)
+
         # Fall back to session check
         if 'user_id' not in session:
             if request.is_json or request.path.startswith('/api/'):
@@ -368,9 +451,25 @@ def login_required(f):
     return decorated_function
 
 def admin_required(f):
-    """Decorator to require admin role."""
+    """Decorator to require admin role.
+
+    Bearer tokens are accepted on the same terms as ``login_required`` so a
+    mobile client cannot reach an admin route by a different path, and the role
+    is always read from the database rather than trusted from the caller.
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            user_id = _verify_token(auth_header[7:])
+            user = _user_auth_state(user_id) if user_id is not None else None
+            if user is None:
+                return jsonify({'error': 'Unauthorized'}), 401
+            session.clear()
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['role'] = user['role']
+
         if 'user_id' not in session:
             if request.is_json:
                 return jsonify({'error': 'Unauthorized'}), 401
@@ -487,9 +586,18 @@ def api_auth_register():
 @app.route('/api/auth/logout', methods=['POST'])
 def api_auth_logout():
     """Mobile API logout endpoint."""
-    # Revoke this user's outstanding tokens, then clear the session.
-    if 'user_id' in session:
-        invalidate_user_tokens(session['user_id'])
+    # Mobile clients authenticate with a Bearer token and have no session, so
+    # revoke the identity proven by the presented token; fall back to the
+    # session user for browser callers. Without this, a mobile logout would
+    # leave the token valid.
+    user_id = None
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        user_id = _verify_token(auth_header[7:])
+    if user_id is None:
+        user_id = session.get('user_id')
+    if user_id is not None:
+        invalidate_user_tokens(user_id)
     session.clear()
     return jsonify({'success': True})
 
