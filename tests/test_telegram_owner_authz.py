@@ -267,7 +267,7 @@ def test_harness_never_merges_for_a_non_owner_entry(monkeypatch):
     monkeypatch.setenv("TELEGRAM_ADMIN_ID", OWNER)
     payload = {"commands": [{"text": "/approve 7", "from_id": STRANGER}]}
     monkeypatch.setattr(module, "_space_get", lambda url: json.dumps(payload))
-    monkeypatch.setattr(module, "_clear_commands", lambda: None)
+    monkeypatch.setattr(module, "_ack_commands", lambda ids: None)
     monkeypatch.setattr(module, "_notify", lambda *a, **k: None)
 
     merged: list[str] = []

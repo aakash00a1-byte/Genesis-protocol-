@@ -270,3 +270,142 @@ def test_harness_rejects_unauthorized_queued_entry(monkeypatch):
     }
     monkeypatch.setattr(module, "_space_get", lambda url: json.dumps(payload))
     assert module._incoming_commands() == ["/approve 8"]
+
+
+# ---------------------------------------------------------------------------
+# Drain by id: a writer racing a drain must never lose an entry
+# ---------------------------------------------------------------------------
+def test_ack_queue_removes_only_acknowledged_ids(appmod, paths):
+    path = paths["command"]
+    for text in ("a", "b", "c"):
+        appmod._append_queue(path, OWNER, text)
+    ids = [e["id"] for e in _read(path)]
+    removed = appmod._ack_queue(path, [ids[0], ids[2]])
+    assert removed == 2
+    assert [e["text"] for e in _read(path)] == ["b"]
+
+
+def test_ack_queue_unknown_id_is_harmless(appmod, paths):
+    path = paths["command"]
+    appmod._append_queue(path, OWNER, "keep")
+    assert appmod._ack_queue(path, ["does-not-exist"]) == 0
+    assert [e["text"] for e in _read(path)] == ["keep"]
+
+
+def test_ack_queue_empty_ids_is_noop(appmod, paths):
+    path = paths["command"]
+    appmod._append_queue(path, OWNER, "keep")
+    assert appmod._ack_queue(path, []) == 0
+    assert [e["text"] for e in _read(path)] == ["keep"]
+
+
+def test_entry_appended_during_drain_survives_ack(appmod, paths):
+    """The lost-entry race: a command arriving mid-drain must not be wiped.
+
+    The drain reads the queue, acts, then acknowledges the ids it saw. An entry
+    appended after the read is not in the ack set, so it must remain for the
+    next tick instead of being cleared with the batch.
+    """
+    path = paths["command"]
+    appmod._append_queue(path, OWNER, "old")
+    drained_ids = [e["id"] for e in appmod._read_queue(path)]  # what the drain saw
+    appmod._append_queue(path, OWNER, "new")  # arrives while the drain works
+    appmod._ack_queue(path, drained_ids)
+    remaining = [e["text"] for e in _read(path)]
+    assert remaining == ["new"]
+
+
+def test_drain_endpoint_acks_by_id_and_keeps_new(appmod, client, paths, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_ID", OWNER)
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "s3cret")
+    header = {"X-Telegram-Bot-Api-Secret-Token": "s3cret"}
+
+    # Owner queues one command; the harness reads it.
+    client.post("/api/telegram/webhook", json=_msg("/approve 7"), headers=header)
+    first = client.get("/api/telegram/commands", headers=header).get_json()["commands"]
+    assert len(first) == 1
+
+    # A second command arrives while the harness is acting on the first.
+    client.post("/api/telegram/webhook", json=_msg("/reject 8"), headers=header)
+
+    # The harness acknowledges only what it read.
+    resp = client.delete(
+        "/api/telegram/commands", json={"ids": [first[0]["id"]]}, headers=header
+    )
+    assert resp.get_json()["removed"] == 1
+    remaining = client.get("/api/telegram/commands", headers=header).get_json()["commands"]
+    assert [e["text"] for e in remaining] == ["/reject 8"]
+
+
+def test_drain_endpoint_without_body_still_clears_all(appmod, client, paths, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_ID", OWNER)
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "s3cret")
+    header = {"X-Telegram-Bot-Api-Secret-Token": "s3cret"}
+    client.post("/api/telegram/webhook", json=_msg("/approve 7"), headers=header)
+    resp = client.delete("/api/telegram/commands", headers=header)
+    assert resp.get_json()["cleared"] is True
+    assert client.get("/api/telegram/commands", headers=header).get_json()["commands"] == []
+
+
+def test_drain_endpoint_requires_auth(appmod, client, paths, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "s3cret")
+    assert client.delete("/api/telegram/commands", json={"ids": ["x"]}).status_code == 401
+
+
+def test_drain_endpoint_rejects_non_list_ids(appmod, client, paths, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "s3cret")
+    header = {"X-Telegram-Bot-Api-Secret-Token": "s3cret"}
+    resp = client.delete("/api/telegram/commands", json={"ids": "nope"}, headers=header)
+    assert resp.status_code == 400
+
+
+def test_reply_drain_acks_only_sent_ids(appmod, client, paths, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "s3cret")
+    header = {"X-Telegram-Bot-Api-Secret-Token": "s3cret"}
+    appmod._append_queue(paths["reply"], OWNER, "r1")
+    seen = appmod._read_reply_queue()
+    appmod._append_queue(paths["reply"], OWNER, "r2")  # arrives mid-drain
+    resp = client.delete(
+        "/api/telegram/queue", json={"ids": [seen[0]["id"]]}, headers=header
+    )
+    assert resp.get_json()["removed"] == 1
+    left = client.get("/api/telegram/queue", headers=header).get_json()["replies"]
+    assert [e["text"] for e in left] == ["r2"]
+
+
+def test_harness_ack_commands_sends_ids_not_a_clear(monkeypatch):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("self_improve", ROOT / "scripts" / "self_improve.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    calls: list[tuple] = []
+    monkeypatch.setattr(module, "_space_send", lambda *a, **k: calls.append((a, k)))
+    module._ack_commands(["1", "2"])
+    assert calls, "ack must call the Space"
+    args, kwargs = calls[0]
+    assert args[0] == "DELETE"
+    assert args[2] == {"ids": ["1", "2"]}
+    # Nothing to ack means no call at all.
+    calls.clear()
+    module._ack_commands([])
+    assert calls == []
+
+
+def test_harness_incoming_entries_keep_ids(monkeypatch):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("self_improve", ROOT / "scripts" / "self_improve.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setenv("TELEGRAM_ADMIN_ID", OWNER)
+    payload = {
+        "commands": [
+            {"id": "s1", "text": "/approve 7", "from_id": STRANGER},
+            {"id": "o1", "text": "/approve 8", "from_id": OWNER},
+        ]
+    }
+    monkeypatch.setattr(module, "_space_get", lambda url: json.dumps(payload))
+    entries = module._incoming_command_entries()
+    assert entries == [{"id": "o1", "text": "/approve 8", "from_id": OWNER}]
+    assert module._incoming_commands() == ["/approve 8"]

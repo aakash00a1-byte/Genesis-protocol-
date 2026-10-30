@@ -248,6 +248,21 @@ def _post(url: str, payload: dict, timeout: int = 60) -> bytes | None:
         return None
 
 
+def _delete(url: str, payload: dict, timeout: int = 20) -> bytes | None:
+    try:
+        req = urllib.request.Request(  # noqa: S310
+            url,
+            data=json.dumps(payload).encode(),
+            method="DELETE",
+            headers={**_headers(), "Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            return resp.read()
+    except Exception as exc:  # noqa: BLE001 - ids are persisted, so a failed ack is not fatal
+        _log(f"DELETE {_redact(url)} failed: {_reason(exc)}")
+        return None
+
+
 def keep_awake() -> bool:
     """Best-effort HTTP ping. True means the Space answered, nothing more."""
     return _get(f"{HF_SPACE_URL}/", timeout=60) is not None
@@ -332,6 +347,7 @@ def relay_once() -> int:
     seen = _load_seen()
     sent = 0
     attempted = 0
+    sent_ids: list[str] = []
     for entry in replies:
         parsed = _valid_reply(entry)
         if parsed is None:
@@ -348,23 +364,19 @@ def relay_once() -> int:
         attempted += 1
         if _telegram_send(chat_id, text):
             seen.add(reply_id)
+            sent_ids.append(reply_id)
             sent += 1
 
     if sent:
-        # Persist first, then clear: if the clear fails we still will not
-        # re-send, because the ids are already recorded.
+        # Persist first, then acknowledge: if the ack fails we still will not
+        # re-send, because the ids are already recorded. Only the ids we sent
+        # are acknowledged, so a reply queued while we were sending survives to
+        # the next tick instead of being cleared with the batch.
         _save_seen(seen)
-        req = urllib.request.Request(
+        _delete(
             f"{HF_SPACE_URL}/api/telegram/queue",
-            method="DELETE",
-            headers=_headers(),
+            {"ids": sent_ids},
         )
-        try:
-            urllib.request.urlopen(req, timeout=20).read()  # noqa: S310
-        except Exception as exc:  # noqa: BLE001 - ids are persisted, so no re-send
-            # Not fatal (delivery is idempotent), but a queue that never clears
-            # is re-fetched every tick, so say why instead of hiding it.
-            _log(f"queue clear failed: {_reason(exc)}")
     _log(f"relayed {sent}/{len(replies)} queued replies")
     return sent
 

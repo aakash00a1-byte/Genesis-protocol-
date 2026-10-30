@@ -1645,6 +1645,31 @@ def _clear_queue(path):
         _write_queue(path, [])
 
 
+def _ack_queue(path, ack_ids):
+    """Remove exactly the acknowledged entries under the same queue lock.
+
+    A drain runs on a different host (GitHub Actions), so it cannot hold the
+    fcntl lock itself; instead it reports which ids it acted on and the removal
+    happens here, inside the lock, as one read-modify-write. An entry appended
+    while the drain was working is therefore never in ``ack_ids`` and is kept,
+    which is what stops a concurrent writer and a drain from losing entries.
+
+    ``ack_ids`` is normalised to a set of strings. Only ids that are present are
+    removed; unknown ids are ignored, so a retried ack is harmless. Returns the
+    number of entries removed.
+    """
+    wanted = {str(i) for i in ack_ids if i is not None and str(i).strip()}
+    if not wanted:
+        return 0
+    with _queue_lock(path):
+        queue = _load_queue_for_write(path)
+        kept = [e for e in queue if not (isinstance(e, dict) and str(e.get('id')) in wanted)]
+        removed = len(queue) - len(kept)
+        if removed:
+            _write_queue(path, kept)
+        return removed
+
+
 def _read_command_queue():
     return _read_queue(TELEGRAM_COMMAND_QUEUE)
 
@@ -2032,10 +2057,23 @@ def telegram_queue_get():
 
 @app.route('/api/telegram/queue', methods=['DELETE'])
 def telegram_queue_clear():
-    """Clear the reply queue (called by GitHub Actions after sending)."""
+    """Clear the reply queue (called by GitHub Actions after sending).
+
+    With a JSON body ``{"ids": [...]}`` only those replies are removed, so a
+    reply appended while the relay was sending is kept and delivered next tick
+    instead of being wiped. Without a body the whole queue is cleared, which
+    stays correct for an owner-requested full clear.
+    """
     if not _telegram_secret_ok():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    body = request.get_json(force=True, silent=True) or {}
+    ids = body.get('ids') if isinstance(body, dict) else None
     try:
+        if ids is not None:
+            if not isinstance(ids, list):
+                return jsonify({'ok': False, 'error': 'ids must be a list'}), 400
+            removed = _ack_queue(TELEGRAM_REPLY_QUEUE, ids)
+            return jsonify({'ok': True, 'removed': removed})
         _clear_queue(TELEGRAM_REPLY_QUEUE)
         return jsonify({'ok': True, 'cleared': True})
     except Exception as e:
@@ -2053,10 +2091,23 @@ def telegram_commands_get():
 
 @app.route('/api/telegram/commands', methods=['DELETE'])
 def telegram_commands_clear():
-    """Clear the command queue (called after the harness acts on them)."""
+    """Clear the command queue (called after the harness acts on them).
+
+    With a JSON body ``{"ids": [...]}`` only those entries are removed, so a
+    command appended while the harness was acting is kept rather than wiped.
+    Without a body the whole queue is cleared, which stays correct for the
+    owner-requested ``/clear`` path and for older callers.
+    """
     if not _telegram_secret_ok():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    body = request.get_json(force=True, silent=True) or {}
+    ids = body.get('ids') if isinstance(body, dict) else None
     try:
+        if ids is not None:
+            if not isinstance(ids, list):
+                return jsonify({'ok': False, 'error': 'ids must be a list'}), 400
+            removed = _ack_queue(TELEGRAM_COMMAND_QUEUE, ids)
+            return jsonify({'ok': True, 'removed': removed})
         _clear_queue(TELEGRAM_COMMAND_QUEUE)
         return jsonify({'ok': True, 'cleared': True})
     except Exception as e:

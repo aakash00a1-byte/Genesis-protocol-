@@ -292,8 +292,13 @@ def test_process_approvals_merges_via_transport(monkeypatch) -> None:
     module.GH_MERGE_TOKEN = "tok"
     replies: list[str] = []
     monkeypatch.setattr(module, "_notify", lambda text: replies.append(text))
-    monkeypatch.setattr(module, "_incoming_commands", lambda: ["/approve 7"])
-    monkeypatch.setattr(module, "_clear_commands", lambda: None)
+    monkeypatch.setattr(
+        module,
+        "_incoming_command_entries",
+        lambda: [{"id": "1", "text": "/approve 7"}],
+    )
+    acked: list[list[str]] = []
+    monkeypatch.setattr(module, "_ack_commands", lambda ids: acked.append(ids))
 
     class Transport:
         def approve(self, token, reason=""):
@@ -311,26 +316,31 @@ def test_process_approvals_merges_via_transport(monkeypatch) -> None:
     monkeypatch.setattr(module, "_transport", lambda: Transport())
     module.process_approvals()
     assert any("Approved & merged" in r for r in replies)
+    assert acked == [["1"]]
 
 
 def test_process_approvals_without_token_warns(monkeypatch) -> None:
     module = _load()
     replies: list[str] = []
     monkeypatch.setattr(module, "_notify", lambda text: replies.append(text))
-    monkeypatch.setattr(module, "_incoming_commands", lambda: ["/approve 1"])
+    monkeypatch.setattr(
+        module,
+        "_incoming_command_entries",
+        lambda: [{"id": "1", "text": "/approve 1"}],
+    )
     monkeypatch.setattr(module, "_transport", lambda: None)
-    monkeypatch.setattr(module, "_clear_commands", lambda: None)
+    monkeypatch.setattr(module, "_ack_commands", lambda ids: None)
     module.process_approvals()
     assert any("merge token" in r for r in replies)
 
 
 def test_process_approvals_no_commands_is_noop(monkeypatch) -> None:
     module = _load()
-    called = {"clear": False}
-    monkeypatch.setattr(module, "_incoming_commands", lambda: [])
-    monkeypatch.setattr(module, "_clear_commands", lambda: called.update(clear=True))
+    called = {"ack": False}
+    monkeypatch.setattr(module, "_incoming_command_entries", lambda: [])
+    monkeypatch.setattr(module, "_ack_commands", lambda ids: called.update(ack=True))
     module.process_approvals()
-    assert called["clear"] is False
+    assert called["ack"] is False
 
 
 def test_requeue_stuck_orders_requeues_only_running(monkeypatch) -> None:

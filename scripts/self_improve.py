@@ -639,14 +639,13 @@ def _entry_is_owner(entry: object) -> bool:
     return bool(sender) and sender in _configured_owner_ids()
 
 
-def _incoming_commands() -> list[str]:
-    """Owner commands parked by the Space webhook, without consuming them.
+def _incoming_command_entries() -> list[dict]:
+    """Owner command entries parked by the Space webhook, without consuming them.
 
     The webhook routes ``/approve``-style text to the command queue and the
-    harness owns that queue: it reads here, acts, then clears. The reply queue
-    is untouched (the relay still delivers ordinary replies). Only entries that
-    carry a configured owner sender id are returned; anything else is refused
-    and never reaches the approval/merge path.
+    harness owns that queue: it reads here, acts, then acknowledges by id. Only
+    entries that carry a configured owner sender id are returned; anything else
+    is refused and never reaches the approval/merge path.
     """
     raw = _space_get(f"{HF_SPACE_URL}/api/telegram/commands")
     if raw is None:
@@ -660,27 +659,37 @@ def _incoming_commands() -> list[str]:
     commands = payload.get("commands") if isinstance(payload, dict) else None
     if not isinstance(commands, list):
         return []
-    texts: list[str] = []
+    entries: list[dict] = []
     for entry in commands:
         if not isinstance(entry, dict) or not isinstance(entry.get("text"), str):
             continue
         if not _entry_is_owner(entry):
             _log("refused a queued command without a configured owner sender")
             continue
-        texts.append(entry["text"])
-    return texts
+        entries.append(entry)
+    return entries
 
 
-def _clear_commands() -> None:
-    req = urllib.request.Request(  # noqa: S310 - fixed host
+def _incoming_commands() -> list[str]:
+    """The text of each owner command, for callers that only need the text."""
+    return [entry["text"] for entry in _incoming_command_entries()]
+
+
+def _ack_commands(ids: list[str]) -> None:
+    """Remove exactly the commands the harness acted on, by id.
+
+    Sending ids (rather than clearing the whole queue) is what stops a command
+    the owner sends while the harness is working from being wiped: that entry is
+    not in ``ids``, so the Space keeps it for the next tick.
+    """
+    ids = [str(i) for i in ids if i is not None and str(i).strip()]
+    if not ids:
+        return
+    _space_send(
+        "DELETE",
         f"{HF_SPACE_URL}/api/telegram/commands",
-        method="DELETE",
-        headers=_space_headers(),
+        {"ids": ids},
     )
-    try:
-        urllib.request.urlopen(req, timeout=20).read()  # noqa: S310
-    except Exception:  # noqa: BLE001
-        pass
 
 
 def process_approvals() -> None:
@@ -688,13 +697,14 @@ def process_approvals() -> None:
 
     Reads the command queue, and for each command merges the matching agent PR
     (the push + deploy) or closes it, then replies so the owner knows the
-    outcome. The queue is cleared only after every command has been handled, so
-    a crash mid-run does not drop an approval.
+    outcome. Each handled command is acknowledged by id only after it has been
+    acted on, so a crash mid-run does not drop an approval and a command that
+    arrives while this run is working is left for the next tick.
     """
-    texts = _incoming_commands()
-    if not texts:
+    entries = _incoming_command_entries()
+    if not entries:
         return
-    _log(f"{len(texts)} owner command(s) pending")
+    _log(f"{len(entries)} owner command(s) pending")
     try:
         from genesis_protocol.updates import handle_command, parse_command
     except Exception as exc:  # noqa: BLE001
@@ -702,7 +712,9 @@ def process_approvals() -> None:
         return
 
     transport = _transport()
-    for text in texts:
+    handled_ids: list[str] = []
+    for entry in entries:
+        text = entry["text"]
         if transport is None:
             if parse_command(text) is not None:
                 _notify(
@@ -715,7 +727,8 @@ def process_approvals() -> None:
         if reply is not None:
             _log(f"approval: {text[:40]} -> {reply.splitlines()[0]}")
             _notify(reply)
-    _clear_commands()
+        handled_ids.append(entry.get("id"))
+    _ack_commands(handled_ids)
 
 
 def _git(*args: str) -> subprocess.CompletedProcess:

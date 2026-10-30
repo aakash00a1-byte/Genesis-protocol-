@@ -134,18 +134,24 @@ def test_relay_state_survives_corrupt_file_and_persists_before_clear(
         relay, "_telegram_send", lambda cid, text: sent.append(text) or True
     )
 
-    # Make the clear (DELETE) fail: the id must still have been persisted first.
+    # Make the ack (DELETE) fail: the id must still have been persisted first.
     import urllib.request
 
+    acked: list[dict] = []
+
     def boom(req, *a, **k):
-        raise OSError("clear failed")
+        acked.append(json.loads(req.data.decode()))
+        raise OSError("ack failed")
 
     monkeypatch.setattr(urllib.request, "urlopen", boom)
 
     assert relay.relay_once() == 1
     assert json.loads(state_file.read_text(encoding="utf-8"))["sent_ids"] == ["x"]
+    # Only the ids we actually sent are acknowledged.
+    assert acked == [{"ids": ["x"]}]
     # The failure is not fatal, but it must not be silent.
-    assert "queue clear failed: OSError" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "DELETE" in out and "failed" in out
 
     # The queue still holds the reply, but the recorded id stops a re-send.
     assert relay.relay_once() == 0
