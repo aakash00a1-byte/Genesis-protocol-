@@ -129,3 +129,35 @@ def test_is_owner_ignores_blank_and_whitespace(monkeypatch, appmod):
     assert appmod._is_owner(222) is False
     assert appmod._is_owner(None) is False
     assert appmod._is_owner("") is False
+
+
+def test_semicolon_separated_admin_ids_are_accepted(monkeypatch, appmod):
+    monkeypatch.delenv("TELEGRAM_ADMIN_ID", raising=False)
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", f"{OWNER};111")
+    assert appmod._is_owner(OWNER) is True
+    assert appmod._is_owner(111) is True
+    assert appmod._is_owner(222) is False
+
+
+def test_forged_owner_id_in_message_text_does_not_authorize(client, appmod, monkeypatch):
+    # The authorising id must come from the update sender, never from the text.
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", str(OWNER))
+    forged = {"message": {"text": f"/approve 1 {OWNER}", "chat": {"id": STRANGER}}}
+    assert _post(client, forged).status_code == 200
+    assert appmod._read_command_queue() == []
+
+
+def test_missing_sender_identity_is_denied(client, appmod, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", str(OWNER))
+    no_from = {"message": {"text": "/approve 1", "chat": {"id": OWNER}}}
+    assert _post(client, no_from).status_code == 200
+    assert appmod._read_command_queue() == []
+
+
+def test_callback_forged_from_field_is_denied(client, appmod, monkeypatch):
+    # The callback sender id comes from callback.from; a payload without it is
+    # denied even when the chat id looks like the owner.
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", str(OWNER))
+    forged = {"callback_query": {"data": "approve:1", "message": {"chat": {"id": OWNER}}}}
+    assert _post(client, forged).status_code == 200
+    assert appmod._read_command_queue() == []

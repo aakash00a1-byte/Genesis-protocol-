@@ -1416,12 +1416,17 @@ def _telegram_secret_ok():
 
 
 def _owner_ids():
-    """The configured owner chat/user ids (TELEGRAM_ADMIN_IDS, TELEGRAM_ADMIN_ID)."""
+    """The configured owner chat/user ids (TELEGRAM_ADMIN_IDS, TELEGRAM_ADMIN_ID).
+
+    TELEGRAM_ADMIN_IDS is comma- or semicolon-separated, matching the bot
+    launchers (start_telegram.py / start_all_telegram_bots.py).
+    """
     ids = set()
-    for raw in str(os.environ.get('TELEGRAM_ADMIN_IDS', '')).split(','):
-        raw = raw.strip()
-        if raw:
-            ids.add(raw)
+    raw = str(os.environ.get('TELEGRAM_ADMIN_IDS', '')).replace(';', ',')
+    for part in raw.split(','):
+        part = part.strip()
+        if part:
+            ids.add(part)
     single = os.environ.get('TELEGRAM_ADMIN_ID', '').strip()
     if single:
         ids.add(single)
