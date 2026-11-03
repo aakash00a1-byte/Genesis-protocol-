@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import urllib.request
 
@@ -27,6 +28,13 @@ SPACE_URL = os.environ.get(
 ).rstrip("/")
 WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
 WEBHOOK_URL = f"{SPACE_URL}/api/telegram/webhook"
+
+
+def _redact(text: str) -> str:
+    """Keep the bot token (which lives in the request URL) out of any log line."""
+    if BOT_TOKEN:
+        text = text.replace(BOT_TOKEN, "***")
+    return re.sub(r"/bot[^/\s]+", "/bot***", str(text))
 
 
 def _call(method: str, payload: dict | None = None) -> dict:
@@ -50,7 +58,7 @@ def main() -> int:
     try:
         info = _call("getWebhookInfo")
     except Exception as exc:  # noqa: BLE001
-        print(f"getWebhookInfo failed: {type(exc).__name__}: {exc}")
+        print(f"getWebhookInfo failed: {_redact(f'{type(exc).__name__}: {exc}')}")
         return 1
 
     result = info.get("result") or {}
@@ -58,9 +66,16 @@ def main() -> int:
     want_updates = ["message", "callback_query"]
     current_updates = result.get("allowed_updates")
     print(f"current webhook: {current or '(none)'}")
-    if current == WEBHOOK_URL and (
-        not current_updates or set(want_updates) <= set(current_updates)
-    ):
+
+    url_ok = current == WEBHOOK_URL
+    updates_ok = not current_updates or set(want_updates) <= set(current_updates)
+    # A matching URL does NOT prove the secret is registered: Telegram never
+    # reports secret_token back from getWebhookInfo. If a shared secret is
+    # configured we therefore always re-register (setWebhook is idempotent), so
+    # a webhook that was set without the secret_token — which 401s every update
+    # and is exactly how Telegram delivery broke — is healed on the next run.
+    # Only when no secret is configured is a URL/updates match a safe no-op.
+    if url_ok and updates_ok and not WEBHOOK_SECRET:
         last_error = result.get("last_error_message", "")
         print(f"webhook already correct; last_error={last_error or '(none)'}")
         return 0
@@ -76,11 +91,11 @@ def main() -> int:
     try:
         result = _call("setWebhook", payload)
     except Exception as exc:  # noqa: BLE001
-        print(f"setWebhook failed: {type(exc).__name__}: {exc}")
+        print(f"setWebhook failed: {_redact(f'{type(exc).__name__}: {exc}')}")
         return 1
 
     if not result.get("ok"):
-        print(f"setWebhook rejected: {result.get('description')}")
+        print(f"setWebhook rejected: {_redact(result.get('description'))}")
         return 1
 
     verify = _call("getWebhookInfo")

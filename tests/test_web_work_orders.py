@@ -22,6 +22,9 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(appmod, "TELEGRAM_TASK_QUEUE", str(tmp_path / "tasks.json"))
     monkeypatch.setattr(appmod, "TELEGRAM_REPLY_QUEUE", str(tmp_path / "replies.json"))
     monkeypatch.setattr(appmod, "TELEGRAM_COMMAND_QUEUE", str(tmp_path / "commands.json"))
+    # /do and /tasks are owner-only; the webhook now fails closed unless the
+    # owner is configured (as the live Space does via TELEGRAM_ADMIN_IDS).
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "1863492058")
     appmod.app.config["TESTING"] = True
     return appmod.app.test_client()
 

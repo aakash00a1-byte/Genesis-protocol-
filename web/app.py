@@ -1375,12 +1375,16 @@ def _handle_callback_query(callback):
     Button payloads are ``"<verb>:<arg>"`` (e.g. ``approve:17``, ``list``).
     Only verbs the update pipeline understands are accepted, so a forged
     callback cannot inject an arbitrary command. The command is parked on the
-    same queue as a typed one; the harness replies after it acts.
+    same queue as a typed one; the harness replies after it acts. Only the
+    owner's tap is accepted, so a forwarded or spoofed button cannot approve.
     """
     data = str(callback.get('data', '')).strip()
     verb, _, arg = data.partition(':')
     allowed = {'approve', 'reject', 'list', 'updates', 'pending', 'status', 'help'}
     if verb not in allowed:
+        return jsonify({'ok': True})
+    sender = callback.get('from') or {}
+    if not _is_owner(sender.get('id') if isinstance(sender, dict) else None):
         return jsonify({'ok': True})
     command = f'/{verb}' + (f' {arg}' if arg else '')
     message = callback.get('message') or {}
@@ -1409,6 +1413,32 @@ def _telegram_secret_ok():
     supplied = request.headers.get('X-Telegram-Bot-Api-Secret-Token', '')
     import hmac
     return hmac.compare_digest(str(supplied), str(expected))
+
+
+def _owner_ids():
+    """The configured owner chat/user ids (TELEGRAM_ADMIN_IDS, TELEGRAM_ADMIN_ID)."""
+    ids = set()
+    for raw in str(os.environ.get('TELEGRAM_ADMIN_IDS', '')).split(','):
+        raw = raw.strip()
+        if raw:
+            ids.add(raw)
+    single = os.environ.get('TELEGRAM_ADMIN_ID', '').strip()
+    if single:
+        ids.add(single)
+    return ids
+
+
+def _is_owner(user_id):
+    """Owner-only gate for privileged Telegram commands.
+
+    TELEGRAM_ADMIN_IDS (comma-separated) and TELEGRAM_ADMIN_ID name the owner.
+    If neither is configured there is no owner to check against, so we deny
+    (fail closed) rather than let an arbitrary chat merge PRs or start agents.
+    """
+    uid = str(user_id).strip() if user_id is not None else ''
+    if not uid:
+        return False
+    return uid in _owner_ids()
 
 
 def _read_reply_queue():
@@ -1453,7 +1483,9 @@ def telegram_webhook():
     if not isinstance(text, str):
         return jsonify({'ok': True})
     text = text[:4000]
-    user = msg.get('from', {})
+    sender = msg.get('from') or {}
+    user_id = sender.get('id') if isinstance(sender, dict) else None
+    owner = _is_owner(user_id)
     
     # Owner work orders (/do, /cancel, /tasks) are handled here: the order is
     # parked on the task queue for the harness, and the owner gets an immediate
@@ -1462,21 +1494,28 @@ def telegram_webhook():
         from genesis_protocol.updates import is_tasks_command, parse_work_order
         work = parse_work_order(text)
         if work is not None:
+            if not owner:
+                return jsonify({'ok': True})
             return _handle_work_order(chat_id, work[0], work[1])
         if is_tasks_command(text):
+            if not owner:
+                return jsonify({'ok': True})
             return _handle_tasks_list(chat_id)
     except Exception as e:
         print(f"Work-order routing error: {e}")
 
     # Owner update commands are parked for the self-improvement harness, which
     # is the only thing that may act on them. They get no immediate reply; the
-    # harness replies after it merges or rejects.
+    # harness replies after it merges or rejects. Only the owner may approve or
+    # order work, so a non-owner command is dropped here.
     try:
         from genesis_protocol.updates import parse_command
         is_command = parse_command(text) is not None
     except Exception:
         is_command = False
     if is_command:
+        if not owner:
+            return jsonify({'ok': True})
         try:
             _append_command(chat_id, text)
         except Exception as e:
