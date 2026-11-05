@@ -1,6 +1,6 @@
-# ⚡ Gluttony OS - Autonomous Deployment Guide
+# ⚡ Gluten OS - Autonomous Deployment Guide
 
-Gluttony OS can deploy itself anywhere automatically!
+Gluten OS can deploy itself anywhere automatically!
 
 ## 🚀 Quick Deploy (One Command)
 
@@ -116,7 +116,7 @@ AUTONOMOUS_MODE=true
 
 ```
 ┌─────────────────────────────────────────────┐
-│           Gluttony OS                  │
+│           Gluten OS                  │
 ├─────────────────────────────────────────────┤
 │  Telegram Bot  │  Web UI  │  API             │
 ├─────────────────────────────────────────────┤
@@ -154,4 +154,4 @@ MIT License - Use freely!
 
 ---
 
-**Gluttony OS** - The autonomous AI agent that runs itself! ⚡🤖
+**Gluten OS** - The autonomous AI agent that runs itself! ⚡🤖

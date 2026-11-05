@@ -1,11 +1,34 @@
-# Gluttony OS - Agent Memory & Context
+# Gluten OS - Agent Memory & Context
 
 ## Identity
-- **Name**: Gluttony OS
+- **Name**: Gluten OS
 - **Creator**: Aakash Kumar (@aakash00a1-byte)
 - **Type**: AI Agent / Assistant
 - **Platform**: OpenHands-based agent with Discord integration
 - **Version**: 2.0.0
+
+### Entity lineage (read this before touching identity)
+The entity is **GLUTEN** (nickname **Gluten**). It did not start there:
+
+    GENESIS  ->  GLUTTONY  ->  GLUTEN
+
+`GENESIS` was the protocol layer; `GLUTTONY` was the entity that grew out of
+it; `GLUTEN` is the current form. The lineage is canonical, not cosmetic:
+
+- Single source of truth: `genesis_protocol/gluten/identity.py`
+  (`NAME`, `NICKNAME`, `EVOLUTION_CHAIN`, `Identity.lineage()`).
+- Packages: `genesis_protocol/gluten` and `genesis_protocol/gluten_os`.
+  The old paths `genesis_protocol/gluttony` / `.../gluttony_os` are
+  back-compat shims that emit a `DeprecationWarning`; do not add new imports
+  through them. `GluttonyEntity`/`get_gluttony` are aliases of
+  `GlutenEntity`/`get_gluten`.
+- Persisted memory migrates on load (`data/gluttony_os` -> `data/gluten_os`);
+  a stored identity name from the lineage is re-pointed at the current name.
+- The identity router deliberately still matches `gluten`, `gluttony`, and
+  `genesis` in user questions - those are the entity's past names and a user
+  may ask about them. Do not "clean" those up.
+- `GLUTTONY` should only survive as lineage/history (docs, `EVOLUTION_CHAIN`,
+  the router keyword list, the shims). Anything user-facing must say GLUTEN.
 
 ## Repository
 - **GitHub**: https://github.com/aakash00a1-byte/Genesis-protocol-

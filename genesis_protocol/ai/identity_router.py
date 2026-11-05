@@ -48,7 +48,7 @@ class IdentityRouter:
     
     # Layer-related keywords
     LAYER_KEYWORDS = [
-        "layer", "gluttony_os", "presence", "legacy", "autonomous",
+        "layer", "gluten_os", "presence", "legacy", "autonomous",
         "active layer", "which layer", "what system"
     ]
     
@@ -122,13 +122,13 @@ class IdentityRouter:
     
     def _get_identity_response(self, query: str) -> str:
         """Get identity response from entity object."""
-        from genesis_protocol.gluttony import get_identity, get_gluttony
-        from genesis_protocol.gluttony_os import get_capabilities
+        from genesis_protocol.gluten import get_identity, get_gluten
+        from genesis_protocol.gluten_os import get_capabilities
         
         query_lower = query.lower()
         
         identity = get_identity()
-        gluttony = get_gluttony()
+        gluten = get_gluten()
         
         # Detect what specifically is asked
         # Hindi: who made you / creator
@@ -136,16 +136,16 @@ class IdentityRouter:
             return self._who_created(identity)
         
         elif any(k in query_lower for k in ["who are you", "what are you", "tell me about", "about you", "describe", "introduce", "tu kaun", "kaun hai tu", "konsa hai tu", "who is gluten", "am i talking to"]):
-            return self._who_are_you(identity, gluttony)
+            return self._who_are_you(identity, gluten)
         
         elif any(k in query_lower for k in ["nickname", "call me", "handle"]):
             return self._what_nickname(identity)
         
         elif any(k in query_lower for k in ["version", "running", "version kya"]):
-            return self._what_version(identity, gluttony)
+            return self._what_version(identity, gluten)
         
-        elif any(k in query_lower for k in ["layer", "gluttony_os", "presence", "legacy", "autonomous", "active"]):
-            return self._what_layers(gluttony)
+        elif any(k in query_lower for k in ["layer", "gluten_os", "presence", "legacy", "autonomous", "active"]):
+            return self._what_layers(gluten)
         
         elif any(k in query_lower for k in ["capability", "skill", "power", "feature", "can you do", "what can you"]):
             return self._what_capabilities()
@@ -160,12 +160,12 @@ class IdentityRouter:
                 return self._what_is_user_name()
         
         elif any(k in query_lower for k in ["your name", "are you gluten", "are you gluttony", "apna naam"]):
-            return self._who_are_you(identity, gluttony)
+            return self._who_are_you(identity, gluten)
         
         else:
-            return self._who_are_you(identity, gluttony)
+            return self._who_are_you(identity, gluten)
     
-    def _who_are_you(self, identity, gluttony) -> str:
+    def _who_are_you(self, identity, gluten) -> str:
         """Build 'who are you' response with EXPLICIT confidence."""
         # Entity identity is ALWAYS explicit (hardcoded)
         return f"""I am **{identity.name}** (nickname: **{identity.nickname}**).
@@ -173,6 +173,7 @@ class IdentityRouter:
 **Identity [EXPLICIT - I know this for certain]:**
 - Name: {identity.name}
 - Nickname: {identity.nickname}
+- Lineage: {identity.lineage()}
 - Variant: {identity.variant}
 - Creator: {identity.creator}
 - Protocol: Genesis Protocol {identity.protocol_version}
@@ -188,11 +189,12 @@ I am an AI entity on the Genesis Protocol OS. 🖤"""
         """Build nickname response with EXPLICIT confidence."""
         return f"My nickname is **{identity.nickname}** [EXPLICIT - hardcoded]. 🖤\n\nYou can call me {identity.nickname}!"
     
-    def _what_version(self, identity, gluttony) -> str:
+    def _what_version(self, identity, gluten) -> str:
         """Build version response with EXPLICIT confidence."""
         return f"""**Version Info [EXPLICIT - I know this for certain]:**
 - Protocol: Genesis Protocol **{identity.protocol_version}**
 - Variant: **{identity.variant}**
+- Lineage: {identity.lineage()}
 - Identity Version: {identity.get_identity().get('version', '2.0')}
 
 I am running on the OS variant! 🖤"""
@@ -250,7 +252,7 @@ Total: {len(caps)} capabilities. Ask me what you need! 🖤"""
     def _get_all_capabilities_list(self) -> List[str]:
         """Get all capabilities."""
         try:
-            from genesis_protocol.gluttony_os import get_capabilities
+            from genesis_protocol.gluten_os import get_capabilities
             cap = get_capabilities()
             all_caps = cap.get_all_capabilities()
             
@@ -281,7 +283,7 @@ These layers handle memory, learning, autonomous decisions, and continuous impro
     def _what_capabilities(self) -> str:
         """Build capabilities response."""
         try:
-            from genesis_protocol.gluttony_os import get_capabilities
+            from genesis_protocol.gluten_os import get_capabilities
             cap = get_capabilities()
             caps = cap.get_all_capabilities()
             

@@ -30,7 +30,7 @@
 ## 1. EXECUTIVE SUMMARY
 
 ### Project Name
-**Gluttony OS** — Autonomous Multimodal AI Agent
+**Gluten OS** — Autonomous Multimodal AI Agent
 
 ### Core Functionality
 An autonomous AI agent system with Telegram interface that processes text, voice, and image inputs through an intelligent multi-provider AI fallback chain, maintaining persistent conversation memory and providing resilient, always-available AI assistance.
@@ -1829,4 +1829,4 @@ main.py
 
 ---
 
-*This document serves as the complete technical specification for the Gluttony OS autonomous AI agent system. All implementation must follow this specification.*
+*This document serves as the complete technical specification for the Gluten OS autonomous AI agent system. All implementation must follow this specification.*

@@ -1,4 +1,4 @@
-"""Relationship History - GLUTTONY Legacy
+"""Relationship History - GLUTEN Legacy
 
 Tracks first meetings, major events, shared projects, and recoveries."""
 

@@ -160,7 +160,7 @@ Just send any message to chat with me!
                             result = loop.run_until_complete(
                                 ai.call(
                                     messages=[
-                                        {"role": "system", "content": "You are Genesis Protocol AI. Keep responses helpful and concise."},
+                                        {"role": "system", "content": "You are GLUTEN, an AI entity on the Genesis Protocol. Keep responses helpful and concise."},
                                         {"role": "user", "content": question}
                                     ],
                                     user_input=question
@@ -170,7 +170,7 @@ Just send any message to chat with me!
                             
                             if result.success and result.response:
                                 response = result.response.content[:4000] if result.response.content else "Sorry, no response."
-                                send(chat_id, f"🤖 *Genesis AI:*\n\n{response}")
+                                send(chat_id, f"🤖 *GLUTEN:*\n\n{response}")
                             else:
                                 send(chat_id, f"❌ Error: {result.error[:500] if result.error else 'Unknown error'}")
                         except Exception as e:
@@ -250,7 +250,7 @@ Just send any message to chat with me!
                         result = loop.run_until_complete(
                             ai.call(
                                 messages=[
-                                    {"role": "system", "content": "You are Genesis Protocol AI. Keep responses helpful, concise, and friendly."},
+                                    {"role": "system", "content": "You are GLUTEN, an AI entity on the Genesis Protocol. Keep responses helpful, concise, and friendly."},
                                     {"role": "user", "content": text}
                                 ],
                                 user_input=text
@@ -260,7 +260,7 @@ Just send any message to chat with me!
                         
                         if result.success and result.response:
                             response = result.response.content[:4000] if result.response.content else "Sorry, I couldn't respond."
-                            send(chat_id, f"🤖 *Genesis AI:*\n\n{response}")
+                            send(chat_id, f"🤖 *GLUTEN:*\n\n{response}")
                         else:
                             send(chat_id, f"❌ Error: {result.error[:500] if result.error else 'Unknown error'}")
                     except Exception as e:

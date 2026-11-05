@@ -1,4 +1,4 @@
-"""Trust Builder - GLUTTONY OS
+"""Trust Builder - GLUTEN OS
 
 Builds trust through reliability and consistency."""
 

@@ -1,4 +1,4 @@
-"""Dream Mode - GLUTTONY Presence Layer
+"""Dream Mode - GLUTEN Presence Layer
 
 Sandbox processing during idle time: summarize memories, connect ideas, generate insights."""
 

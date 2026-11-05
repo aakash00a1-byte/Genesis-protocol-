@@ -1,10 +1,10 @@
-# Gluttony OS Mobile App
+# Gluten OS Mobile App
 
 **Autonomous AI Agent Mobile Application**
 
 ## 📱 Overview
 
-Gluttony OS Mobile App connects to your Gluttony OS backend running on Railway, providing real-time monitoring, chat, and control of your autonomous AI agent from your mobile device.
+Gluten OS Mobile App connects to your Gluten OS backend running on Railway, providing real-time monitoring, chat, and control of your autonomous AI agent from your mobile device.
 
 ## ✨ Features
 
@@ -219,4 +219,4 @@ MIT License - See LICENSE file for details.
 
 **Built with ❤️ using Expo & React Native**
 
-**Gluttony OS - Autonomous AI Agent**
+**Gluten OS - Autonomous AI Agent**

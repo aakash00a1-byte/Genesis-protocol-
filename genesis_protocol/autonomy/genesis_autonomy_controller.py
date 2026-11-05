@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
-from genesis_protocol.gluttony_os.autonomy_controller import get_autonomy_controller
+from genesis_protocol.gluten_os.autonomy_controller import get_autonomy_controller
 from genesis_protocol.improvement import (
     WeaknessDetector, ProposalGenerator, RiskEngine, SafetyRules,
     get_weakness_detector, get_proposal_generator

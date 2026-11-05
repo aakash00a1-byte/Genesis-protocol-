@@ -11,7 +11,8 @@ class Persona(Enum):
     """Available personas."""
     NORMAL = "normal"
     JARVIS = "jarvis"
-    GLUTTONY = "gluttony"
+    GLUTEN = "gluten"
+    GLUTTONY = "gluten"  # back-compat alias for the pre-rename persona
     FRIENDLY = "friendly"
     DEVELOPER = "developer"
 
@@ -70,8 +71,8 @@ class PersonalityEngine:
             catchphrases=["Shall I proceed?", "How may I be of service?"]
         ),
         
-        Persona.GLUTTONY: PersonaConfig(
-            name="Gluttony",
+        Persona.GLUTEN: PersonaConfig(
+            name="Gluten",
             greeting="Hey hey! What's cooking? 🍳",
             farewell="Catch ya later! Stay awesome! ✨",
             humor_level=0.9,
@@ -141,7 +142,7 @@ class PersonalityEngine:
         prompts = []
         
         # Persona-specific instructions
-        if self.current_persona == Persona.GLUTTONY:
+        if self.current_persona == Persona.GLUTEN:
             prompts.append("You are enthusiastic, playful, and use casual language.")
             prompts.append("Use emojis occasionally. Be energetic and friendly.")
             prompts.append("Show genuine interest and excitement.")

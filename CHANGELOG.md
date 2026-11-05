@@ -1,4 +1,27 @@
-# Changelog - Gluttony OS
+# Changelog - Gluten OS
+
+## [2.0.0] - 2026-11-05
+
+### Changed - Entity renamed GLUTTONY -> GLUTEN 🖤
+
+The entity evolved. The lineage is now part of the identity, not hidden:
+
+    GENESIS  ->  GLUTTONY  ->  GLUTEN
+
+- Canonical name is **GLUTEN** (nickname **Gluten**), surfaced from
+  `genesis_protocol.gluten.identity` (`NAME`, `NICKNAME`, `EVOLUTION_CHAIN`,
+  `Identity.lineage()`).
+- Packages moved: `genesis_protocol/gluttony` -> `genesis_protocol/gluten`,
+  `genesis_protocol/gluttony_os` -> `genesis_protocol/gluten_os`.
+- Back-compat shims keep the old import paths working (with a
+  `DeprecationWarning`): `genesis_protocol.gluttony`, `genesis_protocol.gluttony_os`.
+  `GluttonyEntity`/`get_gluttony` remain as aliases of
+  `GlutenEntity`/`get_gluten`.
+- Persisted state migrates on load: `data/gluttony_os` -> `data/gluten_os`, and
+  a stored identity name from the lineage is re-pointed at the current name.
+- Persona `gluttony` -> `gluten` (`Persona.GLUTTONY` kept as an alias);
+  `/persona gluten` and `/persona g` are the documented forms. The identity
+  router still recognises the whole lineage in user questions.
 
 ## [1.4.0] - 2026-06-18
 
@@ -66,4 +89,4 @@
 
 ## [1.0.0] - 2026-06-17
 
-Initial Gluttony OS release
+Initial Gluten OS release

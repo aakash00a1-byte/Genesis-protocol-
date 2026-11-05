@@ -81,7 +81,7 @@ class TestTrustConfidenceSystem:
         
         assert result["status"] == "explicit"
         assert result["confidence"] == "explicit"
-        assert result["data"]["name"] == "GLUTTONY"
+        assert result["data"]["name"] == "GLUTEN"
         assert result["data"]["nickname"] == "Gluten"
         assert result["source"] == "hardcoded_entity_definition"
     

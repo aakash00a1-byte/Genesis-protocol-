@@ -5,7 +5,7 @@ Autonomous Financial Operations System
 OBJECTIVE: Transform Genesis into an Autonomous Financial Operations Manager
 
 Owner: aakash kumar
-Operator: GLUTTONY
+Operator: GLUTEN
 
 Owner has final authority.
 Genesis manages daily operations.
@@ -35,7 +35,7 @@ class FinancialJSONEncoder(json.JSONEncoder):
 
 class Role(Enum):
     OWNER = "owner"        # aakash kumar - Final authority
-    OPERATOR = "operator"  # GLUTTONY - Daily management
+    OPERATOR = "operator"  # GLUTEN - Daily management
     VIEWER = "viewer"      # Read-only access
     AUDITOR = "auditor"    # Review access
 
@@ -235,7 +235,7 @@ class GenesisFinancialManager:
     Autonomous Financial Operations Manager
     
     Owner: aakash kumar (Final Authority)
-    Operator: GLUTTONY (Daily Management)
+    Operator: GLUTEN (Daily Management)
     
     Capabilities:
     - Financial Monitoring (Level 1)
@@ -854,7 +854,7 @@ if __name__ == "__main__":
 ║  ⚡ GENESIS FINANCIAL OPERATIONS MANAGER v1.0.0 ⚡  ║
 ║                                                       ║
 ║  Owner: aakash kumar (Final Authority)                ║
-║  Operator: GLUTTONY (Daily Management)                 ║
+║  Operator: GLUTEN (Daily Management)                 ║
 ╚═══════════════════════════════════════════════════════════╝
     """)
     

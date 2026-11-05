@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the backup and recovery procedures for Gluttony OS.
+This document describes the backup and recovery procedures for Gluten OS.
 
 ## What Gets Backed Up
 

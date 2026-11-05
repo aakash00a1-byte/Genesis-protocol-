@@ -1,4 +1,4 @@
-# Deployment Audit - Gluttony OS
+# Deployment Audit - Gluten OS
 
 **Audit Date:** 2026-06-18  
 **Version:** 1.0.0  

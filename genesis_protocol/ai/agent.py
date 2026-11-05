@@ -420,41 +420,42 @@ class GenesisAgent:
     def _get_entity_context(self) -> str:
         """Get entity context for identity questions."""
         try:
-            from genesis_protocol.gluttony import get_identity, get_gluttony
+            from genesis_protocol.gluten import get_identity, get_gluten
             
             identity = get_identity()
-            gluttony = get_gluttony()
+            gluten = get_gluten()
             
             # Get active layers
             layers = []
-            for attr in dir(gluttony):
-                if not attr.startswith('_') and not callable(getattr(gluttony, attr)):
-                    val = getattr(gluttony, attr)
+            for attr in dir(gluten):
+                if not attr.startswith('_') and not callable(getattr(gluten, attr)):
+                    val = getattr(gluten, attr)
                     if val is not None:
                         layers.append(attr)
             
             return f"""**ENTITY CONTEXT:**
 Entity: {identity.name}
 Nickname: {identity.nickname}
-Version: {gluttony.version}
+Lineage: {identity.lineage()}
+Version: {gluten.version}
 Active Layers ({len(layers)}): {', '.join(layers[:10])}{'...' if len(layers) > 10 else ''}
 
 When asked about identity, layers, or version - answer from this context, NOT from memory."""
         except Exception as e:
             self.logger.warning(f"Could not get entity context: {e}")
-            return "**ENTITY CONTEXT:** GLUTTONY OS - answer identity questions from entity object."
+            return "**ENTITY CONTEXT:** GLUTEN OS - answer identity questions from entity object."
     
     def _get_system_prompt(self) -> str:
         """Get system prompt for responses with entity context and live info."""
         # Get actual entity identity
         try:
-            from genesis_protocol.gluttony import get_identity
+            from genesis_protocol.gluten import get_identity
             identity = get_identity()
             name = identity.name
             nickname = identity.nickname
             version = identity.get_identity().get('version', 'OS')
         except Exception:
-            name = "GLUTTONY"
+            name = "GLUTEN"
             nickname = "Gluten"
             version = "OS"
         

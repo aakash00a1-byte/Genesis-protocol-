@@ -1,7 +1,7 @@
 # Discord Integration Guide
 
 ## Overview
-Gluttony OS Discord Bot - Python 3.11+ with discord.py
+Gluten OS Discord Bot - Python 3.11+ with discord.py
 
 ## Features
 - Message listening in #general channel
@@ -30,7 +30,7 @@ Gluttony OS Discord Bot - Python 3.11+ with discord.py
 ### 1. Create Application
 1. Go to https://discord.com/developers/applications
 2. Click "New Application"
-3. Name it (e.g., "Gluttony OS")
+3. Name it (e.g., "Gluten OS")
 
 ### 2. Create Bot
 1. Select your application
@@ -93,7 +93,7 @@ Replace `BOT_CLIENT_ID` with your bot's Application ID.
 |---------|----------|
 | `hello genesis` | Greets the user |
 | `hlo genesis` | Greets the user |
-| `@Gluttony OS` | AI chat response |
+| `@Gluten OS` | AI chat response |
 | New member joins | Auto welcome message |
 
 ### 👑 Admin Setup

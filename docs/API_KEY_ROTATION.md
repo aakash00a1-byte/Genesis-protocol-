@@ -1,6 +1,6 @@
 # API Key Rotation Guide
 
-## Keys Used by Gluttony OS
+## Keys Used by Gluten OS
 
 | Variable | Required | Regeneration Link |
 |----------|----------|-------------------|

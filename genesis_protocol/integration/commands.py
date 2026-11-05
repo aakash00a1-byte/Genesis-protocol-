@@ -75,14 +75,14 @@ class PersonalityCommands:
             return CommandResult(
                 is_command=True,
                 handled=True,
-                response="Available personas: normal, jarvis, gluttony, friendly, developer\n\nExample: /persona gluttony"
+                response="Available personas: normal, jarvis, gluten, friendly, developer\n\nExample: /persona gluten"
             )
         
         persona_name = args.lower().strip()
         
         # Map aliases
         aliases = {
-            'g': 'gluttony',
+            'g': 'gluten',
             'j': 'jarvis',
             'f': 'friendly',
             'd': 'developer',
@@ -98,7 +98,7 @@ class PersonalityCommands:
             persona_greetings = {
                 'normal': "Hello! I'm Genesis, ready to help.",
                 'jarvis': "At your service, sir.",
-                'gluttony': "Hey hey! What's cooking? Let's have some fun! 😄",
+                'gluten': "Hey hey! What's cooking? Let's have some fun! 😄",
                 'friendly': "Hey friend! What's up? 😊",
                 'developer': "Initializing... Hello, developer!"
             }
@@ -111,7 +111,7 @@ class PersonalityCommands:
             return CommandResult(
                 is_command=True,
                 handled=True,
-                response=f"Unknown persona: {args}\n\nAvailable: normal, jarvis, gluttony, friendly, developer"
+                response=f"Unknown persona: {args}\n\nAvailable: normal, jarvis, gluten, friendly, developer"
             )
     
     @classmethod

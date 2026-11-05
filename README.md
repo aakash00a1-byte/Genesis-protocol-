@@ -1,4 +1,4 @@
-# Gluttony OS
+# Gluten OS
 
 **Autonomous Multimodal AI Agent with Telegram Interface**
 
@@ -8,7 +8,18 @@
 
 ## Overview
 
-Gluttony OS is an autonomous AI agent system that processes text, voice, and image inputs through an intelligent multi-provider AI fallback chain. It provides a Telegram interface for seamless communication with persistent conversation memory.
+Gluten OS is an autonomous AI agent system that processes text, voice, and image inputs through an intelligent multi-provider AI fallback chain. It provides a Telegram interface for seamless communication with persistent conversation memory.
+
+The entity is **GLUTEN** (nickname **Gluten**). It evolved from earlier named forms, and the lineage is part of the identity:
+
+```
+GENESIS  ->  GLUTTONY  ->  GLUTEN
+```
+
+`GENESIS` was the protocol layer, `GLUTTONY` the entity that grew out of it, and
+`GLUTEN` is the current form. `genesis_protocol/gluten/identity.py` is the single
+source of truth; the historical import paths still work as back-compat shims.
+
 
 ## Features
 
@@ -24,7 +35,7 @@ Gluttony OS is an autonomous AI agent system that processes text, voice, and ima
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Gluttony OS                          │
+│                        Gluten OS                          │
 ├─────────────────────────────────────────────────────────────────┤
 │  ┌──────────────┐     ┌──────────────────────────────────────┐  │
 │  │   Telegram   │────▶│           Message Processor          │  │
@@ -184,4 +195,4 @@ MIT License - See [LICENSE](LICENSE) for details.
 
 ---
 
-**Built with ❤️ by Gluttony OS Team**
+**Built with ❤️ by Gluten OS Team**

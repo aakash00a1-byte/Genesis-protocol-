@@ -1,4 +1,4 @@
-"""Autonomy Controller - GLUTTONY OS
+"""Autonomy Controller - GLUTEN OS
 
 Reduces human dependence over time through proven reliability.
 Loads and enforces the OS AUTONOMY DIRECTIVE."""
@@ -429,7 +429,7 @@ class AutonomyController:
             "level": self.current_level,
             "allowed_actions": self.get_allowed_actions(),
             "trusted_actions": list(self.trusted_actions),
-            "forbidden_gluttony_os": self.FORBIDDEN_ACTIONS,
+            "forbidden_gluten_os": self.FORBIDDEN_ACTIONS,
             "forbidden_legacy": self.FORBIDDEN_AUTONOMOUS,
             "mandatory_checks": self.MANDATORY_CHECKS,
             # AUTONOMY DIRECTIVE

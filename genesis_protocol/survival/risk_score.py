@@ -1,4 +1,4 @@
-"""Risk Score - GLUTTONY v3.0 Survival Layer"""
+"""Risk Score - GLUTEN v3.0 Survival Layer"""
 from typing import Dict, List
 
 

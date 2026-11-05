@@ -1,4 +1,4 @@
-"""GLUTTONY v3.0 - Survival Layer
+"""GLUTEN v3.0 - Survival Layer
 
 Ensures system continuity, resilience, and self-maintenance.
 Prioritizes survival over perfection."""

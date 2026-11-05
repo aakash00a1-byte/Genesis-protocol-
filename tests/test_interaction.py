@@ -21,10 +21,10 @@ class TestContextManager:
         from genesis_protocol.interaction.context_manager import UnifiedContext
         ctx = UnifiedContext(user_id=1)
         ctx.user_name = "Test"
-        ctx.persona = "gluttony"
+        ctx.persona = "gluten"
         prompt = ctx.to_prompt_context()
         assert "Test" in prompt
-        assert "gluttony" in prompt
+        assert "gluten" in prompt
 
 
 class TestToolSystem:

@@ -1,4 +1,4 @@
-"""Expiration Detector - GLUTTONY v3.0 Survival Layer"""
+"""Expiration Detector - GLUTEN v3.0 Survival Layer"""
 from datetime import datetime, timedelta
 from typing import Dict, List
 

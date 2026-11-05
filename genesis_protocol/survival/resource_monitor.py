@@ -1,4 +1,4 @@
-"""Resource Monitor - GLUTTONY v3.0 Survival Layer"""
+"""Resource Monitor - GLUTEN v3.0 Survival Layer"""
 
 import psutil
 import platform

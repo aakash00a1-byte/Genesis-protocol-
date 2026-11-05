@@ -1,4 +1,4 @@
-"""Relationship Memory - GLUTTONY Presence Layer
+"""Relationship Memory - GLUTEN Presence Layer
 
 Remembers creator name, preferences, long-term topics, and recurring patterns."""
 

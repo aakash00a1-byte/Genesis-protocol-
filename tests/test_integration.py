@@ -10,14 +10,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 class TestPersonalityCommands:
     """Test personality commands."""
     
-    def test_persona_command_gluttony(self):
-        """Test /persona gluttony command."""
+    def test_persona_command_gluten(self):
+        """Test /persona gluten command."""
         from genesis_protocol.integration.commands import PersonalityCommands
         
-        result = PersonalityCommands.parse_command("/persona gluttony")
+        result = PersonalityCommands.parse_command("/persona gluten")
         assert result.is_command is True
         assert result.handled is True
-        assert "GLUTTONY" in result.response
+        assert "GLUTEN" in result.response
         assert "fun" in result.response.lower()
     
     def test_persona_command_jarvis(self):
@@ -93,7 +93,7 @@ class TestPersonalityEngine:
         from genesis_protocol.personality import Persona
         
         assert Persona.NORMAL.value == "normal"
-        assert Persona.GLUTTONY.value == "gluttony"
+        assert Persona.GLUTEN.value == "gluten"
         assert Persona.JARVIS.value == "jarvis"
         assert Persona.FRIENDLY.value == "friendly"
         assert Persona.DEVELOPER.value == "developer"
@@ -119,9 +119,9 @@ class TestPersonalityEngine:
         from genesis_protocol.personality import get_personality_engine, Persona
         
         engine = get_personality_engine(456)
-        response = engine.set_persona(Persona.GLUTTONY)
-        assert "Gluttony" in response
-        assert engine.current_persona == Persona.GLUTTONY
+        response = engine.set_persona(Persona.GLUTEN)
+        assert "Gluten" in response
+        assert engine.current_persona == Persona.GLUTEN
 
 
 class TestLongTermMemory:

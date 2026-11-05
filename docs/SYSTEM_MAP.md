@@ -1,10 +1,10 @@
-# Gluttony OS - System Map v1.3
+# Gluten OS - System Map v1.3
 
 ## Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         Gluttony OS v1.3 🔥                          │
+│                         Gluten OS v1.3 🔥                          │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
@@ -106,7 +106,7 @@ Verified against the routes defined in `web/app.py`.
 |----------|--------|-------------|
 | `/api/health` | GET | Health check |
 | `/api/status` | GET | Status with metrics |
-| `/api/state` | GET | Full GLUTTONY state |
+| `/api/state` | GET | Full GLUTEN state |
 | `/api/chat` | POST | Chat with AI |
 | `/api/diagnostics` | GET | Provider, memory, uptime and version diagnostics |
 | `/api/telegram/webhook` | POST | Telegram update webhook |
@@ -118,7 +118,7 @@ See `web/app.py` for the full route list.
 
 ```json
 {
-  "entity": "gluttony",
+  "entity": "gluten",
   "version": "1.3.0",
   "layers": {},
   "metrics": {},
@@ -127,8 +127,8 @@ See `web/app.py` for the full route list.
 }
 ```
 
-Key names come from `GluttonyEntity.get_state()` in
-`genesis_protocol/gluttony/gluttony_core.py`; the contents of `layers`,
+Key names come from `GlutenEntity.get_state()` in
+`genesis_protocol/gluten/gluten_core.py`; the contents of `layers`,
 `metrics`, `autonomy` and `survival` depend on which subsystems are loaded.
 
 ## Background Daemon Loops
@@ -147,5 +147,5 @@ v1.2 ✅ Integration (Commands, Modules)
 v1.3 ✅ Autonomous Behavior 🔥
 v1.4 🔜 Voice + Vision Interaction
 v1.5 🔜 Multi-agent Tools
-v2.0 🔜 GLUTTONY Entity - Persistent personality
+v2.0 🔜 GLUTEN Entity - Persistent personality
 ```

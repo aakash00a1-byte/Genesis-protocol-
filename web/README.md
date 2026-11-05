@@ -1,4 +1,4 @@
-# Gluttony OS Web - Deployment Guide
+# Gluten OS Web - Deployment Guide
 
 A full-featured web application for Genesis AI with authentication and chat interface.
 

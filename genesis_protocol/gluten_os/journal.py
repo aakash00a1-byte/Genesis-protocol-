@@ -1,4 +1,4 @@
-"""Journal - GLUTTONY OS
+"""Journal - GLUTEN OS
 
 Continuous reflection and learning through journaling."""
 
@@ -9,9 +9,9 @@ from pathlib import Path
 
 
 class Journal:
-    """GLUTTONY's daily journal for reflection and learning."""
+    """GLUTEN's daily journal for reflection and learning."""
     
-    def __init__(self, storage_path: str = "./data/gluttony_os/journal"):
+    def __init__(self, storage_path: str = "./data/gluten_os/journal"):
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
         self._entries = []

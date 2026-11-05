@@ -1,4 +1,4 @@
-# Gluttony OS - Production Deployment Guide
+# Gluten OS - Production Deployment Guide
 
 ## 🚀 Quick Deploy to Render (Recommended)
 

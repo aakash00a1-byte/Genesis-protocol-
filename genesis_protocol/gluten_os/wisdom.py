@@ -1,4 +1,4 @@
-"""Wisdom Layer - GLUTTONY Presence Layer
+"""Wisdom Layer - GLUTEN Presence Layer
 
 Distinguishes facts, assumptions, beliefs, and unknowns."""
 

@@ -1,4 +1,4 @@
-"""Capabilities Module - GLUTTONY  OS+2
+"""Capabilities Module - GLUTEN  OS+2
 
 Documents and exposes all system capabilities."""
 
@@ -7,7 +7,7 @@ from datetime import datetime
 
 
 class Capabilities:
-    """GLUTTONY capabilities enumeration."""
+    """GLUTEN capabilities enumeration."""
     
     # 1. Coding & Development
     CODING = {
@@ -119,7 +119,7 @@ class Capabilities:
     def get_all_capabilities(self) -> Dict[str, Any]:
         """Get all capabilities."""
         return {
-            "entity": "GLUTTONY",
+            "entity": "GLUTEN",
             "version": "OS  OS+2",
             "total_categories": len(self.all_categories),
             "total_capabilities": self.get_total_capability_count(),

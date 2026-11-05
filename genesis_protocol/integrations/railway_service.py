@@ -1,4 +1,4 @@
-"""Gluttony OS - Railway Integration Service
+"""Gluten OS - Railway Integration Service
 
 Provides real-time access to Railway deployment logs, status, and management using GraphQL API.
 """
@@ -15,7 +15,7 @@ RAILWAY_API = "https://backboard.railway.app/graphql/v2"
 
 class RailwayService:
     """
-    Railway deployment service for Gluttony OS using GraphQL API.
+    Railway deployment service for Gluten OS using GraphQL API.
     
     Features:
     - Get deployment status

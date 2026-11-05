@@ -1,18 +1,32 @@
-"""GLUTTONY Entity - Genesis Protocol v2.0
+"""Back-compat shim for the historical ``genesis_protocol.gluttony`` path.
 
-The unified AI entity that integrates all layers:
-- Autonomous observation and reflection
-- Interaction with tools and context
-- Learning from experiences
-- Safe self-improvement
-- Proposal generation
-- Human approval workflow
-
-GLUTTONY: Endless hunger for knowledge and evolution.
-But always with human trust and approval. 🖤
+The entity was renamed GLUTTONY -> GLUTEN; the package now lives at
+``genesis_protocol.gluten``. This shim keeps old imports working.
 """
 
-from .gluttony_core import GluttonyEntity, get_gluttony
-from .identity import Identity, get_identity
+import warnings
 
-__all__ = ['GluttonyEntity', 'get_gluttony', 'Identity', 'get_identity']
+from genesis_protocol.gluten import (  # noqa: F401
+    EVOLUTION_CHAIN,
+    GlutenEntity,
+    GluttonyEntity,
+    Identity,
+    NAME,
+    NICKNAME,
+    get_gluten,
+    get_gluttony,
+    get_identity,
+)
+
+warnings.warn(
+    "genesis_protocol.gluttony is deprecated; use genesis_protocol.gluten",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+__all__ = [
+    'GlutenEntity', 'get_gluten',
+    'GluttonyEntity', 'get_gluttony',
+    'Identity', 'get_identity',
+    'EVOLUTION_CHAIN', 'NAME', 'NICKNAME',
+]

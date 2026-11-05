@@ -168,7 +168,7 @@ I had trouble processing your identity question.
 
 **Reason:** {reason}
 
-**What I am:** I am GLUTTONY, an AI entity on the Genesis Protocol OS.
+**What I am:** I am GLUTEN, an AI entity on the Genesis Protocol OS.
 **Creator:** Aakash
 **Nickname:** Gluten
 

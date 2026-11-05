@@ -71,11 +71,12 @@ class TrustConfidenceSystem:
             "status": "explicit",
             "confidence": ConfidenceLevel.EXPLICIT.value,
             "data": {
-                "name": "GLUTTONY",
+                "name": "GLUTEN",
                 "nickname": "Gluten",
                 "variant": "OS",
                 "creator": "Aakash",
-                "protocol_version": "OS"
+                "protocol_version": "OS",
+                "evolution_chain": ["GENESIS", "GLUTTONY", "GLUTEN"]
             },
             "source": "hardcoded_entity_definition",
             "message": None  # No qualification needed

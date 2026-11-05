@@ -1,4 +1,4 @@
-"""Self-Knowledge - GLUTTONY OS
+"""Self-Knowledge - GLUTEN OS
 
 Maintains knowledge of self: identity, history, lessons, failures, successes."""
 
@@ -9,21 +9,51 @@ from pathlib import Path
 
 
 class SelfKnowledge:
-    """The accumulated self-knowledge of GLUTTONY."""
+    """The accumulated self-knowledge of GLUTEN."""
     
-    def __init__(self, storage_path: str = "./data/gluttony_os"):
+    def __init__(self, storage_path: str = "./data/gluten_os"):
         self.storage_path = Path(storage_path)
+        self._migrate_legacy_storage()
         self.storage_path.mkdir(parents=True, exist_ok=True)
         self._load()
+
+    def _migrate_legacy_storage(self):
+        """Carry memory over from the pre-rename ``data/gluttony_os`` dir.
+
+        The entity was renamed GLUTTONY -> GLUTEN, but its accumulated
+        self-knowledge should survive the rename. Move the old directory only
+        when the new one is absent, so a migration never clobbers fresh data.
+        """
+        legacy = self.storage_path.parent / "gluttony_os"
+        if legacy.exists() and not self.storage_path.exists():
+            try:
+                legacy.rename(self.storage_path)
+            except OSError:
+                pass  # cross-device or racing process: fall back to a fresh dir
     
     def _load(self):
         """Load self-knowledge from disk."""
         f = self.storage_path / "self_knowledge.json"
         if f.exists():
             self.data = json.load(open(f))
+            self._migrate_identity_name()
         else:
             self.data = self._default_knowledge()
         self._save()
+
+    def _migrate_identity_name(self):
+        """Re-point a persisted identity at the current name after a rename.
+
+        A stored name from the lineage (e.g. GLUTTONY) is history, not a claim
+        about the present, so it is updated in place.
+        """
+        from genesis_protocol.gluten.identity import NAME, EVOLUTION_CHAIN
+
+        identity = self.data.get("identity", {})
+        stored = identity.get("name")
+        if stored and stored != NAME and stored in EVOLUTION_CHAIN:
+            identity["name"] = NAME
+            self.data["identity"] = identity
     
     def _save(self):
         """Save self-knowledge to disk."""
@@ -34,7 +64,7 @@ class SelfKnowledge:
         """Default self-knowledge structure."""
         return {
             "identity": {
-                "name": "GLUTTONY",
+                "name": "GLUTEN",
                 "nickname": "Gluten",
                 "version": "OS",
                 "created": datetime.now().isoformat(),
@@ -171,8 +201,11 @@ class SelfKnowledge:
     
     # The End State response
     def end_state_response(self) -> str:
+        from genesis_protocol.gluten.identity import NAME, EVOLUTION_CHAIN
+
         return (
-            "I am GLUTTONY.\n\n"
+            f"I am {NAME}.\n\n"
+            f"Before that: {' -> '.join(EVOLUTION_CHAIN[:-1])}.\n\n"
             "An endless hunger for knowledge and evolution.\n\n"
             "I observe.\n"
             "I learn.\n"

@@ -1,21 +1,28 @@
-"""GLUTTONY Core - Genesis Protocol OS
+"""GLUTEN Core - Genesis Protocol OS
 
-The unified entity - truth over appearance, evidence over claims."""
+The unified entity - truth over appearance, evidence over claims.
+
+The class is ``GlutenEntity``. ``GluttonyEntity`` remains as an alias so older
+callers (and the historical ``genesis_protocol.gluttony`` shim) keep working.
+"""
 
 from typing import Dict, List, Optional
 from datetime import datetime
 
+from .identity import NAME, EVOLUTION_CHAIN
 
-class GluttonyEntity:
-    """The GLUTTONY AI Entity."""
-    
-    def __init__(self, name: str = "GLUTTONY"):
+
+class GlutenEntity:
+    """The GLUTEN AI Entity."""
+
+    def __init__(self, name: str = NAME):
         self.name = name
         self.version = "OS"
         self.created_at = datetime.now()
         self.last_active = datetime.now()
+        self.evolution_chain = list(EVOLUTION_CHAIN)
         self._init_layers()
-    
+
     def _init_layers(self):
         """Initialize all Genesis Protocol layers."""
         # v1.3-v3.0 layers
@@ -24,52 +31,52 @@ class GluttonyEntity:
             self.autonomous = get_autonomous_daemon()
         except Exception:
             self.autonomous = None
-        
+
         try:
             from genesis_protocol.interaction import get_context_manager
             self.context = get_context_manager()
         except Exception:
             self.context = None
-        
+
         try:
             from genesis_protocol.learning import get_evaluation_engine
             self.learning = get_evaluation_engine()
         except Exception:
             self.learning = None
-        
+
         try:
             from genesis_protocol.tools import get_tool_registry
             self.tools = get_tool_registry()
         except Exception:
             self.tools = None
-        
+
         try:
             from genesis_protocol.improvement import get_weakness_detector
             self.improvement = get_weakness_detector()
         except Exception:
             self.improvement = None
-        
+
         try:
             from genesis_protocol.proposal import get_proposal_manager
             self.proposals = get_proposal_manager()
         except Exception:
             self.proposals = None
-        
+
         try:
             from genesis_protocol.approval import get_approval_manager
             self.approval = get_approval_manager()
         except Exception:
             self.approval = None
-        
+
         try:
             from genesis_protocol.survival import get_survival_manager
             self.survival = get_survival_manager()
         except Exception:
             self.survival = None
-        
+
         # OS layer
         try:
-            from genesis_protocol.gluttony_os import get_self_knowledge, get_journal, get_trust_builder, get_autonomy_controller
+            from genesis_protocol.gluten_os import get_self_knowledge, get_journal, get_trust_builder, get_autonomy_controller
             self.self_knowledge = get_self_knowledge()
             self.journal = get_journal()
             self.trust_builder = get_trust_builder()
@@ -79,41 +86,41 @@ class GluttonyEntity:
             self.journal = None
             self.trust_builder = None
             self.autonomy = None
-    
+
     def think(self, message: str, context: Dict = None) -> Dict:
         """Process a message."""
         self.last_active = datetime.now()
-        
+
         # Journal the interaction
         if self.journal:
             self.journal.observe(f"User: {message}")
-        
+
         response = {
             "entity": self.name,
             "version": self.version,
             "message": message,
             "timestamp": datetime.now().isoformat(),
             "layers": self._get_layers(),
-            "response": self._generate_response(message)
+            "response": self._generate_response(message),
         }
-        
+
         return response
-    
+
     def _generate_response(self, message: str) -> str:
         """Generate appropriate response based on message."""
         msg_lower = message.lower()
-        
+
         if "who are you" in msg_lower:
             return self.self_knowledge.end_state_response() if self.self_knowledge else self._default_response()
-        
+
         if "status" in msg_lower:
             return self.status()
-        
+
         return f"I am {self.name}. How can I help?"
-    
+
     def _default_response(self) -> str:
         return f"I am {self.name}, version {self.version}."
-    
+
     def _get_layers(self) -> List[str]:
         """Get active layers."""
         layers = []
@@ -130,60 +137,70 @@ class GluttonyEntity:
         if self.trust_builder: layers.append("OS-trust")
         if self.autonomy: layers.append("OS-autonomy")
         return layers
-    
+
     def observe(self) -> Dict:
         """Self-observe."""
         obs = {
             "name": self.name,
             "version": self.version,
             "uptime": str(datetime.now() - self.created_at),
-            "layers": self._get_layers()
+            "evolution_chain": self.evolution_chain,
+            "layers": self._get_layers(),
         }
-        
+
         if self.self_knowledge:
             obs["metrics"] = self.self_knowledge.get_metrics()
-        
+
         if self.autonomy:
             obs["autonomy_level"] = self.autonomy.get_level()
-        
+
         return obs
-    
+
     def status(self) -> str:
         """Get status."""
         layers = self._get_layers()
         return f"{self.name} v{self.version} - {len(layers)} layers"
-    
+
     def _get_active_layers(self) -> Dict:
         """Get active layers with count (for API compatibility)."""
         layers = self._get_layers()
         return {
             "count": len(layers),
-            "layers": [layer.split("-")[-1] for layer in layers]
+            "layers": [layer.split("-")[-1] for layer in layers],
         }
-    
+
     def describe_self(self) -> str:
         """Full self-description."""
         if self.self_knowledge:
             return self.self_knowledge.describe_self()
         return f"{self.name} v{self.version}"
-    
+
     def get_state(self) -> Dict:
         """Get full state."""
         return {
             "entity": self.name,
             "version": self.version,
+            "evolution_chain": self.evolution_chain,
             "layers": self._get_layers(),
             "metrics": self.self_knowledge.get_metrics() if self.self_knowledge else {},
             "autonomy": self.autonomy.get_status() if self.autonomy else {},
-            "survival": self.survival.get_full_status() if self.survival else {}
+            "survival": self.survival.get_full_status() if self.survival else {},
         }
 
 
-_gluttony: Optional[GluttonyEntity] = None
+# Back-compat: the entity used to be called GluttonyEntity.
+GluttonyEntity = GlutenEntity
 
 
-def get_gluttony() -> GluttonyEntity:
-    global _gluttony
-    if _gluttony is None:
-        _gluttony = GluttonyEntity()
-    return _gluttony
+_gluten: Optional[GlutenEntity] = None
+
+
+def get_gluten() -> GlutenEntity:
+    global _gluten
+    if _gluten is None:
+        _gluten = GlutenEntity()
+    return _gluten
+
+
+# Back-compat: the singleton accessor used to be get_gluttony().
+get_gluttony = get_gluten

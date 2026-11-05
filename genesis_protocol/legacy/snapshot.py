@@ -1,4 +1,4 @@
-"""Snapshot Layer - GLUTTONY Legacy
+"""Snapshot Layer - GLUTEN Legacy
 
 Periodic snapshots: daily, weekly, monthly.
 Allows rollback and recovery."""

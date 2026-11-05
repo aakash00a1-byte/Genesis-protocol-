@@ -1,4 +1,4 @@
-"""Timeline Memory - GLUTTONY Presence Layer
+"""Timeline Memory - GLUTEN Presence Layer
 
 Remembers important conversations, milestones, recoveries, lessons, and relationship history."""
 

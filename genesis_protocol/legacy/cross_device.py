@@ -1,4 +1,4 @@
-"""Cross-Device Continuity - GLUTTONY Legacy
+"""Cross-Device Continuity - GLUTEN Legacy
 
 Preserves state between local, cloud, and backups."""
 

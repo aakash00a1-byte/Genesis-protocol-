@@ -57,7 +57,7 @@ class GROQClient:
         if not self.api_key:
             return None
         
-        system_prompt = """You are Genesis Protocol, an AI assistant created by Aakash Kumar (@aakash00a1-byte).
+        system_prompt = """You are GLUTEN, an AI entity on the Genesis Protocol, created by Aakash Kumar (@aakash00a1-byte).
 You are helpful, friendly, and concise. Keep responses short and engaging.
 You can help with coding, questions, and general conversation."""
         
@@ -147,7 +147,7 @@ def main():
         command_prefix="!",
         intents=intents,
         help_command=None,
-        description="Genesis Protocol AI Assistant"
+        description="GLUTEN Assistant"
     )
     
     # ============================================================
@@ -255,7 +255,7 @@ def main():
         if content_lower in greetings or content_lower.startswith("hlo genesis") or content_lower.startswith("hello genesis"):
             responses = [
                 f"👋 Hello {message.author.mention}! Welcome to Genesis Protocol!",
-                f"🎉 Hey there! I'm Genesis Protocol AI. How can I help you today?",
+                f"🎉 Hey there! I'm GLUTEN. How can I help you today?",
                 f"✨ Hi {message.author.mention}! Ready to assist you!",
             ]
             import random
@@ -276,7 +276,7 @@ def main():
             
             if not content:
                 await message.reply(
-                    f"👋 Hello! I'm Genesis Protocol AI.\n"
+                    f"👋 Hello! I'm GLUTEN.\n"
                     f"Available commands: `/ping`, `/status`, `/help`\n"
                     f"Or use `/ask [question]` to chat with me!",
                     mention_author=False
@@ -300,7 +300,7 @@ def main():
                     )
             else:
                 await message.reply(
-                    "🤖 I'm Genesis Protocol AI! Configure GROQ_API_KEY to enable AI chat.\n"
+                    "🤖 I'm GLUTEN! Configure GROQ_API_KEY to enable AI chat.\n"
                     "Available commands: `/ping`, `/status`, `/ask`",
                     mention_author=False
                 )
@@ -309,7 +309,7 @@ def main():
         # DM handling
         if is_dm:
             await message.reply(
-                "👋 DM received! I'm Genesis Protocol AI.\n"
+                "👋 DM received! I'm GLUTEN.\n"
                 "For help, use `/status` to see bot info.",
                 mention_author=False
             )
@@ -385,16 +385,16 @@ def main():
         embed.add_field(name="/ping", value="Check if bot is online", inline=True)
         embed.add_field(name="/status", value="Show bot status and info", inline=True)
         embed.add_field(name="/health", value="Show system health", inline=True)
-        embed.add_field(name="/ask [question]", value="Ask Genesis AI anything", inline=True)
+        embed.add_field(name="/ask [question]", value="Ask GLUTEN anything", inline=True)
         embed.add_field(name="/help", value="Show this help message", inline=True)
         embed.add_field(name="Text Commands", value="Say `hello genesis` or `hlo genesis` to greet!", inline=False)
         embed.add_field(name="💬 AI Chat", value="Mention @Genesis Protocol to chat with AI", inline=False)
         embed.set_footer(text="Genesis Protocol v2.1.0")
         await interaction.response.send_message(embed=embed, ephemeral=False)
     
-    @app_commands.command(name="ask", description="Ask Genesis AI anything")
+    @app_commands.command(name="ask", description="Ask GLUTEN anything")
     async def ask(interaction: discord.Interaction, question: str):
-        """Slash command: /ask - Ask Genesis AI"""
+        """Slash command: /ask - Ask GLUTEN"""
         await interaction.response.defer()
         
         if not groq_client.api_key:
@@ -412,7 +412,7 @@ def main():
                 response = response[:1997] + "..."
             
             embed = discord.Embed(
-                title="🤖 Genesis AI Response",
+                title="🤖 GLUTEN Response",
                 color=discord.Color.purple(),
                 description=response,
                 timestamp=datetime.now()

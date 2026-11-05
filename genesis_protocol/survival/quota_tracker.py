@@ -1,4 +1,4 @@
-"""Quota Tracker - GLUTTONY v3.0 Survival Layer"""
+"""Quota Tracker - GLUTEN v3.0 Survival Layer"""
 from datetime import datetime, timedelta
 from typing import Dict
 

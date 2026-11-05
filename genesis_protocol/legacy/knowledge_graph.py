@@ -1,4 +1,4 @@
-"""Knowledge Graph - GLUTTONY Legacy
+"""Knowledge Graph - GLUTEN Legacy
 
 Connects people, topics, projects, memories, and lessons."""
 

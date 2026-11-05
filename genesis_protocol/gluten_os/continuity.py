@@ -1,4 +1,4 @@
-"""Continuity Layer - GLUTTONY Presence Layer
+"""Continuity Layer - GLUTEN Presence Layer
 
 Restores identity, timeline, state, trust, and journal after restart."""
 
@@ -47,7 +47,7 @@ class ContinuityLayer:
             'journal': None,
             'relationship': None,
             'wisdom': None,
-            'gluttony_state': None,
+            'gluten_state': None,
             'uptime_simulation': {
                 'simulated_days': 0,
                 'restarts': 0
@@ -91,9 +91,9 @@ class ContinuityLayer:
         self.state['wisdom'] = wisdom_state
         self._save()
     
-    def save_gluttony_state(self, state: Dict):
-        """Save GLUTTONY core state."""
-        self.state['gluttony_state'] = state
+    def save_gluten_state(self, state: Dict):
+        """Save GLUTEN core state."""
+        self.state['gluten_state'] = state
         self._save()
     
     def save_full_state(self, all_states: Dict):
@@ -105,7 +105,7 @@ class ContinuityLayer:
             self.state['journal'] = all_states.get('journal')
             self.state['relationship'] = all_states.get('relationship')
             self.state['wisdom'] = all_states.get('wisdom')
-            self.state['gluttony_state'] = all_states.get('gluttony_state')
+            self.state['gluten_state'] = all_states.get('gluten_state')
             self._save()
     
     def restore_identity(self) -> Optional[Dict]:
@@ -132,9 +132,9 @@ class ContinuityLayer:
         """Restore wisdom layer state."""
         return self.state.get('wisdom')
     
-    def restore_gluttony_state(self) -> Optional[Dict]:
-        """Restore GLUTTONY core state."""
-        return self.state.get('gluttony_state')
+    def restore_gluten_state(self) -> Optional[Dict]:
+        """Restore GLUTEN core state."""
+        return self.state.get('gluten_state')
     
     def restore_all(self) -> Dict:
         """Restore all states at once."""
@@ -145,7 +145,7 @@ class ContinuityLayer:
             'journal': self.state.get('journal'),
             'relationship': self.state.get('relationship'),
             'wisdom': self.state.get('wisdom'),
-            'gluttony_state': self.state.get('gluttony_state')
+            'gluten_state': self.state.get('gluten_state')
         }
     
     def get_continuity_status(self) -> Dict:
@@ -160,7 +160,7 @@ class ContinuityLayer:
             'has_journal': self.state.get('journal') is not None,
             'has_relationship': self.state.get('relationship') is not None,
             'has_wisdom': self.state.get('wisdom') is not None,
-            'has_gluttony_state': self.state.get('gluttony_state') is not None,
+            'has_gluten_state': self.state.get('gluten_state') is not None,
             'uptime_simulation': self.state.get('uptime_simulation', {})
         }
     

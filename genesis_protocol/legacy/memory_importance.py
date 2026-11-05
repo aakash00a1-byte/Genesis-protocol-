@@ -1,4 +1,4 @@
-"""Memory Importance - GLUTTONY Legacy
+"""Memory Importance - GLUTEN Legacy
 
 Ranks memories: temporary, important, core, permanent.
 Prevents important memories from being lost."""

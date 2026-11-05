@@ -1,4 +1,4 @@
-"""Survival Manager - GLUTTONY v3.0 Survival Layer"""
+"""Survival Manager - GLUTEN v3.0 Survival Layer"""
 from .resource_monitor import get_resource_monitor
 from .cost_tracker import get_cost_tracker
 from .quota_tracker import get_quota_tracker

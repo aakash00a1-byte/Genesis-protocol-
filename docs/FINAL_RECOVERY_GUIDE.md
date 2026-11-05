@@ -1,4 +1,4 @@
-# Final Recovery Guide - Gluttony OS
+# Final Recovery Guide - Gluten OS
 
 **Version:** 1.0.0  
 **Purpose:** Complete disaster recovery procedures

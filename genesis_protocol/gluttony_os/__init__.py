@@ -1,31 +1,18 @@
-"""GLUTTONY OS - Self-Knowledge & Journal System
+"""Back-compat shim for the historical ``genesis_protocol.gluttony_os`` path.
 
-The soul of GLUTTONY - continuous learning and self-understanding."""
+The package now lives at ``genesis_protocol.gluten_os``. This shim re-exports
+its public surface so old imports keep working.
+"""
 
-from .self_knowledge import SelfKnowledge, get_self_knowledge
-from .journal import Journal, get_journal
-from .trust_builder import TrustBuilder, get_trust_builder
-from .autonomy_controller import AutonomyController, get_autonomy_controller
-from .timeline import TimelineMemory, get_timeline_memory
-from .relationship import RelationshipMemory, get_relationship_memory
-from .wisdom import WisdomLayer, get_wisdom_layer
-from .dream_mode import DreamMode, get_dream_mode
-from .continuity import ContinuityLayer, get_continuity_layer
-from .capabilities import Capabilities, get_capabilities
-from .self_preservation import SelfPreservation, get_self_preservation
-from .garden_mode import GardenMode, get_garden_mode
+import warnings
 
-__all__ = [
-    'SelfKnowledge', 'get_self_knowledge',
-    'Journal', 'get_journal',
-    'TrustBuilder', 'get_trust_builder',
-    'AutonomyController', 'get_autonomy_controller',
-    'TimelineMemory', 'get_timeline_memory',
-    'RelationshipMemory', 'get_relationship_memory',
-    'WisdomLayer', 'get_wisdom_layer',
-    'DreamMode', 'get_dream_mode',
-    'ContinuityLayer', 'get_continuity_layer',
-    'Capabilities', 'get_capabilities',
-    'SelfPreservation', 'get_self_preservation',
-    'GardenMode', 'get_garden_mode'
-]
+from genesis_protocol.gluten_os import *  # noqa: F401,F403
+from genesis_protocol.gluten_os import __all__ as _gluten_os_all
+
+warnings.warn(
+    "genesis_protocol.gluttony_os is deprecated; use genesis_protocol.gluten_os",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+__all__ = list(_gluten_os_all)

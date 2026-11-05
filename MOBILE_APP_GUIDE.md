@@ -1,4 +1,4 @@
-# Gluttony OS Mobile App - Implementation Summary
+# Gluten OS Mobile App - Implementation Summary
 
 **Created:** 2026-06-27  
 **Status:** ✅ Implementation Complete
@@ -7,13 +7,13 @@
 
 ## 📱 What Was Built
 
-A complete React Native/Expo mobile application for Gluttony OS that connects to the Railway backend, providing real-time monitoring, chat, and control of the autonomous AI agent from mobile devices.
+A complete React Native/Expo mobile application for Gluten OS that connects to the Railway backend, providing real-time monitoring, chat, and control of the autonomous AI agent from mobile devices.
 
 ## 🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Gluttony OS System                        │
+│                    Gluten OS System                        │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  ┌──────────────────┐     ┌───────────────────────────────────┐ │
@@ -219,4 +219,4 @@ eas build --platform android --profile production
 
 **Built with ❤️ using Expo & React Native**
 
-*Gluttony OS - Autonomous AI Agent System*
+*Gluten OS - Autonomous AI Agent System*

@@ -1,4 +1,4 @@
-"""Cost Tracker - GLUTTONY v3.0 Survival Layer"""
+"""Cost Tracker - GLUTEN v3.0 Survival Layer"""
 import json
 from datetime import datetime
 from pathlib import Path

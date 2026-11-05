@@ -1,4 +1,4 @@
-"""Archive Layer - GLUTTONY Legacy
+"""Archive Layer - GLUTEN Legacy
 
 Stores conversations, lessons, milestones, journals, and trust history.
 Supports export and restore."""
@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 class ArchiveLayer:
-    """Persistent archive of all GLUTTONY memories."""
+    """Persistent archive of all GLUTEN memories."""
     
     def __init__(self, storage_path: str = "data/archive"):
         self.storage_path = storage_path
