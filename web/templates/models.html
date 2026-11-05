@@ -1,0 +1,19 @@
+{% extends "base_v4.html" %}
+{% block title %}Models - Gluten OS{% endblock %}
+{% block header_title %}🧠 GLUTEN MODELS{% endblock %}
+{% block content %}
+{% set fp_icon = "🧠" %}
+{% set fp_title = "Model Providers" %}
+{% set fp_subtitle = "Providers GLUTEN can reach, and their live health. An unconfigured provider is skipped, never faked." %}
+{% set fp_actions = [
+    {'label':'Diagnostics','url':'/api/diagnostics','method':'GET'},
+    {'label':'Status','url':'/api/status','method':'GET'}
+] %}
+{% set fp_extra %}
+<div class="fp-card">
+    <h3>Provider Chain</h3>
+    <p class="fp-note">A request is scored against the configured providers and routed to the best healthy one. If the first fails, the chain falls back to the next. With no key configured, the offline mock answers.</p>
+</div>
+{% endset %}
+{% include "feature_panel.html" %}
+{% endblock %}

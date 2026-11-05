@@ -1,0 +1,18 @@
+{% extends "base_v4.html" %}
+{% block title %}Voice - Gluten OS{% endblock %}
+{% block header_title %}🎤 GLUTEN VOICE{% endblock %}
+{% block content %}
+{% set fp_icon = "🎤" %}
+{% set fp_title = "Voice" %}
+{% set fp_subtitle = "Voice input is not wired to a speech backend in this build." %}
+{% set fp_static %}
+<div class="fp-card">
+    <h3>Status</h3>
+    <div class="fp-row"><span class="k">Speech to text</span><span class="v">not configured</span></div>
+    <div class="fp-row"><span class="k">Text to speech</span><span class="v">not configured</span></div>
+    <div class="fp-row"><span class="k">Browser mic button</span><span class="v">available in Chat</span></div>
+    <p class="fp-note">The chat pages have a microphone button, but it only works if the browser provides speech recognition. No server side speech provider is configured, so nothing is sent anywhere. Rather than show a fake waveform, this page says so.</p>
+</div>
+{% endset %}
+{% include "feature_panel.html" %}
+{% endblock %}

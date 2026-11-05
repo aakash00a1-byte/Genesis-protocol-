@@ -1,0 +1,19 @@
+{% extends "base_v4.html" %}
+{% block title %}Tools - Gluten OS{% endblock %}
+{% block header_title %}🔧 GLUTEN TOOLS{% endblock %}
+{% block content %}
+{% set fp_icon = "🔧" %}
+{% set fp_title = "Tool Capabilities" %}
+{% set fp_subtitle = "What GLUTEN can do. Every tool call passes the authority gate before it runs." %}
+{% set fp_actions = [
+    {'label':'Capabilities','url':'/api/entity','method':'GET'},
+    {'label':'Garden Status','url':'/api/garden/status','method':'GET'}
+] %}
+{% set fp_extra %}
+<div class="fp-card">
+    <h3>Authority Gate</h3>
+    <p class="fp-note">A tool request is checked against policy, then permission, then the sandbox, and only then executed. The result is audited. Some tools are forbidden outright on the agent path, and a role can never widen that list.</p>
+</div>
+{% endset %}
+{% include "feature_panel.html" %}
+{% endblock %}

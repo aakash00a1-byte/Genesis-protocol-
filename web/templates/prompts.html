@@ -1,0 +1,28 @@
+{% extends "base_v4.html" %}
+{% block title %}Prompts - Gluten OS{% endblock %}
+{% block header_title %}📝 GLUTEN PROMPTS{% endblock %}
+{% block content %}
+{% set fp_icon = "📝" %}
+{% set fp_title = "Commands and Persona" %}
+{% set fp_subtitle = "The instructions that shape GLUTEN, and the commands it understands." %}
+{% set fp_static %}
+<div class="fp-card">
+    <h3>Persona Directives</h3>
+    <div class="fp-row"><span class="k">Identity</span><span class="v">GLUTEN, nickname Gluten</span></div>
+    <div class="fp-row"><span class="k">Lineage</span><span class="v">GENESIS → GLUTTONY → GLUTEN</span></div>
+    <div class="fp-row"><span class="k">Default language</span><span class="v">Hinglish</span></div>
+    <div class="fp-row"><span class="k">Never says</span><span class="v">"I am an AI"</span></div>
+</div>
+<div class="fp-card">
+    <h3>Chat Commands</h3>
+    <div class="fp-row"><span class="k">/ask &lt;question&gt;</span><span class="v">ask the provider chain</span></div>
+    <div class="fp-row"><span class="k">/council &lt;question&gt;</span><span class="v">ask several models, then reconcile</span></div>
+    <div class="fp-row"><span class="k">/status</span><span class="v">report current state</span></div>
+    <div class="fp-row"><span class="k">/do &lt;instruction&gt;</span><span class="v">queue a work order for the agent</span></div>
+    <div class="fp-row"><span class="k">/updates</span><span class="v">list agent pull requests</span></div>
+    <div class="fp-row"><span class="k">/approve &lt;id&gt;</span><span class="v">merge an approved change</span></div>
+</div>
+{% endset %}
+{% set fp_actions = [ {'label':'Identity Context','url':'/api/entity','method':'GET'} ] %}
+{% include "feature_panel.html" %}
+{% endblock %}

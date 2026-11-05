@@ -647,6 +647,8 @@ def agent_workspace():
 @login_required
 def settings():
     """Settings page."""
+    from genesis_protocol.config import get_config
+
     config = get_config()
     
     # Get provider status
@@ -2896,6 +2898,8 @@ def api_crypto_all():
 def railway_status():
     """Get Railway deployment status."""
     try:
+        from genesis_protocol.integrations.railway_service import get_railway_service
+
         railway = get_railway_service()
         
         if not railway.is_configured():
@@ -2920,6 +2924,40 @@ def railway_status():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
+
+
+# ---------------------------------------------------------------------------
+# Sidebar pages. Each links to a nav entry in base_v4.html; the data comes
+# from the API routes above, so the page never shows invented values.
+# ---------------------------------------------------------------------------
+
+_FEATURE_PAGES = [
+    ('/agents', 'agents.html'),
+    ('/models', 'models.html'),
+    ('/knowledge', 'knowledge.html'),
+    ('/memory', 'memory.html'),
+    ('/tools', 'tools.html'),
+    ('/voice', 'voice.html'),
+    ('/files', 'files.html'),
+    ('/prompts', 'prompts.html'),
+    ('/history', 'history.html'),
+]
+
+
+def _feature_page(template):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template(template, username=session.get('username'))
+
+
+for _path, _template in _FEATURE_PAGES:
+    app.add_url_rule(
+        _path,
+        endpoint='page' + _path.replace('/', '_'),
+        view_func=(lambda t: (lambda: _feature_page(t)))(_template),
+        methods=['GET'],
+    )
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

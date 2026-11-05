@@ -1,0 +1,26 @@
+{% extends "base_v4.html" %}
+{% block title %}Agents - Gluten OS{% endblock %}
+{% block header_title %}🤖 GLUTEN AGENTS{% endblock %}
+{% block content %}
+{% set fp_icon = "🤖" %}
+{% set fp_title = "Agent Inventory" %}
+{% set fp_subtitle = "The built-in agents GLUTEN routes work to. All run offline; each is deterministic." %}
+{% set fp_static %}
+<div class="fp-card">
+    <h3>Built-in Agents (8)</h3>
+    <div class="fp-list">
+        <div class="fp-item"><div class="t">planning</div><div class="d">Decomposes a request into ordered steps.</div></div>
+        <div class="fp-item"><div class="t">research</div><div class="d">Read-only recon and source gathering.</div></div>
+        <div class="fp-item"><div class="t">coding</div><div class="d">Writes and edits code.</div></div>
+        <div class="fp-item"><div class="t">qa</div><div class="d">Independent verification of a result.</div></div>
+        <div class="fp-item"><div class="t">security</div><div class="d">Checks permissions, secrets, and risk.</div></div>
+        <div class="fp-item"><div class="t">deployment</div><div class="d">Build and release steps.</div></div>
+        <div class="fp-item"><div class="t">memory</div><div class="d">Always the final step; writes what was learned.</div></div>
+        <div class="fp-item"><div class="t">generic</div><div class="d">Fallback when no keyword matches.</div></div>
+    </div>
+    <p class="fp-note">Selection is keyword based. Every tool call an agent makes still passes the authority gate, so no agent can widen its own permissions.</p>
+</div>
+{% endset %}
+{% set fp_actions = [ {'label':'Autonomy State','url':'/api/state','method':'GET'} ] %}
+{% include "feature_panel.html" %}
+{% endblock %}

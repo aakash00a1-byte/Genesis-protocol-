@@ -1,0 +1,19 @@
+{% extends "base_v4.html" %}
+{% block title %}Knowledge - Gluten OS{% endblock %}
+{% block header_title %}📚 GLUTEN KNOWLEDGE{% endblock %}
+{% block content %}
+{% set fp_icon = "📚" %}
+{% set fp_title = "Knowledge Graph" %}
+{% set fp_subtitle = "Nodes and edges GLUTEN has learned. Search runs over the same store." %}
+{% set fp_actions = [ {'label':'Graph','url':'/api/knowledge','method':'GET'} ] %}
+{% set fp_extra %}
+<div class="fp-card">
+    <h3>Search</h3>
+    <div class="fp-actions">
+        <input class="fp-input" id="kg-q" placeholder="Search knowledge...">
+        <button class="fp-btn" onclick="fpCall('/api/knowledge/search?q=' + encodeURIComponent(document.getElementById('kg-q').value), 'GET')">Search</button>
+    </div>
+</div>
+{% endset %}
+{% include "feature_panel.html" %}
+{% endblock %}

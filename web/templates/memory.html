@@ -1,0 +1,13 @@
+{% extends "base_v4.html" %}
+{% block title %}Memory - Gluten OS{% endblock %}
+{% block header_title %}💾 GLUTEN MEMORY{% endblock %}
+{% block content %}
+{% set fp_icon = "💾" %}
+{% set fp_title = "Memory Fabric" %}
+{% set fp_subtitle = "Stored memories by rank. Secrets are redacted before anything is written." %}
+{% set fp_actions = [
+    {'label':'Importance','url':'/api/memory/importance','method':'GET'},
+    {'label':'Preservation Status','url':'/api/preservation/status','method':'GET'}
+] %}
+{% include "feature_panel.html" %}
+{% endblock %}

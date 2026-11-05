@@ -1,0 +1,64 @@
+{% extends "base_v4.html" %}
+
+{% block title %}Roadmap - Gluten OS v4{% endblock %}
+
+{% block header_title %}🗺️ GLUTEN ROADMAP{% endblock %}
+
+{% block content %}
+<style>
+.rm-wrap { max-width: 1000px; margin: 0 auto; padding: 20px; }
+.rm-hero {
+    background: rgba(10, 10, 26, 0.8);
+    border: 1px solid #1a1a3a;
+    border-radius: 12px;
+    padding: 30px;
+    margin-bottom: 20px;
+}
+.rm-hero h2 { color: #00ff9d; margin: 0 0 10px; font-size: 22px; }
+.rm-hero p { color: #7070a0; margin: 0; font-size: 13px; }
+.rm-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 24px; }
+.rm-node {
+    background: rgba(10, 10, 26, 0.8);
+    border: 1px solid #1a1a3a;
+    border-radius: 10px;
+    padding: 14px 22px;
+    text-align: center;
+}
+.rm-node.current { border-color: #00ff9d; box-shadow: 0 0 20px rgba(0, 255, 157, 0.2); }
+.rm-node .name { color: #e0e0ff; font-size: 14px; letter-spacing: 2px; }
+.rm-node.current .name { color: #00ff9d; }
+.rm-node .when { color: #404060; font-size: 11px; margin-top: 4px; }
+.rm-arrow { color: #00e5ff; font-size: 18px; }
+.rm-list { background: rgba(10, 10, 26, 0.8); border: 1px solid #1a1a3a; border-radius: 12px; padding: 24px; }
+.rm-list h3 { color: #00e5ff; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 16px; }
+.rm-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #12122a; font-size: 13px; }
+.rm-item:last-child { border-bottom: none; }
+.rm-dot { color: #00ff9d; }
+.rm-item .label { color: #e0e0ff; }
+.rm-item .note { color: #7070a0; margin-left: auto; font-size: 12px; }
+</style>
+
+<div class="rm-wrap">
+    <div class="rm-hero">
+        <h2>🗺️ Evolution Roadmap</h2>
+        <p>Where GLUTEN came from and what it is working toward.</p>
+    </div>
+
+    <div class="rm-chain">
+        <div class="rm-node"><div class="name">GENESIS</div><div class="when">protocol layer</div></div>
+        <div class="rm-arrow">→</div>
+        <div class="rm-node"><div class="name">GLUTTONY</div><div class="when">first entity</div></div>
+        <div class="rm-arrow">→</div>
+        <div class="rm-node current"><div class="name">GLUTEN</div><div class="when">current</div></div>
+    </div>
+
+    <div class="rm-list">
+        <h3>Current Focus</h3>
+        <div class="rm-item"><span class="rm-dot">◆</span><span class="label">Autonomous engineering loop, bounded and approval-gated</span><span class="note">active</span></div>
+        <div class="rm-item"><span class="rm-dot">◆</span><span class="label">Continuous memory and self-knowledge</span><span class="note">active</span></div>
+        <div class="rm-item"><span class="rm-dot">◆</span><span class="label">Multi-provider AI with fallback chain</span><span class="note">active</span></div>
+        <div class="rm-item"><span class="rm-dot">◇</span><span class="label">Wider channel support beyond Telegram and Discord</span><span class="note">planned</span></div>
+        <div class="rm-item"><span class="rm-dot">◇</span><span class="label">Deeper offline capability</span><span class="note">planned</span></div>
+    </div>
+</div>
+{% endblock %}

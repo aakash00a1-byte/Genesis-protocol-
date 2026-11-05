@@ -1,0 +1,14 @@
+{% extends "base_v4.html" %}
+{% block title %}History - Gluten OS{% endblock %}
+{% block header_title %}📜 GLUTEN HISTORY{% endblock %}
+{% block content %}
+{% set fp_icon = "📜" %}
+{% set fp_title = "History" %}
+{% set fp_subtitle = "Timeline events, past conversations, and the archive." %}
+{% set fp_actions = [
+    {'label':'Timeline','url':'/api/timeline','method':'GET'},
+    {'label':'Conversations','url':'/api/chat/conversations','method':'GET'},
+    {'label':'Archive','url':'/api/archive','method':'GET'}
+] %}
+{% include "feature_panel.html" %}
+{% endblock %}

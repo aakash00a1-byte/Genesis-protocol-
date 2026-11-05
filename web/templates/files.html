@@ -1,0 +1,13 @@
+{% extends "base_v4.html" %}
+{% block title %}Files - Gluten OS{% endblock %}
+{% block header_title %}📁 GLUTEN FILES{% endblock %}
+{% block content %}
+{% set fp_icon = "📁" %}
+{% set fp_title = "Archive and Snapshots" %}
+{% set fp_subtitle = "Conversations, journals, lessons, and milestones kept on disk." %}
+{% set fp_actions = [
+    {'label':'Archive','url':'/api/archive','method':'GET'},
+    {'label':'Snapshot','url':'/api/snapshot','method':'GET'}
+] %}
+{% include "feature_panel.html" %}
+{% endblock %}

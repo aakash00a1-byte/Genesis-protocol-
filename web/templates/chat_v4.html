@@ -51,7 +51,7 @@
             <div class="message-content">
                 <div class="message-text">{{ msg.content|safe }}</div>
                 <div class="message-meta">
-                    <span class="model-badge">⚡ GENESIS</span>
+                    <span class="model-badge">⚡ GLUTEN</span>
                     <span>{{ msg.created_at.strftime('%H:%M') if msg.created_at else '' }}</span>
                     <div class="message-actions">
                         <button class="message-action" onclick="copyMessage(this)" title="Copy">📋</button>
@@ -140,7 +140,7 @@ function addMessage(content, isUser = false, meta = {}) {
     const avatar = isUser ? '👤' : '⚡';
     const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
     
-    const modelBadge = !isUser ? '<span class="model-badge">⚡ GENESIS</span>' : '';
+    const modelBadge = !isUser ? '<span class="model-badge">⚡ GLUTEN</span>' : '';
     const actions = !isUser 
         ? '<button class="message-action" onclick="copyMessage(this)" title="Copy">📋</button><button class="message-action" onclick="regenerateMessage(0)" title="Regenerate">🔄</button>'
         : '';
