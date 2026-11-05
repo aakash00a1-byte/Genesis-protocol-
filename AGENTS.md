@@ -176,6 +176,27 @@ push to `main` (runs `scripts/hf_deploy.sh` with the `HF_TOKEN` repo secret),
 so a GitHub push updates the live Space without a manual step. If `HF_TOKEN` is
 unset the job fails loudly instead of silently skipping.
 
+**But a private repo burns Actions minutes, and when they run out every
+workflow fails instantly with zero steps.** On 2026-11-05 a push to `main`
+produced five failed runs (Deploy, CI/CD, Mobile, Webhook) that each completed
+in ~4s with `steps: 0` -- no job ever started. That is not a code failure and
+re-running will not help; it is the spending limit. The Space then silently
+stays on old code, which is how the "hello" fix appeared not to work.
+
+- Diagnose: a run whose `updated_at - created_at` is a few seconds and whose
+  jobs report zero steps is out of minutes, not broken.
+- Fix: raise the spending limit, or make the repo public (public repos get
+  unlimited minutes, which is what the relay/heartbeat already assume), or
+  deploy by hand.
+- Manual deploy always works and is the reliable path:
+  `HF_TOKEN=hf_... bash scripts/hf_deploy.sh`. It prints
+  `Deployed <sha>`, then the Space rebuilds on its own (~1-2 min).
+- Verify the *Space repo*, not just the web page:
+  `git clone https://hf:$HF_TOKEN@huggingface.co/spaces/GenesisNo/Genesis-Automaton`
+  and check `git log -1` shows `deploy: sync from GitHub main (<sha>)`.
+  Remember `/chat` is behind `@login_required`, so a no-cookie fetch redirects
+  and can never confirm a template change -- log in first.
+
 ## V6 hardening notes (relay + authority gate)
 
 - V6 kernel lives in `genesis_v5/genesis/`. Run its suite from that dir with
@@ -218,6 +239,17 @@ unset the job fails loudly instead of silently skipping.
   To see the real cause when chat misbehaves, check
   `/api/diagnostics` -> `environment.*_configured`, then the server log for
   `NO AI PROVIDERS CONFIGURED`.
+- **Fix every chat template, not just the one you are looking at.** The first
+  pass only fixed `genesis_ultra.html`, but login redirects to `/chat`, which
+  renders `chat.html` -- so the user still hit the bug. Four routed templates
+  post to `/api/chat` and all four needed the same 401 handling, dynamic model
+  label and real transport badge: `genesis_ultra.html`, `genesis_gemini.html`,
+  `chat.html`, `agent_workspace.html`. `settings.html` also listed a dead
+  `Groq LLama-3` in a dropdown that was never wired to anything; it now renders
+  the provider status the route already passes. When you touch one chat
+  template, grep the others (`grep -rl api/chat web/templates/`) and fix them
+  together. Regression: `tests/test_web_routes.py::test_chat_template_handles_401`
+  and friends, parameterized over all four.
 - **Never report a backend or model that is not there.** `/api/diagnostics`
   used to hardcode `vector_db: 'chroma'` and `cache: 'redis'` regardless of
   what was installed, and reported only groq. It now probes the optional
