@@ -321,3 +321,44 @@ class TestEncryptionService:
         # Should have a key
         assert service._key is not None
         assert len(service._key) == 32  # 256 bits
+
+
+class TestEncryptionFailClosed:
+    """The service must never present encoding as encryption.
+
+    Regression: without the ``cryptography`` package, ``encrypt()`` silently
+    returned base64 and ``test_encrypt_different_each_time`` failed, because
+    the same plaintext produced identical "ciphertext". A caller could not tell
+    that its data was never encrypted.
+    """
+
+    def test_encrypt_raises_when_backend_missing(self):
+        import builtins
+
+        import pytest
+
+        from genesis_protocol.security.encryption import (
+            EncryptionService,
+            EncryptionUnavailableError,
+        )
+
+        real_import = builtins.__import__
+
+        def _blocked(name, *args, **kwargs):
+            if name.startswith("cryptography"):
+                raise ImportError("cryptography is not installed")
+            return real_import(name, *args, **kwargs)
+
+        service = EncryptionService(key="test-key-12345")
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(builtins, "__import__", _blocked)
+            with pytest.raises(EncryptionUnavailableError):
+                service.encrypt("Hello, World!")
+            with pytest.raises(EncryptionUnavailableError):
+                service.decrypt("SGVsbG8sIFdvcmxkIQ==")
+
+    def test_error_is_exported(self):
+        from genesis_protocol.security import EncryptionUnavailableError
+
+        assert issubclass(EncryptionUnavailableError, RuntimeError)
