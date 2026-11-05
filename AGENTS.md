@@ -202,6 +202,31 @@ unset the job fails loudly instead of silently skipping.
 
 ## Live runtime gotchas (found by driving the real Space)
 
+- **Chat answers "Sorry, I encountered an error" when no provider is
+  configured.** Three faults stacked up, all fixed in `c77f474e`:
+  1. `/` served `genesis_ultra.html` (a chat page) to logged-out visitors, but
+     `/api/chat` is `@login_required`, so every message was a 401 that the
+     template flattened into the generic error. `/` now renders
+     `index_v4.html` for logged-out visitors; both chat templates redirect a
+     401 to `/login`.
+  2. The empty-response path always reported `PROVIDER_EMPTY`, whose text
+     advised "try rephrasing your question". With no key that advice is wrong.
+     `FailureType.NO_PROVIDERS` now names the missing key and the fix.
+     `GenesisAgent._empty_response_failure()` picks between the two.
+  3. The status bar hardcoded `Model: Groq LLama-3.1`; it now reads
+     `/api/diagnostics`. Do not hardcode a model name in a template.
+  To see the real cause when chat misbehaves, check
+  `/api/diagnostics` -> `environment.*_configured`, then the server log for
+  `NO AI PROVIDERS CONFIGURED`.
+- **Never report a backend or model that is not there.** `/api/diagnostics`
+  used to hardcode `vector_db: 'chroma'` and `cache: 'redis'` regardless of
+  what was installed, and reported only groq. It now probes the optional
+  dependency and reports every provider as a boolean. Regression:
+  `tests/test_failure_communicator.py::test_diagnostics_reports_every_provider_and_no_fake_backends`.
+- **There is no `/ws` route.** `genesis_ultra.html` opened a WebSocket to it
+  and retried every 3s forever, which is why the status bar said
+  "Reconnecting...". Chat is HTTP-only; the page now probes once and reports
+  HTTP mode. Regression: `tests/test_web_routes.py`.
 - **AI brain / event loops:** providers must not cache `httpx.AsyncClient` in
   `__init__`. The Telegram webhook builds a fresh asyncio loop per request and
   closes it, so a cached client fails on the 2nd request with
