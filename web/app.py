@@ -91,6 +91,36 @@ app.permanent_session_lifetime = timedelta(days=7)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Provider name -> env var holding its API key. Diagnostics reports each as a
+# boolean; the key itself is never read into a response.
+PROVIDER_ENV_VARS = {
+    'groq': 'GROQ_API_KEY',
+    'openai': 'OPENAI_API_KEY',
+    'gemini': 'GEMINI_API_KEY',
+    'claude': 'ANTHROPIC_API_KEY',
+    'deepseek': 'DEEPSEEK_API_KEY',
+    'mistral': 'MISTRAL_API_KEY',
+}
+
+
+def _optional_dependency_status(module_name, label):
+    """Report an optional backend honestly instead of assuming it is present."""
+    try:
+        __import__(module_name)
+        return f'{label} (available)'
+    except ImportError:
+        return f'{label} (not installed)'
+
+
+def _cache_backend_status():
+    """Report the cache backend actually in use."""
+    try:
+        import redis  # noqa: F401
+    except ImportError:
+        return 'in-memory (redis not installed)'
+    return 'redis (client installed; connection verified at first use)'
+
+
 # Rate limiting. flask-limiter is optional: fall back to a no-op decorator so a
 # missing optional dependency can never break app import (it previously did).
 try:
@@ -604,7 +634,7 @@ def index():
     """Homepage."""
     if 'user_id' in session:
         return redirect(url_for('ultra'))
-    return render_template('genesis_ultra.html')
+    return render_template('index_v4.html')
 
 
 @app.route('/chat')
@@ -1755,12 +1785,13 @@ def api_diagnostics():
             'user_count': user_count
         },
         'memory': {
-            'vector_db': 'chroma',  # TODO: check actual status
-            'cache': 'redis'  # TODO: check actual status
+            'vector_db': _optional_dependency_status('chromadb', 'chroma'),
+            'cache': _cache_backend_status()
         },
         'metrics': metrics,
         'environment': {
-            'groq_configured': os.environ.get('GROQ_API_KEY', '') != '',
+            **{f'{p}_configured': bool(os.environ.get(env_var, ''))
+               for p, env_var in PROVIDER_ENV_VARS.items()},
             'railway': os.environ.get('RAILWAY', '') != '',
             'port': os.environ.get('PORT', '5000')
         },

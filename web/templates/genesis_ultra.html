@@ -970,7 +970,7 @@
                     </div>
                     <div class="status-item">
                         <span class="material-icons-round" style="font-size: 12px;">smart_toy</span>
-                        <span>Model: Groq LLama-3.1</span>
+                        <span id="modelLabel">Model: detecting...</span>
                     </div>
                 </div>
             </div>
@@ -1017,7 +1017,26 @@
             initTheme();
             initWebSocket();
             initVoiceRecognition();
+            initModelLabel();
         });
+
+        // Show the model that is actually serving chat, not a hardcoded name.
+        async function initModelLabel() {
+            const el = document.getElementById('modelLabel');
+            if (!el) return;
+            try {
+                const res = await fetch('/api/diagnostics');
+                const d = await res.json();
+                const env = d.environment || {};
+                const configured = ['groq', 'openai', 'gemini', 'claude', 'deepseek', 'mistral']
+                    .filter(p => env[p + '_configured']);
+                el.textContent = configured.length
+                    ? 'Model: ' + configured.join(', ')
+                    : 'Model: none configured';
+            } catch (e) {
+                el.textContent = 'Model: unknown';
+            }
+        }
 
         // Theme
         function initTheme() {
@@ -1041,37 +1060,43 @@
         }
 
         // WebSocket
+        // Chat is served over HTTP only; there is no /ws endpoint. Probe once
+        // and report HTTP mode on failure instead of retrying a dead route.
+        let wsProbeDone = false;
         function initWebSocket() {
+            if (wsProbeDone) return;
+            wsProbeDone = true;
+
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/ws`;
-            
+
             try {
                 ws = new WebSocket(wsUrl);
-                
+
                 ws.onopen = () => {
                     wsConnected = true;
                     wsStatusDot.className = 'status-dot';
                     connectionStatus.textContent = 'Connected';
                 };
-                
+
                 ws.onclose = () => {
                     wsConnected = false;
-                    wsStatusDot.className = 'status-dot warning';
-                    connectionStatus.textContent = 'Reconnecting...';
-                    setTimeout(initWebSocket, 3000);
+                    wsStatusDot.className = 'status-dot';
+                    connectionStatus.textContent = 'HTTP Mode';
                 };
-                
+
                 ws.onerror = () => {
-                    wsStatusDot.className = 'status-dot error';
-                    connectionStatus.textContent = 'Connection error';
+                    wsConnected = false;
+                    wsStatusDot.className = 'status-dot';
+                    connectionStatus.textContent = 'HTTP Mode';
                 };
-                
+
                 ws.onmessage = (event) => {
                     handleStreamMessage(event.data);
                 };
             } catch (e) {
                 console.log('WebSocket not available, using HTTP');
-                wsStatusDot.className = 'status-dot warning';
+                wsStatusDot.className = 'status-dot';
                 connectionStatus.textContent = 'HTTP Mode';
             }
         }
@@ -1189,11 +1214,20 @@
 
                 typingDiv.remove();
 
-                if (response.ok) {
+                if (response.status === 401) {
+                    addMessage('genesis', 'Your session has expired. Taking you to the login page...');
+                    setTimeout(() => { window.location.href = '/login'; }, 1500);
+                } else if (response.ok) {
                     const data = await response.json();
                     await addStreamingMessage('genesis', data.response || data.message);
                 } else {
-                    addMessage('genesis', 'Sorry, I encountered an error. Please try again.');
+                    let detail = '';
+                    try {
+                        const err = await response.json();
+                        detail = err.error || err.message || '';
+                    } catch (e) { /* body was not JSON */ }
+                    addMessage('genesis', 'Request failed (HTTP ' + response.status + ').'
+                        + (detail ? ' ' + detail : ' Please try again.'));
                 }
             } catch (error) {
                 typingDiv.remove();

@@ -11,6 +11,7 @@ from enum import Enum
 
 class FailureType(Enum):
     """Types of failures that can occur."""
+    NO_PROVIDERS = "no_providers"
     PROVIDER_EMPTY = "provider_empty"
     PROVIDER_ERROR = "provider_error"
     PROVIDER_TIMEOUT = "provider_timeout"
@@ -94,7 +95,10 @@ class FailureCommunicator:
     ) -> str:
         """Generate response based on failure type."""
         
-        if failure_type == FailureType.PROVIDER_EMPTY:
+        if failure_type == FailureType.NO_PROVIDERS:
+            return self._no_providers_response(reason)
+
+        elif failure_type == FailureType.PROVIDER_EMPTY:
             return self._provider_empty_response(reason, attempts)
         
         elif failure_type == FailureType.PROVIDER_ERROR:
@@ -112,6 +116,25 @@ class FailureCommunicator:
         else:
             return self._generic_failure_response(reason, attempts)
     
+    def _no_providers_response(self, reason: str) -> str:
+        """Response when no model provider is configured at all.
+
+        This is a deployment gap, not a problem with the question, so say so
+        plainly instead of blaming the question or claiming a retry will work.
+        """
+        return (
+            "I can't think of a reply yet, because no AI provider is connected "
+            "to me.\n\n"
+            "**What happened:** No provider API key is configured, so there is "
+            "nothing for me to reason with.\n\n"
+            "**How to fix it:** Set `GROQ_API_KEY` (or `OPENAI_API_KEY`, "
+            "`GEMINI_API_KEY`) in the environment and restart me. The key is "
+            "read at startup, so a restart is required.\n\n"
+            "**Meanwhile:** Everything else still works. You can browse my "
+            "state, memory, timeline and lineage from the sidebar, and ask me "
+            "for a status report."
+        )
+
     def _provider_empty_response(self, reason: str, attempts: list) -> str:
         """Response when provider returns empty."""
         action = self._get_action_taken(attempts)
@@ -126,7 +149,7 @@ I attempted to generate a response but the provider returned an empty result.
 
 **Status:** System remains active, I am still here.
 
-**Suggestion:** Try rephrasing your question, or ask something different. I am learning from this interaction."""
+**Suggestion:** This is usually a provider-side hiccup. Sending the message again often works."""
     
     def _provider_error_response(self, reason: str, attempts: list) -> str:
         """Response when provider errors."""
@@ -142,7 +165,7 @@ The AI provider encountered an issue while generating my response.
 
 **Status:** I am still operational and ready to help.
 
-**Next step:** Your question has been logged. Please try again with a different query."""
+**Next step:** The error has been logged. Sending the message again often works."""
     
     def _timeout_response(self, reason: str, attempts: list) -> str:
         """Response when provider times out."""

@@ -841,14 +841,23 @@
 
                 typingDiv.remove();
 
-                if (response.ok) {
+                if (response.status === 401) {
+                    addMessage('genesis', 'Your session has expired. Taking you to the login page...');
+                    setTimeout(() => { window.location.href = '/login'; }, 1500);
+                } else if (response.ok) {
                     const data = await response.json();
                     await addStreamingMessage('genesis', data.response || data.message);
                     
                     // Optional: Auto-speak response
                     // speakText(data.response);
                 } else {
-                    addMessage('genesis', 'Sorry, I encountered an error. Please try again.');
+                    let detail = '';
+                    try {
+                        const err = await response.json();
+                        detail = err.error || err.message || '';
+                    } catch (e) { /* body was not JSON */ }
+                    addMessage('genesis', 'Request failed (HTTP ' + response.status + ').'
+                        + (detail ? ' ' + detail : ' Please try again.'));
                 }
             } catch (error) {
                 typingDiv.remove();

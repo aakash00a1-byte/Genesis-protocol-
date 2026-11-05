@@ -91,6 +91,27 @@ class GenesisAgent:
         
         logger.info("Genesis Agent v2 initialized")
     
+    def _empty_response_failure(self):
+        """Classify an empty provider response.
+
+        An empty result with no provider configured is a deployment gap, not a
+        bad question, so the two cases get different wording. Telling a user to
+        rephrase when no key exists would be misleading.
+        """
+        try:
+            available = self.provider_chain.get_available_providers()
+        except Exception:
+            available = []
+        if not available:
+            return (
+                FailureType.NO_PROVIDERS,
+                "No provider API key is configured",
+            )
+        return (
+            FailureType.PROVIDER_EMPTY,
+            "Provider returned empty or invalid response",
+        )
+
     def _update_claude_status(self):
         """Check and update Claude availability."""
         available = self.provider_chain.get_available_providers()
@@ -185,9 +206,10 @@ class GenesisAgent:
             else:
                 # Use failure communicator instead of generic "Sorry..."
                 fc = get_failure_communicator()
+                failure_type, reason = self._empty_response_failure()
                 response_content = fc.communicate(
-                    failure_type=FailureType.PROVIDER_EMPTY,
-                    reason="Provider returned empty or invalid response",
+                    failure_type=failure_type,
+                    reason=reason,
                     attempts=["primary_provider"],
                     query=query
                 )
@@ -284,9 +306,10 @@ class GenesisAgent:
                 else:
                     # Still no response - use failure communicator
                     fc = get_failure_communicator()
+                    failure_type, reason = self._empty_response_failure()
                     fallback_message = fc.communicate(
-                        failure_type=FailureType.PROVIDER_EMPTY,
-                        reason="Both primary and fallback providers returned empty content",
+                        failure_type=failure_type,
+                        reason=reason,
                         attempts=["primary_provider", "fallback_provider"],
                         query=query
                     )

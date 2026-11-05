@@ -70,3 +70,57 @@ def test_late_defined_api_routes_are_registered(path):
 def test_sidebar_pages_are_registered(path):
     """Every link in the base_v4 sidebar must resolve to a real page."""
     assert path in _route_strings(), f"{path} is not registered"
+
+
+# --- The "hello" bug: a logged-out visitor must never land on a chat that
+# --- cannot answer them.
+
+def test_logged_out_homepage_is_a_landing_page_not_the_chat():
+    """`/` used to render genesis_ultra.html for logged-out visitors.
+
+    That page posts to /api/chat, which is @login_required, so every message
+    came back 401 and the UI showed "Sorry, I encountered an error". The
+    logged-out homepage must be a landing page instead.
+    """
+    client = app.test_client()
+    resp = client.get("/")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "genesis_ultra.html" not in body
+    assert "Message GLUTEN" not in body
+
+
+def test_chat_api_requires_login_and_says_so_as_json():
+    """A 401 must be machine-readable so the UI can redirect to /login."""
+    client = app.test_client()
+    resp = client.post("/api/chat", json={"message": "hello"})
+    assert resp.status_code == 401
+    data = resp.get_json()
+    assert data.get("login_required") is True
+    assert data.get("error")
+
+
+def test_chat_templates_redirect_on_401():
+    """Both chat templates must send an expired session to /login."""
+    templates = Path(__file__).parent.parent / "web" / "templates"
+    for name in ("genesis_ultra.html", "genesis_gemini.html"):
+        text = (templates / name).read_text()
+        assert "response.status === 401" in text, name
+        assert "window.location.href = '/login'" in text, name
+
+
+def test_chat_templates_have_no_websocket_reconnect_loop():
+    """There is no /ws route; a reconnect loop hammered the server forever."""
+    templates = Path(__file__).parent.parent / "web" / "templates"
+    text = (templates / "genesis_ultra.html").read_text()
+    assert "setTimeout(initWebSocket" not in text
+    assert "Reconnecting..." not in text
+
+
+def test_chat_page_does_not_hardcode_a_model_name():
+    """The status bar claimed "Model: Groq LLama-3.1" with nothing configured."""
+    templates = Path(__file__).parent.parent / "web" / "templates"
+    text = (templates / "genesis_ultra.html").read_text()
+    assert "Groq LLama" not in text
+    assert 'id="modelLabel"' in text
+
