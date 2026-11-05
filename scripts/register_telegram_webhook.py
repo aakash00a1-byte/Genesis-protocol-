@@ -42,6 +42,19 @@ def _call(method: str, payload: dict | None = None) -> dict:
         return json.loads(resp.read() or b"{}")
 
 
+def _is_healthy(result: dict) -> bool:
+    """Return True only when Telegram is not reporting a delivery failure.
+
+    A webhook whose URL matches but whose ``last_error_message`` is set is NOT
+    healthy: the endpoint is rejecting every update. That is exactly the state
+    a stale ``setWebhook`` leaves behind when the Space later starts enforcing
+    ``TELEGRAM_WEBHOOK_SECRET`` but Telegram was never told the secret. Treating
+    a matching URL as "already correct" made this script a no-op forever, so
+    the failure never healed.
+    """
+    return not result.get("last_error_message")
+
+
 def main() -> int:
     if not BOT_TOKEN:
         print("TELEGRAM_BOT_TOKEN is not set; skipping webhook registration")
@@ -57,12 +70,18 @@ def main() -> int:
     current = result.get("url", "")
     want_updates = ["message", "callback_query"]
     current_updates = result.get("allowed_updates")
+    last_error = result.get("last_error_message", "")
+
     print(f"current webhook: {current or '(none)'}")
-    if current == WEBHOOK_URL and (
-        not current_updates or set(want_updates) <= set(current_updates)
+    print(f"last_error: {last_error or '(none)'}")
+    print(f"secret configured: {bool(WEBHOOK_SECRET)}")
+
+    if (
+        current == WEBHOOK_URL
+        and (not current_updates or set(want_updates) <= set(current_updates))
+        and _is_healthy(result)
     ):
-        last_error = result.get("last_error_message", "")
-        print(f"webhook already correct; last_error={last_error or '(none)'}")
+        print("webhook already correct and healthy; nothing to do")
         return 0
 
     payload: dict = {
@@ -73,6 +92,17 @@ def main() -> int:
     }
     if WEBHOOK_SECRET:
         payload["secret_token"] = WEBHOOK_SECRET
+    else:
+        # The Space enforces the secret when TELEGRAM_WEBHOOK_SECRET is set
+        # there. Without the matching repo secret we cannot present it, so a
+        # re-registration would just re-create the same 401. Fail loudly
+        # instead of pushing a webhook we know the Space will reject.
+        print(
+            "TELEGRAM_WEBHOOK_SECRET is not set as a repo secret. If the Space "
+            "enforces it, the webhook will keep returning 401 UNAUTHORIZED. "
+            "Set the repo secret to the same value as the Space, then re-run."
+        )
+
     try:
         result = _call("setWebhook", payload)
     except Exception as exc:  # noqa: BLE001
@@ -84,8 +114,13 @@ def main() -> int:
         return 1
 
     verify = _call("getWebhookInfo")
-    url_now = (verify.get("result") or {}).get("url", "")
+    vr = verify.get("result") or {}
+    url_now = vr.get("url", "")
+    verify_error = vr.get("last_error_message", "")
     print(f"webhook set -> {url_now}")
+    if verify_error:
+        print(f"WARNING: Telegram still reports: {verify_error}")
+        return 1
     return 0 if url_now == WEBHOOK_URL else 1
 
 
