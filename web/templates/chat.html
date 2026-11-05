@@ -367,7 +367,7 @@
                     <div class="chat-avatar">Ω</div>
                     <div class="chat-details">
                         <h2>GLUTEN</h2>
-                        <span>● Online | Groq LLama</span>
+                        <span id="chatSubtitle">● Online</span>
                     </div>
                 </div>
                 <div class="header-actions">
@@ -392,10 +392,10 @@
             <div class="status-bar">
                 <div class="status-item">
                     <span class="status-dot"></span>
-                    <span>WebSocket Connected</span>
+                    <span id="connLabel">HTTP Mode</span>
                 </div>
                 <div class="status-item">
-                    <span>Model: Groq LLama-3</span>
+                    <span id="modelLabel">Model: detecting...</span>
                 </div>
             </div>
         </div>
@@ -453,18 +453,48 @@
                 
                 removeTyping();
                 
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
                 if (response.ok) {
                     const data = await response.json();
                     addMessage('genesis', data.response || data.message || 'Response received');
                 } else {
-                    addMessage('genesis', 'Error: ' + response.statusText);
+                    addMessage('genesis', 'The server rejected that request (HTTP ' + response.status +
+                        '). If this keeps happening, check /api/diagnostics.');
                 }
             } catch (error) {
                 removeTyping();
-                addMessage('genesis', 'Connection error. Please try again.');
+                addMessage('genesis', "I couldn't reach the server. Check your connection and try again.");
             }
         }
         
+        // Show the provider that is actually serving chat, not a hardcoded name.
+        async function initStatus() {
+            const modelEl = document.getElementById('modelLabel');
+            const subEl = document.getElementById('chatSubtitle');
+            try {
+                const res = await fetch('/api/diagnostics');
+                const d = await res.json();
+                const env = (d.environment) || {};
+                const configured = ['groq', 'openai', 'gemini', 'claude', 'deepseek', 'mistral']
+                    .filter(p => env[p + '_configured']);
+                if (modelEl) {
+                    modelEl.textContent = configured.length
+                        ? 'Model: ' + configured.join(', ')
+                        : 'Model: none configured';
+                }
+                if (subEl) {
+                    subEl.textContent = configured.length ? '\u25cf Online' : '\u25cf No AI provider configured';
+                }
+            } catch (e) {
+                if (modelEl) modelEl.textContent = 'Model: unknown';
+            }
+        }
+        initStatus();
+
         // Welcome message
         setTimeout(() => {
             addMessage('genesis', 'GLUTEN v2.0 initialized.\n\nI am GLUTEN, your autonomous AI assistant. How can I help you today?');

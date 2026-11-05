@@ -236,16 +236,20 @@
                     
                     <div class="setting-row">
                         <div class="setting-info">
-                            <div class="setting-name">Default Model</div>
-                            <div class="setting-desc">Preferred AI model</div>
+                            <div class="setting-name">AI Providers</div>
+                            <div class="setting-desc">Reported from the running server</div>
                         </div>
-                        <select class="select-field">
-                            <option>Groq LLama-3</option>
-                            <option>Groq Mixtral</option>
-                            <option>OpenAI GPT-4</option>
-                            <option>Gemini Pro</option>
-                        </select>
                     </div>
+                    {% for name, is_up in (providers or {}).items() %}
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-name">{{ name }}</div>
+                            <div class="setting-desc">
+                                {% if is_up %}configured{% else %}no API key set{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
                     
                     <div class="setting-row">
                         <div class="setting-info">

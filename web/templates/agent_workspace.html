@@ -627,7 +627,13 @@ function sendAgentMessage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: message })
     })
-    .then(r => r.json())
+    .then(r => {
+        if (r.status === 401) {
+            window.location.href = '/login';
+            throw new Error('redirecting to login');
+        }
+        return r.json();
+    })
     .then(data => {
         document.getElementById('typingMsg').remove();
         

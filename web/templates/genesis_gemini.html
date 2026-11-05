@@ -723,7 +723,7 @@
                 </div>
                 <div class="status-item">
                     <span class="material-icons" style="font-size: 14px;">smart_toy</span>
-                    <span>Model: Groq LLama-3.1</span>
+                    <span id="modelLabel">Model: detecting...</span>
                 </div>
             </div>
         </div>
@@ -808,6 +808,25 @@
                 recognition.start();
             }
         });
+
+        // Report the provider actually serving chat, not a hardcoded name.
+        async function initModelLabel() {
+            const el = document.getElementById('modelLabel');
+            if (!el) return;
+            try {
+                const res = await fetch('/api/diagnostics');
+                const d = await res.json();
+                const env = (d.environment) || {};
+                const configured = ['groq', 'openai', 'gemini', 'claude', 'deepseek', 'mistral']
+                    .filter(p => env[p + '_configured']);
+                el.textContent = configured.length
+                    ? 'Model: ' + configured.join(', ')
+                    : 'Model: none configured';
+            } catch (e) {
+                el.textContent = 'Model: unknown';
+            }
+        }
+        initModelLabel();
 
         // Auto-play response with TTS
         function speakText(text) {

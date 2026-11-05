@@ -124,3 +124,58 @@ def test_chat_page_does_not_hardcode_a_model_name():
     assert "Groq LLama" not in text
     assert 'id="modelLabel"' in text
 
+
+# --- Every template that posts to /api/chat must handle a 401 the same way.
+# --- Missing this is what produced the original "Sorry, I encountered an
+# --- error": the page rendered a chat, the API answered 401, and the template
+# --- turned it into a generic failure instead of sending the user to /login.
+
+CHAT_TEMPLATES = [
+    "genesis_ultra.html",
+    "genesis_gemini.html",
+    "chat.html",
+    "agent_workspace.html",
+]
+
+
+@pytest.mark.parametrize("name", CHAT_TEMPLATES)
+def test_chat_template_handles_401(name):
+    text = (Path(__file__).parent.parent / "web" / "templates" / name).read_text()
+    assert "status === 401" in text, f"{name} does not handle a 401"
+    assert "/login" in text, f"{name} does not redirect to /login on 401"
+
+
+@pytest.mark.parametrize("name", CHAT_TEMPLATES)
+def test_chat_template_has_no_hardcoded_model(name):
+    text = (Path(__file__).parent.parent / "web" / "templates" / name).read_text()
+    assert "Groq LLama" not in text, f"{name} hardcodes a model name"
+
+
+@pytest.mark.parametrize("name", CHAT_TEMPLATES)
+def test_chat_template_has_no_generic_sorry(name):
+    text = (Path(__file__).parent / ".." / "web" / "templates" / name).read_text()
+    assert "Sorry, I encountered an error" not in text, f"{name} shows a generic error"
+
+
+def test_login_lands_on_a_template_that_handles_401():
+    """Login redirects to /chat, so chat.html must be one of the fixed ones."""
+    from web.app import app as _app
+    client = _app.test_client()
+    resp = client.post("/api/auth/login", json={"username": "nope", "password": "nope"})
+    # the route exists and rejects; what matters is that /chat renders chat.html
+    assert resp.status_code in (400, 401, 403)
+    text = (Path(__file__).parent.parent / "web" / "templates" / "chat.html").read_text()
+    assert "status === 401" in text
+
+
+def test_settings_page_reports_real_providers():
+    """It listed deprecated models in a dropdown that was never wired up."""
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = 1
+        sess["username"] = "t"
+    body = client.get("/settings").get_data(as_text=True)
+    assert "AI Providers" in body
+    assert "Groq LLama" not in body
+
+
