@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Genesis Ω - Ultra Advanced AI</title>
+    <title>GLUTEN Ω - Ultra Advanced AI</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
     <style>
@@ -857,7 +857,7 @@
             <div class="sidebar-header">
                 <div class="sidebar-logo">
                     <div class="logo-icon">Ω</div>
-                    <span class="logo-text">Genesis Ω</span>
+                    <span class="logo-text">GLUTEN Ω</span>
                 </div>
                 <button class="new-chat-btn" onclick="newChat()">
                     <span class="material-icons-round">add</span>
@@ -915,7 +915,7 @@
                 <div class="messages-container" id="messagesContainer">
                     <div class="welcome-screen" id="welcomeScreen">
                         <div class="welcome-logo">Ω</div>
-                        <h1 class="welcome-title">Genesis Ω</h1>
+                        <h1 class="welcome-title">GLUTEN Ω</h1>
                         <p class="welcome-subtitle">Your advanced AI assistant powered by autonomous intelligence</p>
                         
                         <div class="suggestions-grid">
@@ -956,7 +956,7 @@
                         <button class="voice-btn" id="voiceBtn" title="Voice Input">
                             <span class="material-icons-round">mic</span>
                         </button>
-                        <textarea class="input-field" id="messageInput" placeholder="Message Genesis Ω..." rows="1"></textarea>
+                        <textarea class="input-field" id="messageInput" placeholder="Message GLUTEN Ω..." rows="1"></textarea>
                         <button class="send-btn" id="sendBtn" onclick="sendMessage()">
                             <span class="material-icons-round">send</span>
                         </button>
@@ -1367,10 +1367,10 @@
 
         function exportChat() {
             const messages = messagesContainer.querySelectorAll('.message');
-            let text = 'Genesis Ω Chat Export\n' + '='.repeat(40) + '\n\n';
+            let text = 'GLUTEN Ω Chat Export\n' + '='.repeat(40) + '\n\n';
             
             messages.forEach(msg => {
-                const role = msg.classList.contains('user') ? 'You' : 'Genesis';
+                const role = msg.classList.contains('user') ? 'You' : 'GLUTEN';
                 const content = msg.querySelector('.message-content').textContent;
                 text += `${role}: ${content}\n\n`;
             });
@@ -1393,7 +1393,7 @@
         // Welcome message
         setTimeout(() => {
             if (welcomeScreen.style.display !== 'none') {
-                addMessage('genesis', 'Hello! I am Genesis Ω, your advanced AI assistant. How can I help you today?');
+                addMessage('genesis', 'Hello! I am GLUTEN Ω, your advanced AI assistant. How can I help you today?');
             }
         }, 1000);
     </script>

@@ -718,7 +718,7 @@ def api_chat():
             return jsonify({'error': 'Rate limit exceeded. Try again tomorrow.'}), 429
     
     try:
-        # Import and use Genesis Agent
+        # Import and use GLUTEN Agent
         import asyncio
         from genesis_protocol.ai.agent import get_genesis_agent
         
@@ -1273,7 +1273,7 @@ def _handle_work_order(chat_id, verb, arg):
             return jsonify({'ok': True})
         _append_reply(
             chat_id,
-            f"🛠️ Work order #{order_id} mil gaya. Genesis agent ispe kaam karega "
+            f"🛠️ Work order #{order_id} mil gaya. GLUTEN agent ispe kaam karega "
             f"aur ek PR kholega — merge tumhari /approve ke baad hi hoga.\n\n"
             f"Instruction: {arg[:300]}",
         )
@@ -1344,7 +1344,7 @@ def _handle_council(chat_id, arg):
         result = loop.run_until_complete(
             council.deliberate(
                 messages=[
-                    {"role": "system", "content": "You are Genesis, a helpful autonomous AI. Keep responses concise and helpful."},
+                    {"role": "system", "content": "You are GLUTEN, a helpful autonomous AI. Keep responses concise and helpful."},
                     {"role": "user", "content": question},
                 ],
                 user_input=question,
@@ -1493,7 +1493,7 @@ def telegram_webhook():
     if text == '/start':
         reply = "🤖 *Genesis Protocol* online!\n\nI'm your autonomous AI. Send me any message or question!\n\nCommands:\n/start - Welcome\n/status - Bot status\n/ask <question> - Ask AI\n/council <question> - Ask several models at once"
     elif text == '/status':
-        reply = "✅ Genesis bot running (webhook + relay mode)\n🚀 HF Space: LIVE\n🧠 AI: Groq-powered\n📡 Replies relayed via GitHub Actions"
+        reply = "✅ GLUTEN bot running (webhook + relay mode)\n🚀 HF Space: LIVE\n🧠 AI: Groq-powered\n📡 Replies relayed via GitHub Actions"
     elif text.startswith('/ask '):
         question = text[5:].strip()
         reply = None
@@ -1516,7 +1516,7 @@ def telegram_webhook():
             result = loop.run_until_complete(
                 ai.call(
                     messages=[
-                        {"role": "system", "content": "You are Genesis, a helpful autonomous AI. Keep responses concise and helpful."},
+                        {"role": "system", "content": "You are GLUTEN, a helpful autonomous AI. Keep responses concise and helpful."},
                         {"role": "user", "content": question}
                     ],
                     user_input=question
@@ -1524,7 +1524,7 @@ def telegram_webhook():
             )
             loop.close()
             if result.success and result.response:
-                reply = f"🤖 *Genesis AI:*\n\n{result.response.content[:4000]}"
+                reply = f"🤖 *GLUTEN AI:*\n\n{result.response.content[:4000]}"
             else:
                 err = result.error[:500] if result.error else "Unknown error"
                 reply = f"❌ Error: {err}"
@@ -1622,7 +1622,7 @@ def telegram_tasks_clear():
 
 
 BRIEFING_PROMPT = (
-    "You are Genesis, an autonomous AI news editor. You are given today's "
+    "You are GLUTEN, an autonomous AI news editor. You are given today's "
     "headlines and live market numbers. Write a short briefing for the user in "
     "Hinglish (Hindi written in Latin script, mixed with English). Structure:\n"
     "1) one line 'Aaj ka sabse bada news' highlighting the single most "
@@ -1861,16 +1861,6 @@ try:
 except ImportError as e:
     logger.warning(f"⚠️ Mobile API module not found: {e}")
 
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
-    
-    # Run startup checks
-    run_startup_checks()
-    
-    print(f"\nStarting server on port {port}...")
-    app.run(host='0.0.0.0', port=port, debug=debug)
 
 # GLUTEN v3.0 Entity API Endpoints
 @app.route('/api/entity', methods=['GET'])
@@ -2929,3 +2919,14 @@ def railway_status():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    
+    # Run startup checks
+    run_startup_checks()
+    
+    print(f"\nStarting server on port {port}...")
+    app.run(host='0.0.0.0', port=port, debug=debug)

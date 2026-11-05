@@ -211,6 +211,13 @@ unset the job fails loudly instead of silently skipping.
 - **web/app.py must import.** It once used `@limiter.limit` with no `limiter`
   defined -> `NameError` on import -> any redeploy crash. Keep the optional
   flask-limiter setup (no-op fallback) intact.
+- **`app.run()` must stay at the end of `web/app.py`.** It once sat ~1050 lines
+  above the end of the file, so 56 routes defined *after* it (entity, state,
+  timeline, journal, trust, wisdom, relationship, dream, continuity, archive,
+  survival, garden, infinity, live-info, crypto, railway) never registered and
+  answered 404 under `python web/app.py`. Importing the module registered them,
+  which is why unit tests did not catch it. If you add routes, add them above
+  the `if __name__ == '__main__':` block.
 - **News digest runs in the relay, not the Space.** `scripts/relay_loop.py`
   builds a category digest (World, India, Tech, Sports, Markets, Crypto,
   Obituaries) from public RSS feeds and sends it to TELEGRAM_ADMIN_ID every
