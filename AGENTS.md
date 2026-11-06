@@ -242,6 +242,16 @@ stays on old code, which is how the "hello" fix appeared not to work.
 
 - Diagnose: a run whose `updated_at - created_at` is a few seconds and whose
   jobs report zero steps is out of minutes, not broken.
+- The strongest single signal is the timing endpoint:
+  `GET /repos/{owner}/{repo}/actions/runs/{id}/timing` returns
+  `billable.total_ms: 0` with `run_duration_ms: 4000` and `steps: []`. Zero
+  billable time means the runner was never allocated, which is billing, not
+  code. Rotating the token does not change it — the request never reaches the
+  runner that would use the token.
+- To confirm a token is fine (so you do not chase the wrong problem):
+  `GET /user` (expect 200 and your login), `GET /rate_limit`, and
+  `GET /repos/{owner}/{repo}` for `permissions.admin`. If those pass, the
+  token is not the cause of zero-step failures.
 - Fix: raise the spending limit, or make the repo public (public repos get
   unlimited minutes, which is what the relay/heartbeat already assume), or
   deploy by hand.
