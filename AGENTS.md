@@ -207,6 +207,15 @@ head, is refused with a `merge blocked` reply. This closes the old hole where
 `/approve` merged without reading CI. `require_checks=False` restores the old
 behaviour and is used only in tests.
 
+**Watch out: the merge gate depends on CI, which depends on Actions minutes.**
+When the private repo's Actions minutes are exhausted (see "Auto-deploy to the
+Space" below — every run fails in ~4s with zero steps), the head's check-runs
+report `failure`, so the merge gate blocks every `/approve`. That is the gate
+working as designed, not a bug. To merge in that state, either raise the
+spending limit / make the repo public so CI can actually run, or set
+`SELF_IMPROVE_REQUIRE_CHECKS=0` for the approval run. The gate never merges a
+head whose CI did not genuinely pass.
+
 ## Auto-deploy to the Space
 `.github/workflows/deploy-space.yml` mirrors the repo to the HF Space on every
 push to `main` (runs `scripts/hf_deploy.sh` with the `HF_TOKEN` repo secret),
