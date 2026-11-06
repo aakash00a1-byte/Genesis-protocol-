@@ -382,3 +382,30 @@ stays on old code, which is how the "hello" fix appeared not to work.
   `/council vote ...`, `/council synth ...`. A member failing is expected and
   never fails the deliberation.
 
+- **The Telegram webhook secret has TWO halves and both must match.**
+  `TELEGRAM_WEBHOOK_SECRET` exists on the HF Space (enforced by
+  `_telegram_secret_ok()`, value not readable back) *and* must be the value
+  passed to Telegram's `setWebhook secret_token`. On 2026-11-05 the Space had a
+  value Telegram did not, so every update was 401. Because the Space cannot
+  reach `api.telegram.org`, the webhook can be re-registered from anywhere that
+  can — you do not need Actions (which were out of minutes). Rotate the Space
+  value and register it in one pass:
+  `POST https://huggingface.co/api/spaces/<id>/secrets` with
+  `{"key":"TELEGRAM_WEBHOOK_SECRET","value":...}` (HF token with `repo.write`),
+  then `setWebhook` with the same string as `secret_token`. Verify with a real
+  update: no header -> 401, correct header -> 200. Never echo the value.
+- **A 200 from the webhook does not mean the bot answers.** The Space only
+  *parks* replies in `/tmp/telegram_reply_queue.json`; `scripts/relay_loop.py`
+  in `keepalive.yml` is the only thing that calls `sendMessage`. With Actions
+  minutes exhausted the relay never runs, so inbound works and nothing is ever
+  delivered. The two legs fail independently — test them separately.
+- **Owner commands must be gated on the sender id, not just the shared
+  secret.** `TELEGRAM_WEBHOOK_SECRET` proves an update came from Telegram, not
+  from the owner: anyone who can message the bot produces a valid, signed
+  update. The webhook parks `/approve`, `/reject` and `/do` on queues that merge
+  and deploy code, so `_telegram_is_admin()` checks the sender against
+  `TELEGRAM_ADMIN_IDS` / `TELEGRAM_ADMIN_ID` on both the message and the
+  inline-button path. It degrades like `_telegram_secret_ok()`: no admin ids
+  configured means the endpoint stays open. Regression:
+  `tests/test_web_telegram_admin_gate.py`. This gap was latent while the webhook
+  was returning 401 and became reachable the moment the 401 was fixed.
