@@ -340,6 +340,25 @@ stays on old code, which is how the "hello" fix appeared not to work.
   `.github/workflows/register-webhook.yml` runs the idempotent
   `scripts/register_telegram_webhook.py` on push to main / every 6h / on demand
   and re-registers only on drift. Never call `deleteWebhook` from the Space.
+  **A matching URL is not enough to call the webhook healthy.** On 2026-11-02
+  `TELEGRAM_WEBHOOK_SECRET` was added to the Space, which made
+  `_telegram_secret_ok()` reject every update with 401 — but Telegram was never
+  told the secret, because the script returned early on URL match without ever
+  looking at `last_error_message`. Every scheduled run printed "already
+  correct" and exited 0, so the 401 loop was invisible in CI for days. The
+  script now treats a set `last_error_message` as broken, re-registers, warns
+  when the repo secret is missing (re-registering without it reproduces the
+  same 401), and exits 1 if Telegram still reports an error. When the Space
+  enforces the secret, the **repo** secret must hold the same value — both
+  sides are required, and only the Space one is visible from the HF API.
+- **Zero-step workflow failures mean Actions minutes are exhausted, not a
+  broken workflow.** `ci.yml`, `deploy-space.yml`, `register-webhook.yml` and
+  `keepalive.yml` all show `conclusion=failure` with `steps: 0` on this private
+  repo. A zero-step job never started, so it says nothing about the code. The
+  fix is billing (make the repo public, or raise the spending limit) — do not
+  "fix" the workflow. This also kills the relay, which is the only component
+  that sends replies *outbound* to Telegram, so the bot can neither receive nor
+  answer until minutes return.
 - **Health check: `scripts/health_check.py` answers "is anything broken?".**
   Three independent checks: every `genesis_protocol` package imports, the live
   HF Space answers `/api/health`, and no workflow's latest run is red. It only
