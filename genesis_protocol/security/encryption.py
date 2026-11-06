@@ -14,6 +14,14 @@ from genesis_protocol.utils.logger import get_logger
 logger = get_logger("security.encryption")
 
 
+class EncryptionUnavailableError(RuntimeError):
+    """Raised when the ``cryptography`` backend is missing.
+
+    The service must fail closed: silently falling back to base64 would make
+    callers believe their data is encrypted when it is merely encoded.
+    """
+
+
 class EncryptionService:
     """
     Encryption service for Genesis Protocol.
@@ -57,10 +65,13 @@ class EncryptionService:
             
             return base64.urlsafe_b64encode(encrypted).decode()
             
-        except ImportError:
-            logger.warning("cryptography library not available, using simple encoding")
-            encoded = base64.b64encode(data.encode())
-            return encoded.decode()
+        except ImportError as exc:
+            logger.error("cryptography library not available; refusing to fake encryption")
+            raise EncryptionUnavailableError(
+                "The 'cryptography' package is required for encryption. "
+                "Install it (it is listed in requirements.txt) instead of relying "
+                "on an unencrypted fallback."
+            ) from exc
         except Exception as e:
             logger.error(f"Encryption failed: {e}")
             raise
@@ -85,10 +96,13 @@ class EncryptionService:
             
             return decrypted.decode()
             
-        except ImportError:
-            logger.warning("cryptography library not available, using simple decoding")
-            decoded = base64.b64decode(encrypted_data.encode())
-            return decoded.decode()
+        except ImportError as exc:
+            logger.error("cryptography library not available; cannot decrypt")
+            raise EncryptionUnavailableError(
+                "The 'cryptography' package is required for decryption. "
+                "Install it (it is listed in requirements.txt) instead of relying "
+                "on an unencrypted fallback."
+            ) from exc
         except Exception as e:
             logger.error(f"Decryption failed: {e}")
             raise
