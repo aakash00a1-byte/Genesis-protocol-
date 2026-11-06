@@ -303,6 +303,24 @@ def test_approve_refuses_when_no_checks_reported() -> None:
     assert "merge blocked" in reply and "no check-runs" in reply
 
 
+def test_approve_refuses_when_check_runs_unreadable() -> None:
+    """A token without `checks: read` gets a 403. That must block, not crash.
+
+    Regression: the gate read check-runs unconditionally, so the 403 escaped
+    as a raw RuntimeError. The owner saw a scary "HTTP 403" instead of a clear
+    reason, and no approval could ever succeed.
+    """
+
+    def http(method, url, payload):
+        if "/check-runs" in url:
+            raise RuntimeError("GET .../check-runs -> HTTP 403: not accessible")
+        return [_pr(5, "improve docs")]
+
+    transport = GitHubPRTransport("o/r", "tok", http=http)
+    reply = transport.approve("5")
+    assert "merge blocked" in reply and "checks: read" in reply
+
+
 def test_approve_with_gate_disabled_merges() -> None:
     calls = []
 

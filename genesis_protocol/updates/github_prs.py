@@ -119,12 +119,22 @@ class GitHubPRTransport:
     def _find(self, token: str) -> Update | None:
         return resolve(self.list_open(), token)
 
-    def _check_runs(self, sha: str) -> list[dict]:
-        data = self._http(
-            "GET",
-            f"https://api.github.com/repos/{self.repo}/commits/{sha}/check-runs",
-            None,
-        )
+    def _check_runs(self, sha: str) -> list[dict] | None:
+        """Check-runs for a commit, or None when the API refuses to read them.
+
+        ``None`` is distinct from ``[]``: the first means we could not ask
+        (a token without ``checks: read``, or a network error), the second
+        means GitHub answered and reported nothing. Both block a merge, but
+        they need different messages, so the caller can tell them apart.
+        """
+        try:
+            data = self._http(
+                "GET",
+                f"https://api.github.com/repos/{self.repo}/commits/{sha}/check-runs",
+                None,
+            )
+        except Exception:  # noqa: BLE001 - an unreadable gate blocks, it must not crash
+            return None
         runs = data.get("check_runs") if isinstance(data, dict) else None
         return runs if isinstance(runs, list) else []
 
@@ -154,7 +164,13 @@ class GitHubPRTransport:
                 )
 
         runs = self._check_runs(sha)
-        if not runs:
+        if runs is None:
+            blockers.append(
+                "check-runs could not be read — the merge token needs "
+                "`checks: read` (repo secret AGENT_GH_TOKEN, or the workflow's "
+                "permissions block)"
+            )
+        elif not runs:
             blockers.append("no check-runs reported for the head commit")
         else:
             bad = [

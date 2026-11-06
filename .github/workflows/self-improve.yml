@@ -41,6 +41,10 @@ permissions:
   # with GITHUB_TOKEN does not trigger another workflow, so the loop asks for
   # the deploy by name instead. Creating a workflow dispatch needs actions:write.
   actions: write
+  # The merge gate reads the head commit's check-runs before it will merge an
+  # /approve. Setting `permissions` explicitly zeroes every scope not listed,
+  # so without this the check-runs call returns 403 and every approval blocks.
+  checks: read
 
 jobs:
   self-improve:

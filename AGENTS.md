@@ -207,6 +207,14 @@ head, is refused with a `merge blocked` reply. This closes the old hole where
 `/approve` merged without reading CI. `require_checks=False` restores the old
 behaviour and is used only in tests.
 
+**The gate needs `checks: read`.** Setting `permissions:` in a workflow zeroes
+every scope not listed, so `self-improve.yml` lists `checks: read` explicitly.
+Without it the check-runs call returns 403, the gate blocks every `/approve`,
+and the owner sees a `checks could not be read` reply. If you move approval to a
+different job, grant the same scope there. An unreadable gate is treated as
+`None` (could not ask) rather than `[]` (GitHub said nothing), so the two cases
+get different messages — both still block.
+
 **Watch out: the merge gate depends on CI, which depends on Actions minutes.**
 When the private repo's Actions minutes are exhausted (see "Auto-deploy to the
 Space" below — every run fails in ~4s with zero steps), the head's check-runs
