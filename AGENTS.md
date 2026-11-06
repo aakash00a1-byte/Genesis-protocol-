@@ -398,7 +398,12 @@ stays on old code, which is how the "hello" fix appeared not to work.
   *parks* replies in `/tmp/telegram_reply_queue.json`; `scripts/relay_loop.py`
   in `keepalive.yml` is the only thing that calls `sendMessage`. With Actions
   minutes exhausted the relay never runs, so inbound works and nothing is ever
-  delivered. The two legs fail independently — test them separately.
+  delivered. The two legs fail independently — test them separately. You can
+  prove whether the **repo** secret is set from a relay run log without any
+  secrets: the runner prints the workflow env, and a set secret shows as `***`
+  while an unset one shows as an empty value
+  (`TELEGRAM_WEBHOOK_SECRET:` with nothing after the colon). A live
+  `GET /api/telegram/queue` with no header returning 401 says the same thing.
 - **Owner commands must be gated on the sender id, not just the shared
   secret.** `TELEGRAM_WEBHOOK_SECRET` proves an update came from Telegram, not
   from the owner: anyone who can message the bot produces a valid, signed
