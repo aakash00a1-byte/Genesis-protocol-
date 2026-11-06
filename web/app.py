@@ -1414,6 +1414,10 @@ def _handle_callback_query(callback):
     allowed = {'approve', 'reject', 'list', 'updates', 'pending', 'status', 'help'}
     if verb not in allowed:
         return jsonify({'ok': True})
+    # A button tap parks the same owner commands as typed text, so it is gated
+    # on the sender exactly like the message path.
+    if not _telegram_is_admin(callback.get('from')):
+        return jsonify({'ok': True})
     command = f'/{verb}' + (f' {arg}' if arg else '')
     message = callback.get('message') or {}
     chat = message.get('chat') or {}
@@ -1441,6 +1445,39 @@ def _telegram_secret_ok():
     supplied = request.headers.get('X-Telegram-Bot-Api-Secret-Token', '')
     import hmac
     return hmac.compare_digest(str(supplied), str(expected))
+
+
+def _telegram_admin_ids():
+    """Chat/user ids allowed to issue owner commands.
+
+    ``TELEGRAM_ADMIN_IDS`` (comma- or space-separated) is the list;
+    ``TELEGRAM_ADMIN_ID`` is accepted as a single-value alias because the
+    relay and self-improvement workflows use that name.
+    """
+    raw = f"{os.environ.get('TELEGRAM_ADMIN_IDS', '')},{os.environ.get('TELEGRAM_ADMIN_ID', '')}"
+    return {part.strip() for part in raw.replace(' ', ',').split(',') if part.strip()}
+
+
+def _telegram_is_admin(sender):
+    """True when ``sender`` (a Telegram user dict) may issue owner commands.
+
+    The shared secret proves an update came from Telegram, not that it came
+    from the owner: anyone who can message the bot produces a valid update.
+    The commands this endpoint parks (/approve, /reject, /do) merge and deploy
+    code, so the sender is checked here. With no admin ids configured we allow
+    the request so an existing deployment does not break, matching
+    ``_telegram_secret_ok``.
+    """
+    allowed = _telegram_admin_ids()
+    if not allowed:
+        return True
+    if not isinstance(sender, dict):
+        return False
+    for key in ('id', 'user_id'):
+        value = sender.get(key)
+        if value is not None and str(value).strip() in allowed:
+            return True
+    return False
 
 
 def _read_reply_queue():
@@ -1486,6 +1523,7 @@ def telegram_webhook():
         return jsonify({'ok': True})
     text = text[:4000]
     user = msg.get('from', {})
+    is_admin = _telegram_is_admin(user)
     
     # Owner work orders (/do, /cancel, /tasks) are handled here: the order is
     # parked on the task queue for the harness, and the owner gets an immediate
@@ -1494,8 +1532,12 @@ def telegram_webhook():
         from genesis_protocol.updates import is_tasks_command, parse_work_order
         work = parse_work_order(text)
         if work is not None:
+            if not is_admin:
+                return jsonify({'ok': True})
             return _handle_work_order(chat_id, work[0], work[1])
         if is_tasks_command(text):
+            if not is_admin:
+                return jsonify({'ok': True})
             return _handle_tasks_list(chat_id)
     except Exception as e:
         print(f"Work-order routing error: {e}")
@@ -1509,6 +1551,8 @@ def telegram_webhook():
     except Exception:
         is_command = False
     if is_command:
+        if not is_admin:
+            return jsonify({'ok': True})
         try:
             _append_command(chat_id, text)
         except Exception as e:
