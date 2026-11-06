@@ -55,6 +55,11 @@ class Update:
     priority: float = 0.5
     state: str = "proposed"
     notes: list[str] = field(default_factory=list)
+    # The head commit the PR currently points at, and the PR body. The approval
+    # transport uses both to refuse a merge whose evidence is not bound to the
+    # exact commit that would ship.
+    head_sha: str = ""
+    body: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -66,6 +71,7 @@ class Update:
             "priority": round(self.priority, 4),
             "state": self.state,
             "notes": list(self.notes),
+            "head_sha": self.head_sha,
         }
 
 

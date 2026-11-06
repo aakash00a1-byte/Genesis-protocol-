@@ -163,13 +163,20 @@ def test_render_list_shows_numbered_ids() -> None:
 # ------------------------------------------------------------------
 # GitHub PR transport (fake HTTP, no network)
 # ------------------------------------------------------------------
-def _pr(number, title, branch="agent/self-improve-x", url=None):
+def _pr(number, title, branch="agent/self-improve-x", url=None, sha="abc1234def",
+        body=None):
     return {
         "number": number,
         "title": title,
-        "head": {"ref": branch},
+        "head": {"ref": branch, "sha": sha},
         "html_url": url or f"https://github.com/o/r/pull/{number}",
+        "body": body if body is not None else f"- landed commit: `{sha}`\n",
     }
+
+
+def _green_checks(method, url, payload):
+    """Fake check-runs endpoint: one successful run for any commit."""
+    return {"check_runs": [{"name": "CI/CD", "conclusion": "success"}]}
 
 
 def test_transport_lists_only_agent_branches() -> None:
@@ -189,6 +196,8 @@ def test_transport_approve_merges_squash() -> None:
 
     def http(method, url, payload):
         calls.append((method, url, payload))
+        if "/check-runs" in url:
+            return _green_checks(method, url, payload)
         if method == "GET":
             return [_pr(5, "improve docs")]
         return {"merged": True, "sha": "abc123"}
@@ -203,6 +212,8 @@ def test_transport_approve_merges_squash() -> None:
 
 def test_transport_approve_reports_merge_failure() -> None:
     def http(method, url, payload):
+        if "/check-runs" in url:
+            return _green_checks(method, url, payload)
         if method == "GET":
             return [_pr(5, "improve docs")]
         return {"merged": False, "message": "Pull Request is not mergeable"}
@@ -215,6 +226,8 @@ def test_transport_calls_on_merged_after_success() -> None:
     merged: list[str] = []
 
     def http(method, url, payload):
+        if "/check-runs" in url:
+            return _green_checks(method, url, payload)
         if method == "GET":
             return [_pr(6, "ship it")]
         return {"merged": True, "sha": "deadbeef"}
@@ -230,6 +243,8 @@ def test_transport_on_merged_not_called_when_merge_fails() -> None:
     merged: list[str] = []
 
     def http(method, url, payload):
+        if "/check-runs" in url:
+            return _green_checks(method, url, payload)
         if method == "GET":
             return [_pr(6, "ship it")]
         return {"merged": False}
@@ -239,6 +254,68 @@ def test_transport_on_merged_not_called_when_merge_fails() -> None:
     )
     transport.approve("6")
     assert merged == []
+
+
+# ------------------------------------------------------------------
+# Merge gate: refuse an unverified head (B2)
+# ------------------------------------------------------------------
+def test_approve_refuses_when_checks_are_red() -> None:
+    def http(method, url, payload):
+        if "/check-runs" in url:
+            return {"check_runs": [{"name": "CI/CD", "conclusion": "failure"}]}
+        return [_pr(5, "improve docs")]
+
+    transport = GitHubPRTransport("o/r", "tok", http=http)
+    reply = transport.approve("5")
+    assert "merge blocked" in reply and "CI/CD" in reply
+
+
+def test_approve_refuses_when_evidence_sha_differs_from_head() -> None:
+    def http(method, url, payload):
+        if "/check-runs" in url:
+            return _green_checks(method, url, payload)
+        return [_pr(5, "improve docs", sha="aaaaaaaabbbb", body="- landed commit: `ccccccccdddd`\n")]
+
+    transport = GitHubPRTransport("o/r", "tok", http=http)
+    reply = transport.approve("5")
+    assert "merge blocked" in reply and "evidence bound to" in reply
+
+
+def test_approve_refuses_when_pr_body_has_no_evidence() -> None:
+    def http(method, url, payload):
+        if "/check-runs" in url:
+            return _green_checks(method, url, payload)
+        return [_pr(5, "improve docs", body="no evidence here")]
+
+    transport = GitHubPRTransport("o/r", "tok", http=http)
+    reply = transport.approve("5")
+    assert "merge blocked" in reply and "no verification evidence" in reply
+
+
+def test_approve_refuses_when_no_checks_reported() -> None:
+    def http(method, url, payload):
+        if "/check-runs" in url:
+            return {"check_runs": []}
+        return [_pr(5, "improve docs")]
+
+    transport = GitHubPRTransport("o/r", "tok", http=http)
+    reply = transport.approve("5")
+    assert "merge blocked" in reply and "no check-runs" in reply
+
+
+def test_approve_with_gate_disabled_merges() -> None:
+    calls = []
+
+    def http(method, url, payload):
+        calls.append((method, url))
+        if method == "GET":
+            return [_pr(5, "improve docs")]
+        return {"merged": True, "sha": "abc123"}
+
+    transport = GitHubPRTransport("o/r", "tok", http=http, require_checks=False)
+    assert "Approved & merged" in transport.approve("5")
+    # With the gate off, check-runs are never queried.
+    assert not any("/check-runs" in url for _, url in calls)
 
 
 def test_transport_reject_closes_pr() -> None:

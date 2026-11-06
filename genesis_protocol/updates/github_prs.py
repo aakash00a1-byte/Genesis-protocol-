@@ -15,6 +15,7 @@ is read-only; approval must run with the owner's write token, supplied as the
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -25,6 +26,13 @@ from . import Update, resolve
 # Only branches the self-improvement harness creates are approvable, so a
 # human's own PR cannot be merged by this command by accident.
 AGENT_BRANCH_PREFIX = "agent/"
+
+# A check-run with one of these conclusions does not block a merge. Anything
+# else (failure, cancelled, timed_out, action_required, ...) does.
+_CHECK_RUN_OK = {"success", "neutral", "skipped"}
+
+# The evidence SHA the harness recorded in the PR body ("landed commit: `sha`").
+_EVIDENCE_SHA = re.compile(r"landed commit:\s*`([0-9a-fA-F]{7,40})`")
 
 HttpFn = Callable[[str, str, dict | None], Any]
 
@@ -66,11 +74,16 @@ class GitHubPRTransport:
         http: HttpFn | None = None,
         branch_prefix: str = AGENT_BRANCH_PREFIX,
         on_merged: Callable[[Update], None] | None = None,
+        require_checks: bool = True,
     ) -> None:
         self.repo = repo
         self.token = token
         self.branch_prefix = branch_prefix
         self.on_merged = on_merged
+        # Refuse to merge unless the head commit's check-runs are green and the
+        # PR body carries an evidence record bound to that same commit. On by
+        # default: an approval should never be able to ship an unverified head.
+        self.require_checks = require_checks
         if http is not None:
             self._http = http
         else:
@@ -92,6 +105,8 @@ class GitHubPRTransport:
             area="",
             priority=0.5,
             state="proposed",
+            head_sha=str(pull.get("head", {}).get("sha", "")),
+            body=str(pull.get("body") or ""),
         )
 
     def list_open(self) -> list[Update]:
@@ -104,11 +119,65 @@ class GitHubPRTransport:
     def _find(self, token: str) -> Update | None:
         return resolve(self.list_open(), token)
 
+    def _check_runs(self, sha: str) -> list[dict]:
+        data = self._http(
+            "GET",
+            f"https://api.github.com/repos/{self.repo}/commits/{sha}/check-runs",
+            None,
+        )
+        runs = data.get("check_runs") if isinstance(data, dict) else None
+        return runs if isinstance(runs, list) else []
+
+    def _merge_blockers(self, item: Update) -> list[str]:
+        """Reasons this approval must not merge. Empty means clear to merge.
+
+        Two independent conditions, both fail-closed: the head commit's
+        check-runs must all be green, and the PR body must carry an evidence
+        record bound to that exact commit. A head that moved after verification,
+        or an unverified head, is refused.
+        """
+        if not self.require_checks:
+            return []
+        blockers: list[str] = []
+        sha = item.head_sha
+        if not sha:
+            return ["PR head commit could not be read"]
+
+        evidence = _EVIDENCE_SHA.search(item.body or "")
+        if evidence is None:
+            blockers.append("PR body has no verification evidence")
+        else:
+            recorded = evidence.group(1)
+            if not (sha.startswith(recorded) or recorded.startswith(sha)):
+                blockers.append(
+                    f"evidence bound to {recorded}, but the head is {sha[:12]}"
+                )
+
+        runs = self._check_runs(sha)
+        if not runs:
+            blockers.append("no check-runs reported for the head commit")
+        else:
+            bad = [
+                r for r in runs if str(r.get("conclusion")) not in _CHECK_RUN_OK
+            ]
+            if bad:
+                names = ", ".join(sorted({str(r.get("name", "?")) for r in bad}))
+                blockers.append(f"check-runs not green: {names}")
+        return blockers
+
     # -- decisions ------------------------------------------------------
     def approve(self, token: str, reason: str = "") -> str:
         item = self._find(token)
         if item is None:
             return f"Update '{token}' nahi mila (ya already decided)."
+        blockers = self._merge_blockers(item)
+        if blockers:
+            return (
+                "⚠️ merge blocked — verification gate:\n- "
+                + "\n- ".join(blockers)
+                + "\n\nCI green hone aur evidence head se match hone ke baad "
+                "dobara /approve karein."
+            )
         payload: dict[str, Any] = {
             "merge_method": "squash",
             "commit_title": f"{item.title} (#{item.id})",

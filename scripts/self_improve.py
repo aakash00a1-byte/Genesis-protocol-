@@ -44,6 +44,11 @@ import urllib.request
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
+# This file's own directory, so the verification gate next to it imports whether
+# the harness is run as a script or loaded as a module.
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
 
 BASE_URL = os.environ.get("OH_BASE_URL", "https://app.all-hands.dev").rstrip("/")
 API_KEY = os.environ.get("OPENHANDS_API_KEY", "").strip()
@@ -76,6 +81,19 @@ EVOLUTION_BACKLOG = os.environ.get(
 ).strip()
 POLL_SECONDS = 15
 POLL_TIMEOUT_SECONDS = 900
+# Independent verification of every patch before it is landed (see
+# scripts/patch_verification.py). On by default; set to "0" only to fall back to
+# the old land-without-verifying behaviour. VERIFY_TEST_COMMAND is what the gate
+# re-runs on the patch; empty means the gate has no runner and cannot accept a
+# patch while VERIFY_REQUIRE_TESTS is on (fail-closed).
+VERIFY_ENABLED = os.environ.get("SELF_IMPROVE_VERIFY", "1").strip() not in ("0", "false", "no")
+VERIFY_TEST_COMMAND = os.environ.get(
+    "SELF_IMPROVE_VERIFY_TESTS", "python3 -m pytest tests/ -q"
+).strip()
+VERIFY_REQUIRE_TESTS = os.environ.get("SELF_IMPROVE_VERIFY_REQUIRE_TESTS", "1").strip() not in ("0", "false", "no")
+# The merge gate refuses to merge an agent PR unless its head check-runs are
+# green and its body carries evidence bound to that head. On by default.
+REQUIRE_CHECKS = os.environ.get("SELF_IMPROVE_REQUIRE_CHECKS", "1").strip() not in ("0", "false", "no")
 # A conversation can take a while; the earlier one took ~50 minutes. Allow 45
 # minutes per cycle and make it tunable.
 RUN_TIMEOUT_SECONDS = int(os.environ.get("SELF_IMPROVE_CYCLE_TIMEOUT_SECONDS", "2700"))
@@ -496,7 +514,20 @@ def process_work_orders() -> int:
                 _notify(f"🛠️ Work order #{order_id}: koi change nahi bana.")
                 handled += 1
                 continue
-            pr_url = land_pr(patch, f"owner order: {instruction}", app_id)
+            verdict = _verify_patch(patch)
+            if verdict is not None and not verdict.accepted:
+                _space_patch_task(
+                    order_id, state="failed", note="verification rejected the patch"
+                )
+                _notify(
+                    f"🛑 Work order #{order_id}: patch verification FAILED, "
+                    "no PR opened.\n" + "; ".join(verdict.reasons)[:300]
+                )
+                handled += 1
+                continue
+            pr_url = land_pr(
+                patch, f"owner order: {instruction}", app_id, verification=verdict
+            )
             if not pr_url:
                 _space_patch_task(order_id, state="failed", note="could not open PR")
                 _notify(f"⚠️ Work order #{order_id}: PR open nahi ho paya.")
@@ -601,7 +632,10 @@ def _transport():
         from genesis_protocol.updates.github_prs import GitHubPRTransport
 
         return GitHubPRTransport(
-            REPO, GH_MERGE_TOKEN, on_merged=lambda _item: _dispatch_deploy()
+            REPO,
+            GH_MERGE_TOKEN,
+            on_merged=lambda _item: _dispatch_deploy(),
+            require_checks=REQUIRE_CHECKS,
         )
     except Exception as exc:  # noqa: BLE001
         _log(f"approval transport unavailable: {type(exc).__name__}")
@@ -725,7 +759,55 @@ def open_agent_prs() -> list[dict]:
     return [p for p in agent_prs if _can_merge(p)]
 
 
-def land_pr(patch: str, topic: str, app_id: str) -> str | None:
+class _RejectedVerdict:
+    """A verdict shape used when the gate itself cannot be loaded.
+
+    It mirrors the fields the caller and ``land_pr`` read, so a gate failure
+    blocks the patch through the normal path instead of raising.
+    """
+
+    def __init__(self, reason: str) -> None:
+        self.accepted = False
+        self.reasons = [reason]
+        self.landed_sha = ""
+        self.patch_sha = ""
+        self.changed_paths: list[str] = []
+        self.path_violations: list[str] = []
+        self.secret_findings: list[str] = []
+        self.tests_run = False
+        self.tests_passed = False
+        self.verifier_passed = None
+        self.verifier_score = None
+
+    def evidence_block(self) -> str:
+        return "### Independent verification (Genesis gate)\n\n- gate unavailable\n"
+
+
+def _verify_patch(patch: str):
+    """Run the independent gate on a patch. Returns a verdict, or None.
+
+    ``None`` means verification was deliberately disabled by config. Every
+    other outcome — including a gate that will not load — returns a verdict
+    with ``accepted=False``, so the caller blocks rather than lands unverified.
+    """
+    if not VERIFY_ENABLED:
+        _log("patch verification disabled by SELF_IMPROVE_VERIFY")
+        return None
+    try:
+        from patch_verification import verify_patch
+    except Exception as exc:  # noqa: BLE001 - fail closed: no gate, no landing
+        _log(f"verification gate unavailable: {type(exc).__name__}: {str(exc)[:160]}")
+        return _RejectedVerdict(f"verification gate unavailable: {type(exc).__name__}")
+    return verify_patch(
+        patch,
+        repo_root=_ROOT,
+        base_ref=f"origin/{BRANCH}",
+        test_command=VERIFY_TEST_COMMAND or None,
+        require_tests=VERIFY_REQUIRE_TESTS,
+    )
+
+
+def land_pr(patch: str, topic: str, app_id: str, verification=None) -> str | None:
     branch = f"agent/self-improve-{_slug(topic)}"
     _git("checkout", "-B", branch, f"origin/{BRANCH}")
     patch_file = "/tmp/agent.patch"
@@ -736,14 +818,22 @@ def land_pr(patch: str, topic: str, app_id: str) -> str | None:
         _log(f"patch did not apply cleanly: {applied.stderr.strip()[:200]}")
         return None
     _git("commit", "-m", f"chore(agent): {topic}\n\nProposed by the Genesis self-improvement agent (OpenHands conversation {app_id}); landed by the harness for human review.\n\nCo-authored-by: openhands <openhands@all-hands.dev>")
+    # Bind the verification evidence to the commit that actually lands, so the
+    # PR body names a SHA a reviewer can check out.
+    if verification is not None:
+        head = _git("rev-parse", "HEAD")
+        if head.returncode == 0:
+            verification.landed_sha = head.stdout.strip()
     pushed = _git("push", "-f", "origin", branch)
     if pushed.returncode != 0:
         _log(f"push failed: {pushed.stderr.strip()[:200]}")
         return None
+    evidence = verification.evidence_block() if verification is not None else ""
     body = (
         f"## Agent-proposed improvement\n\n**Focus:** {topic}\n\n"
         f"Proposed by the Genesis self-improvement agent (OpenHands conversation `{app_id}`). "
         "The agent sandbox has a read-only GitHub credential, so the harness landed the commit.\n\n"
+        f"{evidence}\n"
         "### Review gate\nThis PR is intentionally **not** merged. Merging it triggers "
         "`.github/workflows/deploy-space.yml`, which mirrors `main` to the live HF Space.\n\n"
         "---\n_This pull request was created by an AI agent (OpenHands) on behalf of the repository owner._"
@@ -801,8 +891,16 @@ def run_cycle(index: int) -> None:
         _log("agent produced no patch")
         _notify(f"🧠 Genesis agent cycle '{topic[:50]}': no change produced.")
         return
+    verdict = _verify_patch(patch)
+    if verdict is not None and not verdict.accepted:
+        _log(f"verification rejected the patch: {'; '.join(verdict.reasons)[:200]}")
+        _notify(
+            f"🛑 Genesis agent cycle '{topic[:50]}': patch verification FAILED, "
+            "no PR opened.\n" + "; ".join(verdict.reasons)[:300]
+        )
+        return
     try:
-        pr_url = land_pr(patch, topic, app_id)
+        pr_url = land_pr(patch, topic, app_id, verification=verdict)
     except Exception as exc:  # noqa: BLE001 - one bad cycle must not kill the loop
         _log(f"land_pr failed: {type(exc).__name__}: {str(exc)[:200]}")
         _notify(f"🧠 Genesis agent cycle '{topic[:50]}': could not land the patch.")

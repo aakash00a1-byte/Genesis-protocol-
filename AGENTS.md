@@ -170,6 +170,43 @@ commit for it: it reads the patch from the sandbox with
 `POST {agent_server_url}/api/bash/execute_bash_command`
 (`git format-patch {branch}..HEAD --stdout`), applies it, and opens the PR.
 
+## Independent verification gate (agent patches are checked before landing)
+`scripts/patch_verification.py` sits between `get_patch()` and `land_pr()`:
+an agent patch is verified independently before any PR is opened, instead of
+going straight from the sandbox to a push.
+
+Flow: list the patch's changed paths from the diff and refuse a protected path
+(`.github/`, `scripts/self_improve.py`, `scripts/patch_verification.py`,
+`scripts/hf_deploy.sh`, `genesis_protocol/updates/`) -- these are the controls a
+patch could otherwise use to weaken its own gate; create a scratch `git worktree`
+of `origin/main`; apply the patch there; scan the changed files for secrets and
+re-run the suite with the kernel `AcceptanceGate`; score the run with the kernel
+`IndependentVerifier`. Only a patch that passes all of it is landed, and the
+verdict (patch sha256, changed-file count, path/secret/test/verifier results,
+landed commit) is written into the PR body as an evidence record.
+
+The verifier and gate live in `genesis_v5` under the package root `genesis`,
+which the product never imported (see the V7 audit). `patch_verification.py`
+loads them from that tree rather than forking them; both are pure-stdlib, so
+this adds no dependency. `sys.path` gets `genesis_v5/` for the import only.
+
+- Fail-closed everywhere: a missing gate, an empty patch, a protected path, a
+  secret, a failing test, or a verifier rejection all mean **no PR**.
+- Config: `SELF_IMPROVE_VERIFY` (default 1), `SELF_IMPROVE_VERIFY_TESTS`
+  (default `python3 -m pytest tests/ -q`), `SELF_IMPROVE_VERIFY_REQUIRE_TESTS`,
+  `SELF_IMPROVE_REQUIRE_CHECKS`. Set `SELF_IMPROVE_VERIFY=0` only to fall back
+  to landing without verifying.
+- The self-improve job installs `requirements.txt` + `pytest`, because the gate
+  re-runs the suite inside the worktree.
+
+**The merge gate.** `GitHubPRTransport.approve()` (in
+`genesis_protocol/updates/github_prs.py`) refuses to merge unless the head
+commit's check-runs are all green **and** the PR body carries an evidence record
+bound to that exact head. A head that moved after verification, or an unverified
+head, is refused with a `merge blocked` reply. This closes the old hole where
+`/approve` merged without reading CI. `require_checks=False` restores the old
+behaviour and is used only in tests.
+
 ## Auto-deploy to the Space
 `.github/workflows/deploy-space.yml` mirrors the repo to the HF Space on every
 push to `main` (runs `scripts/hf_deploy.sh` with the `HF_TOKEN` repo secret),

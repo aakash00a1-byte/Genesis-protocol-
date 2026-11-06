@@ -356,3 +356,118 @@ def test_requeue_stuck_orders_requeues_only_running(monkeypatch) -> None:
 
     assert patched == [{"id": "1", "state": "queued", "note": "requeued after restart"}]
 
+
+# ------------------------------------------------------------------
+# Independent verification wiring (audit §15 / §16)
+# ------------------------------------------------------------------
+class _Verdict:
+    def __init__(self, accepted, reasons=None):
+        self.accepted = accepted
+        self.reasons = reasons or []
+        self.landed_sha = ""
+        self.patch_sha = "deadbeef"
+        self.changed_paths = []
+        self.path_violations = []
+        self.secret_findings = []
+        self.tests_run = True
+        self.tests_passed = accepted
+        self.verifier_passed = accepted
+        self.verifier_score = 0.9 if accepted else 0.1
+
+    def evidence_block(self):
+        return "### Independent verification (Genesis gate)\n"
+
+
+def test_verify_patch_returns_none_when_disabled(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setattr(module, "VERIFY_ENABLED", False)
+    assert module._verify_patch("diff --git a/x b/x\n") is None
+
+
+def test_verify_patch_fails_closed_when_gate_unavailable(monkeypatch) -> None:
+    """A gate that will not import must block, not silently allow."""
+    module = _load()
+    monkeypatch.setattr(module, "VERIFY_ENABLED", True)
+    import builtins
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "patch_verification":
+            raise ImportError("no gate")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    verdict = module._verify_patch("diff --git a/x b/x\n")
+    assert verdict is not None and verdict.accepted is False
+
+
+def test_run_cycle_does_not_land_when_verification_rejects(monkeypatch) -> None:
+    """The central invariant: a rejected patch opens no PR."""
+    module = _load()
+    landed = []
+    monkeypatch.setattr(module, "MAX_OPEN_PRS", 99)
+    monkeypatch.setattr(module, "open_agent_prs", lambda: [])
+    monkeypatch.setattr(module, "choose_topic", lambda i, taken: "a topic")
+    monkeypatch.setattr(module, "start_conversation", lambda topic: {"id": "app1"})
+    monkeypatch.setattr(module, "poll_until_ready", lambda start: "app1")
+    monkeypatch.setattr(module, "wait_until_finished", lambda app_id: True)
+    monkeypatch.setattr(module, "get_patch", lambda app_id: "diff --git a/x b/x\n")
+    monkeypatch.setattr(module, "_verify_patch", lambda patch: _Verdict(False, ["tests failed"]))
+    monkeypatch.setattr(module, "land_pr", lambda *a, **k: landed.append(a) or "url")
+    notes: list[str] = []
+    monkeypatch.setattr(module, "_notify", lambda text, **kw: notes.append(text))
+
+    module.run_cycle(0)
+
+    assert landed == []  # no PR was opened
+    assert any("verification FAILED" in n for n in notes)
+
+
+def test_run_cycle_lands_when_verification_accepts(monkeypatch) -> None:
+    module = _load()
+    landed = []
+    monkeypatch.setattr(module, "MAX_OPEN_PRS", 99)
+    monkeypatch.setattr(module, "open_agent_prs", lambda: [])
+    monkeypatch.setattr(module, "choose_topic", lambda i, taken: "a topic")
+    monkeypatch.setattr(module, "start_conversation", lambda topic: {"id": "app1"})
+    monkeypatch.setattr(module, "poll_until_ready", lambda start: "app1")
+    monkeypatch.setattr(module, "wait_until_finished", lambda app_id: True)
+    monkeypatch.setattr(module, "get_patch", lambda app_id: "diff --git a/x b/x\n")
+    monkeypatch.setattr(module, "_verify_patch", lambda patch: _Verdict(True))
+    monkeypatch.setattr(
+        module, "land_pr", lambda *a, **k: landed.append(k.get("verification")) or "http://pr/1"
+    )
+    monkeypatch.setattr(module, "_notify", lambda text, **kw: None)
+
+    module.run_cycle(0)
+
+    assert len(landed) == 1
+    assert landed[0] is not None and landed[0].accepted is True
+
+
+def test_land_pr_puts_evidence_in_the_pr_body(monkeypatch) -> None:
+    module = _load()
+    posted = {}
+
+    def fake_git(*args, **kwargs):
+        class R:
+            returncode = 0
+            stderr = ""
+            stdout = "cafebabe1234"
+
+        return R()
+
+    def fake_github(method, path, payload=None):
+        if method == "POST":
+            posted.update(payload)
+            return {"html_url": "https://github.com/o/r/pull/9"}
+        return []
+
+    monkeypatch.setattr(module, "_git", fake_git)
+    monkeypatch.setattr(module, "_github", fake_github)
+    verdict = _Verdict(True)
+    module.land_pr("diff --git a/x b/x\n", "focus", "app1", verification=verdict)
+    assert "Independent verification" in posted["body"]
+    assert verdict.landed_sha == "cafebabe1234"
+

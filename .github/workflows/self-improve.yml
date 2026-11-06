@@ -74,6 +74,13 @@ jobs:
             echo "::notice::AGENT_GH_TOKEN not set; using the default GITHUB_TOKEN. That is fine: this workflow grants contents/pull-requests/actions write, which covers push, PR and the merge (/approve)."
           fi
 
+      - name: Install verification dependencies
+        # The gate re-runs the test suite on the patch inside a scratch
+        # worktree, so pytest and the runtime deps must be present in the job.
+        run: |
+          python3 -m pip install --quiet -r requirements.txt
+          python3 -m pip install --quiet pytest
+
       - name: Run the continuous self-improvement loop
         env:
           PYTHONUNBUFFERED: "1"
@@ -90,6 +97,13 @@ jobs:
           SELF_IMPROVE_INTERVAL_SECONDS: "2700"
           SELF_IMPROVE_RUN_SECONDS: "19800"
           SELF_IMPROVE_MAX_OPEN_PRS: "5"
+          # Independent verification: the gate re-runs the suite on the patch in
+          # a scratch worktree before any PR is opened, and the merge gate
+          # refuses a PR whose head is not green + evidence-bound.
+          SELF_IMPROVE_VERIFY: "1"
+          SELF_IMPROVE_VERIFY_TESTS: "python3 -m pytest tests/ -q"
+          SELF_IMPROVE_VERIFY_REQUIRE_TESTS: "1"
+          SELF_IMPROVE_REQUIRE_CHECKS: "1"
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ADMIN_ID: ${{ secrets.TELEGRAM_ADMIN_ID }}
         run: |
