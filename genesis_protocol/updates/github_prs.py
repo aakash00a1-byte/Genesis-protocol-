@@ -126,6 +126,12 @@ class GitHubPRTransport:
         (a token without ``checks: read``, or a network error), the second
         means GitHub answered and reported nothing. Both block a merge, but
         they need different messages, so the caller can tell them apart.
+
+        The check-runs endpoint needs the ``checks: read`` permission, which a
+        fine-grained PAT often lacks. When it refuses, fall back to the Actions
+        runs API for the same commit: it needs only ``actions: read`` and
+        reports each workflow run's conclusion, which is what the gate is
+        actually asking about.
         """
         try:
             data = self._http(
@@ -133,10 +139,38 @@ class GitHubPRTransport:
                 f"https://api.github.com/repos/{self.repo}/commits/{sha}/check-runs",
                 None,
             )
-        except Exception:  # noqa: BLE001 - an unreadable gate blocks, it must not crash
-            return None
+        except Exception:  # noqa: BLE001 - try the fallback before giving up
+            return self._workflow_runs(sha)
         runs = data.get("check_runs") if isinstance(data, dict) else None
         return runs if isinstance(runs, list) else []
+
+    def _workflow_runs(self, sha: str) -> list[dict] | None:
+        """Workflow-run conclusions for a commit, shaped like check-runs.
+
+        The fallback for a token that can read Actions but not Checks. Returns
+        None when even this cannot be read, so the caller still fails closed.
+        """
+        try:
+            data = self._http(
+                "GET",
+                f"https://api.github.com/repos/{self.repo}/actions/runs"
+                f"?head_sha={sha}&per_page=100",
+                None,
+            )
+        except Exception:  # noqa: BLE001 - an unreadable gate blocks, it must not crash
+            return None
+        runs = data.get("workflow_runs") if isinstance(data, dict) else None
+        if not isinstance(runs, list):
+            return None
+        return [
+            {
+                "name": str(r.get("name", "?")),
+                # A run still in progress has no conclusion; treat it as not
+                # yet green so the gate waits rather than merging early.
+                "conclusion": r.get("conclusion") or r.get("status"),
+            }
+            for r in runs
+        ]
 
     def _merge_blockers(self, item: Update) -> list[str]:
         """Reasons this approval must not merge. Empty means clear to merge.

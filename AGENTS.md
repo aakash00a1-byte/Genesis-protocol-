@@ -209,11 +209,14 @@ behaviour and is used only in tests.
 
 **The gate needs `checks: read`.** Setting `permissions:` in a workflow zeroes
 every scope not listed, so `self-improve.yml` lists `checks: read` explicitly.
-Without it the check-runs call returns 403, the gate blocks every `/approve`,
-and the owner sees a `checks could not be read` reply. If you move approval to a
-different job, grant the same scope there. An unreadable gate is treated as
-`None` (could not ask) rather than `[]` (GitHub said nothing), so the two cases
-get different messages — both still block.
+Without it the check-runs call returns 403 and the gate blocks every `/approve`.
+
+A fine-grained PAT often cannot read Checks at all (the REST endpoint is
+`Resource not accessible by integration` even with admin on the repo), so
+`_check_runs` falls back to the Actions runs API for the same commit, which
+needs only `actions: read`. An in-progress run has no conclusion and is treated
+as not-green, so the gate waits instead of merging early. If both endpoints
+refuse, the gate reports `checks could not be read` and still blocks.
 
 **Watch out: the merge gate depends on CI, which depends on Actions minutes.**
 When the private repo's Actions minutes are exhausted (see "Auto-deploy to the

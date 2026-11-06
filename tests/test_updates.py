@@ -314,11 +314,65 @@ def test_approve_refuses_when_check_runs_unreadable() -> None:
     def http(method, url, payload):
         if "/check-runs" in url:
             raise RuntimeError("GET .../check-runs -> HTTP 403: not accessible")
+        if "/actions/runs" in url:
+            raise RuntimeError("GET .../actions/runs -> HTTP 403: not accessible")
         return [_pr(5, "improve docs")]
 
     transport = GitHubPRTransport("o/r", "tok", http=http)
     reply = transport.approve("5")
     assert "merge blocked" in reply and "checks: read" in reply
+
+
+def test_approve_falls_back_to_actions_runs() -> None:
+    """A fine-grained PAT can read Actions but not Checks. The gate must still work.
+
+    The check-runs endpoint 403s, so the gate reads the commit's workflow runs
+    instead and merges when they are green.
+    """
+
+    def http(method, url, payload):
+        if "/check-runs" in url:
+            raise RuntimeError("GET .../check-runs -> HTTP 403: not accessible")
+        if "/actions/runs" in url:
+            return {"workflow_runs": [{"name": "CI/CD", "conclusion": "success"}]}
+        if method == "GET":
+            return [_pr(5, "improve docs")]
+        return {"merged": True, "sha": "abc123"}
+
+    transport = GitHubPRTransport("o/r", "tok", http=http)
+    assert "Approved & merged" in transport.approve("5")
+
+
+def test_approve_fallback_blocks_a_failing_run() -> None:
+    def http(method, url, payload):
+        if "/check-runs" in url:
+            raise RuntimeError("GET .../check-runs -> HTTP 403: not accessible")
+        if "/actions/runs" in url:
+            return {"workflow_runs": [{"name": "CI/CD", "conclusion": "failure"}]}
+        return [_pr(5, "improve docs")]
+
+    transport = GitHubPRTransport("o/r", "tok", http=http)
+    reply = transport.approve("5")
+    assert "merge blocked" in reply and "CI/CD" in reply
+
+
+def test_approve_fallback_blocks_a_run_still_in_progress() -> None:
+    """An unfinished run has no conclusion. The gate must wait, not merge."""
+
+    def http(method, url, payload):
+        if "/check-runs" in url:
+            raise RuntimeError("GET .../check-runs -> HTTP 403: not accessible")
+        if "/actions/runs" in url:
+            return {
+                "workflow_runs": [
+                    {"name": "CI/CD", "status": "in_progress", "conclusion": None}
+                ]
+            }
+        return [_pr(5, "improve docs")]
+
+    transport = GitHubPRTransport("o/r", "tok", http=http)
+    reply = transport.approve("5")
+    assert "merge blocked" in reply and "CI/CD" in reply
 
 
 def test_approve_with_gate_disabled_merges() -> None:
