@@ -481,3 +481,42 @@ stays on old code, which is how the "hello" fix appeared not to work.
   configured means the endpoint stays open. Regression:
   `tests/test_web_telegram_admin_gate.py`. This gap was latent while the webhook
   was returning 401 and became reachable the moment the 401 was fixed.
+
+- **The Space cannot reach `api.telegram.org`, so two legs of the Telegram path
+  live outside it.** Inbound works (Telegram POSTs the webhook to the Space) but
+  outbound does not: a `GET https://api.telegram.org/` from inside the Space
+  times out while `groq.com` and `huggingface.co` answer 200. The Space therefore
+  only *parks* replies in `/tmp/telegram_reply_queue.json`; `scripts/relay_loop.py`
+  is the only caller of `sendMessage`. The relay is also what registers the
+  webhook (`scripts/register_telegram_webhook.py`). Both live in `keepalive.yml`
+  on GitHub Actions. **So when Actions minutes are exhausted, the bot goes
+  silent even though the Space is healthy and the webhook reports no error** —
+  inbound 200, queue fills, nothing is ever delivered. Do not read a clean
+  `getWebhookInfo` (no `last_error_message`) as "the bot works".
+- **The webhook secret is enforced by the Space and must match Telegram's
+  `secret_token` exactly.** With a mismatch every update is 401 and Telegram
+  shows `last_error_message`; with no Space value set the Space allows anything.
+  Rotating one side alone breaks the other, so rotate both in one pass:
+  1. write the Space secret —
+     `POST https://huggingface.co/api/spaces/<id>/secrets` with
+     `{"key":"TELEGRAM_WEBHOOK_SECRET","value":<v>}` (HF token needs
+     `repo.write`; the response is `{}`, not the value);
+  2. `POST /bot<token>/setWebhook` with the same `<v>` as `secret_token`;
+  3. **restart the Space** — HF injects the new secret only on a fresh start, so
+     until then the old value is still enforced and the new one returns 401;
+  4. verify both ways: no header -> 401, correct header -> 200.
+  The value is never echoed. The mirror copy for the GitHub repo secret is
+  written to `~/.genesis-webhook-secret` (mode 600, outside the repo) rather than
+  printed to the transcript.
+- **You can drain the queue without Actions at all.** Any host that can reach
+  `api.telegram.org` (a dev sandbox can, even when the Space cannot) can run the
+  real relay: export `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`,
+  `HF_SPACE_URL`, `RELAY_STATE_FILE`, then call `relay_loop.relay_once()`. This
+  is the quickest way to prove the whole path end to end while minutes are out.
+  `relay_once()` reports `relayed N/M queued replies` and clears the queue.
+- **The relay's minute cost is the reason the private repo starves.** One
+  `keepalive.yml` run holds a runner for `RELAY_RUN_SECONDS=19800` (330 min) and
+  runs every 4h, so ~1980 min/day against a 2000 min/**month** private budget —
+  exhausted in about a day. It is written for a **public** repo, where Actions
+  minutes are unlimited. Keep the repo private only if you also raise the
+  Actions spending limit.
