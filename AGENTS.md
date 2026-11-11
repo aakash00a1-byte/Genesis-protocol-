@@ -683,3 +683,21 @@ Two traps made this hard to see, and both are now avoided:
 With both fixed, the probe reports `RESULT: OK - provider chain answered` and
 `RESULT: OK - AI queued a reply`, which is the only evidence that the bot can
 actually answer a user.
+
+## Security invariants (audit 2026-11-11)
+
+- **Mobile bearer tokens are signed.** `login_required` used to accept
+  `genesis_mobile_<id>_<anything>`; the id was plain text, so any caller could
+  name any user id and read that user's conversations (confirmed live with
+  `Bearer genesis_mobile_1_0` -> HTTP 200). Tokens are now HMAC-SHA256 signed by
+  `_issue_mobile_token` and checked by `_verify_mobile_token` (30-day expiry).
+  Never accept a token without verifying the signature, and never let a failed
+  check fall through to an anonymous session.
+- **`/api/debug/telegram` is secret-gated.** It exposes `TELEGRAM_ADMIN_IDS` and
+  the raw bot logs. `/api/debug` stays open because `scripts/release_test.py`
+  calls it; it only lists provider names, not secrets.
+- **`SECRET_KEY` has a public default.** When it is unset the app logs a warning:
+  sessions and tokens are forgeable until it is set as a Space secret.
+- **`_telegram_secret_ok` / `_telegram_is_admin` fail open when their env vars
+  are unset** (by design, so an existing deployment keeps working). Both are set
+  in production, so the live Space is closed; treat them as required config.
