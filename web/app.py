@@ -855,6 +855,199 @@ def api_chat():
         return jsonify({'error': str(e)}), 500
 
 
+
+
+# ============================================================================
+# GLUTEN AGENTIC CAPABILITIES
+# ----------------------------------------------------------------------------
+# Runtime identity, durable user memory (opt-in), bounded task execution and
+# owner-gated privileged operations. These routes never reveal secret values,
+# never grant permissions to the agent, and never perform deploy/merge/secret
+# changes.
+# ============================================================================
+
+def _is_owner(user_id):
+    from genesis_protocol.agentic.policy import get_agent_policy
+
+    return get_agent_policy().is_owner(user_id)
+
+
+@app.route('/api/identity', methods=['GET'])
+def api_identity():
+    """Report the real provider/model and available capabilities.
+
+    Public and secret-free on purpose: a caller should be able to see what the
+    system actually is, instead of trusting a hardcoded self-description.
+    """
+    from genesis_protocol.agentic.identity import describe_runtime
+
+    return jsonify(describe_runtime())
+
+
+@app.route('/api/capabilities', methods=['GET'])
+def api_capabilities():
+    """List the agent's real capabilities and its limits."""
+    from genesis_protocol.agentic.identity import describe_runtime
+
+    runtime = describe_runtime()
+    return jsonify({
+        'persistent_memory': True,
+        'bounded_code_execution': True,
+        'durable_task_state': True,
+        'background_autonomy': False,
+        'notes': [
+            'background_autonomy is False: there is no scheduler driving tasks '
+            'on a timer; execution is caller-driven.',
+            'Code generation and code execution are separate steps.',
+        ],
+        'tools': runtime['tools'],
+        'providers_available': runtime['providers_available'],
+        'providers_unavailable': runtime['providers_unavailable'],
+        'limits': runtime['limits'],
+    })
+
+
+@app.route('/api/memory', methods=['GET'])
+@login_required
+def api_agent_memory_list():
+    """Inspect this user's durable memories."""
+    from genesis_protocol.agentic.memory import get_agent_memory
+
+    user_id = session['user_id']
+    memories = get_agent_memory().list_memories(user_id)
+    return jsonify({'count': len(memories), 'memories': memories})
+
+
+@app.route('/api/memory', methods=['POST'])
+@login_required
+def api_agent_memory_add():
+    """Store an approved fact. Credential-shaped content is refused."""
+    from genesis_protocol.agentic.memory import MemoryRejected, get_agent_memory
+
+    data = request.get_json(silent=True) or request.form
+    content = (data.get('content') or '').strip()
+    approved = str(data.get('approved', '')).lower() in ('1', 'true', 'yes', 'on')
+    if not content:
+        return jsonify({'error': 'content required'}), 400
+    if not approved:
+        return jsonify({'error': 'memory is opt-in; pass approved=true'}), 400
+    try:
+        memory_id = get_agent_memory().remember(
+            session['user_id'], content, kind=data.get('kind', 'fact'), approved=True
+        )
+    except MemoryRejected as exc:
+        return jsonify({'error': str(exc)}), 400
+    return jsonify({'success': True, 'id': memory_id})
+
+
+@app.route('/api/memory/<memory_id>', methods=['PATCH'])
+@login_required
+def api_agent_memory_correct(memory_id):
+    """Correct one of this user's memories."""
+    from genesis_protocol.agentic.memory import MemoryRejected, get_agent_memory
+
+    data = request.get_json(silent=True) or {}
+    content = (data.get('content') or '').strip()
+    if not content:
+        return jsonify({'error': 'content required'}), 400
+    try:
+        ok = get_agent_memory().correct(session['user_id'], memory_id, content)
+    except MemoryRejected as exc:
+        return jsonify({'error': str(exc)}), 400
+    if not ok:
+        return jsonify({'error': 'not found'}), 404
+    return jsonify({'success': True})
+
+
+@app.route('/api/memory/<memory_id>', methods=['DELETE'])
+@login_required
+def api_agent_memory_delete(memory_id):
+    """Delete one of this user's memories."""
+    from genesis_protocol.agentic.memory import get_agent_memory
+
+    if not get_agent_memory().forget(session['user_id'], memory_id):
+        return jsonify({'error': 'not found'}), 404
+    return jsonify({'success': True})
+
+
+@app.route('/api/agent/tasks', methods=['GET'])
+@login_required
+def api_agent_tasks_list():
+    """List this user's tasks and their execution history."""
+    from genesis_protocol.agentic.tasks import get_task_store
+
+    tasks = get_task_store().list_tasks(session['user_id'])
+    return jsonify({'count': len(tasks), 'tasks': [t.to_dict() for t in tasks]})
+
+
+@app.route('/api/agent/tasks/<task_id>', methods=['GET'])
+@login_required
+def api_agent_task_get(task_id):
+    """Fetch one task with its step history (owner of the task only)."""
+    from genesis_protocol.agentic.tasks import get_task_store
+
+    record = get_task_store().get(session['user_id'], task_id)
+    if record is None:
+        return jsonify({'error': 'not found'}), 404
+    return jsonify(record.to_dict())
+
+
+@app.route('/api/agent/run', methods=['POST'])
+@login_required
+def api_agent_run():
+    """Run a bounded task.
+
+    Non-owners may run only steps that touch no restricted tool and no code
+    execution. Code execution and restricted tools require the owner.
+    """
+    from genesis_protocol.agentic.agent_loop import AgentLoop
+
+    data = request.get_json(silent=True) or {}
+    goal = (data.get('goal') or '').strip()
+    steps = data.get('steps') or []
+    task_id = data.get('task_id')
+    owner_approved = bool(data.get('owner_approved', False))
+    if not goal:
+        return jsonify({'error': 'goal required'}), 400
+
+    user_id = session['user_id']
+    owner = _is_owner(user_id)
+
+    # Least privilege: refuse code execution for non-owners up front.
+    for step in steps:
+        if step.get('type') == 'execute_code' and not owner:
+            return jsonify({'error': 'code execution requires owner authorization'}), 403
+        if step.get('type') == 'tool' and not owner:
+            # A non-owner may still use safe tools; the loop enforces per-tool
+            # permission, so we let it through and let policy decide.
+            continue
+
+    try:
+        result = AgentLoop().run(
+            user_id=user_id,
+            goal=goal,
+            steps=steps,
+            task_id=task_id,
+            owner_approved=owner_approved,
+        )
+    except (ValueError, KeyError) as exc:
+        return jsonify({'error': str(exc)}), 400
+    return jsonify(result)
+
+
+@app.route('/api/audit/tail', methods=['GET'])
+@login_required
+def api_audit_tail():
+    """Owner-only view of recent allowed/denied tool requests."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.agentic.audit import get_audit_log
+
+    limit = request.args.get('limit', 50, type=int)
+    return jsonify({'entries': get_audit_log().tail(limit)})
+
+
 @app.route('/api/chat/history', methods=['GET'])
 @login_required
 def api_chat_history():

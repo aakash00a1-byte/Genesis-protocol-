@@ -6,6 +6,8 @@ Long-term memory (ChromaDB): Persistent vector storage
 
 import json
 import logging
+import os
+from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from datetime import datetime
@@ -131,11 +133,12 @@ class LongTermMemory:
             from chromadb.config import Settings
             
             # Create client with persistence
-            chroma_path = self._config.memory.chroma_db_path
-            self._chroma = chromadb.Client(Settings(
-                anonymized_telemetry=False,
-                allow_reset=True
-            ))
+            chroma_path = os.environ.get("CHROMA_DB_PATH") or self._config.memory.chroma_db_path
+            Path(chroma_path).mkdir(parents=True, exist_ok=True)
+            self._chroma = chromadb.PersistentClient(
+                path=chroma_path,
+                settings=Settings(anonymized_telemetry=False),
+            )
             
             # Try to get or create collection
             try:

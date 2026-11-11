@@ -283,6 +283,12 @@ class HistorySearchTool(Tool):
 
 class FileReaderTool(Tool):
     """Read files tool."""
+    @property
+    def permission(self):
+        # Reading project files is filesystem access, so it is owner-only
+        # rather than SAFE.
+        return ToolPermission.RESTRICTED
+
     
     @property
     def name(self) -> str:
@@ -429,11 +435,11 @@ class ToolRegistry:
         return [t for t in self.get_all_tools() if t.permission == permission]
     
     def execute(self, name: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a tool."""
+        """Execute a tool (raw executor; no permission check)."""
         tool = self.get_tool(name)
         if not tool:
             return {"success": False, "error": f"Tool '{name}' not found or disabled"}
-        
+
         try:
             result = tool.execute(**params)
             result["tool_used"] = name
@@ -441,6 +447,39 @@ class ToolRegistry:
         except Exception as e:
             return {"success": False, "error": str(e), "tool_used": name}
 
+    def execute_authorized(
+        self,
+        user_id: Optional[int],
+        name: str,
+        params: Dict[str, Any],
+        owner_approved: bool = False,
+    ) -> Dict[str, Any]:
+        """Execute a tool after a fail-closed policy check.
+
+        Unlike ``execute`` (the raw executor used by internal callers and
+        tests), this refuses any tool whose permission is not SAFE unless the
+        caller is a configured owner. New code paths that run model-chosen
+        tools should use this method.
+        """
+        tool = self.get_tool(name)
+        if tool is None:
+            return {"success": False, "error": f"Tool '{name}' not found or disabled", "denied": True}
+
+        from genesis_protocol.agentic.policy import get_agent_policy
+
+        perm = getattr(getattr(tool, "permission", None), "value", None)
+        decision = get_agent_policy().authorize_tool(
+            user_id, name, permission=perm, owner_approved=owner_approved
+        )
+        if not decision.allowed:
+            return {
+                "success": False,
+                "error": decision.reason,
+                "denied": True,
+                "policy": decision.to_dict(),
+                "tool_used": name,
+            }
+        return self.execute(name, params)
 
 # Global singleton
 _registry: Optional[ToolRegistry] = None
