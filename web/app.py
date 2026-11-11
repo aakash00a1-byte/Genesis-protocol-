@@ -8,6 +8,8 @@ Channel isolation: Web users ONLY receive web responses.
 import os
 import sys
 import json
+import hmac
+import hashlib
 import logging
 import time
 import threading
@@ -84,8 +86,15 @@ def get_metrics() -> Dict[str, Any]:
 app = Flask(__name__, 
             template_folder='templates',
             static_folder='static')
-app.secret_key = os.environ.get('SECRET_KEY', 'genesis-secret-key-change-in-production')
+_DEFAULT_SECRET_KEY = 'genesis-secret-key-change-in-production'
+app.secret_key = os.environ.get('SECRET_KEY', _DEFAULT_SECRET_KEY)
 app.permanent_session_lifetime = timedelta(days=7)
+
+if app.secret_key == _DEFAULT_SECRET_KEY:
+    logging.getLogger(__name__).warning(
+        "SECRET_KEY is unset; using the public default. Session cookies and "
+        "mobile bearer tokens are forgeable until SECRET_KEY is set."
+    )
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -251,6 +260,42 @@ def init_db():
 
 
 # Authentication decorators
+def _mobile_token_secret():
+    """Key for mobile bearer-token signatures, distinct from the session key."""
+    return os.environ.get('MOBILE_TOKEN_SECRET') or app.secret_key
+
+
+def _issue_mobile_token(user_id, issued_at=None):
+    """Return a signed mobile token: genesis_mobile_<id>_<issued_at>_<sig>.
+
+    The signature is what makes the token unforgeable. Without it the id and
+    timestamp were plain text, so anyone could mint a token for any user id.
+    """
+    issued_at = int(time.time()) if issued_at is None else int(issued_at)
+    payload = f"{int(user_id)}.{issued_at}"
+    sig = hmac.new(
+        str(_mobile_token_secret()).encode(), payload.encode(), hashlib.sha256
+    ).hexdigest()
+    return f"genesis_mobile_{int(user_id)}_{issued_at}_{sig}"
+
+
+def _verify_mobile_token(token, max_age_seconds=30 * 24 * 3600):
+    """Return the user id for a valid, unexpired token, else None."""
+    parts = str(token).split('_')
+    # genesis_mobile_<id>_<issued_at>_<sig>
+    if len(parts) != 5 or parts[0] != 'genesis' or parts[1] != 'mobile':
+        return None
+    try:
+        user_id = int(parts[2])
+        issued_at = int(parts[3])
+    except ValueError:
+        return None
+    if issued_at <= 0 or (time.time() - issued_at) > max_age_seconds:
+        return None
+    expected = _issue_mobile_token(user_id, issued_at)
+    return user_id if hmac.compare_digest(str(token), expected) else None
+
+
 def login_required(f):
     """Decorator to require login - supports both session and Bearer token auth."""
     @wraps(f)
@@ -258,19 +303,14 @@ def login_required(f):
         # Check for Bearer token in Authorization header
         auth_header = request.headers.get('Authorization', '')
         if auth_header.startswith('Bearer '):
-            token = auth_header[7:]
-            # Validate token format: genesis_mobile_{user_id}_{timestamp}
-            if token.startswith('genesis_mobile_'):
-                parts = token.split('_')
-                if len(parts) >= 3:
-                    try:
-                        user_id = int(parts[2])
-                        # Set session user_id for downstream code
-                        session['user_id'] = user_id
-                        return f(*args, **kwargs)
-                    except ValueError:
-                        pass
-        
+            user_id = _verify_mobile_token(auth_header[7:])
+            if user_id is not None:
+                session['user_id'] = user_id
+                return f(*args, **kwargs)
+            # A malformed or forged token must never fall through to an
+            # anonymous session: fail closed here instead.
+            return jsonify({'error': 'Unauthorized', 'login_required': True}), 401
+
         # Fall back to session check
         if 'user_id' not in session:
             if request.is_json or request.path.startswith('/api/'):
@@ -334,7 +374,7 @@ def api_auth_login():
     session['role'] = user['role']
     
     # Generate token for mobile auth
-    token = f"genesis_mobile_{user['id']}_{int(time.time())}"
+    token = _issue_mobile_token(user['id'])
     
     return jsonify({
         'success': True,
@@ -380,7 +420,7 @@ def api_auth_register():
         session['username'] = username
         session['role'] = 'user'
         
-        token = f"genesis_mobile_{user_id}_{int(time.time())}"
+        token = _issue_mobile_token(user_id)
         
         return jsonify({
             'success': True,
@@ -1152,7 +1192,13 @@ def api_health():
 
 @app.route('/api/debug/telegram', methods=['GET'])
 def api_debug_telegram():
-    """Debug endpoint: check if Telegram bot is running and what env vars are set."""
+    """Debug endpoint: check if Telegram bot is running and what env vars are set.
+
+    Leaks the admin Telegram id and raw bot logs, so it requires the same
+    shared secret as the reply queue. No relay or workflow reads it.
+    """
+    if not _telegram_secret_ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     import subprocess
     env_status = {
         'TELEGRAM_BOT_TOKEN': bool(os.environ.get('TELEGRAM_BOT_TOKEN')),
