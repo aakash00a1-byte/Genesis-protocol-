@@ -632,3 +632,33 @@ does not have to live on GitHub Actions.
 - **Do not relay through public CORS proxies.** Some are reachable
   (`corsproxy.io` answered), but they would carry the bot token in the URL to an
   untrusted third party. That is a credential disclosure, not a fix.
+
+## Telegram delivery path (verified working 2026-11-11)
+
+The repo is public now, so Actions minutes are unlimited and the relay runs for
+free. Full chain, each link confirmed by a log or an API response:
+
+1. Telegram → `POST /api/telegram/webhook` on the Space. The webhook is healthy
+   (`last_error_message` empty, `pending_update_count: 0`) and registered by
+   `register-webhook.yml`, because the Space itself cannot call `setWebhook`.
+2. The Space parks replies in `/tmp/telegram_reply_queue.json`; it cannot send
+   them, as `api.telegram.org` is blocked outbound.
+3. `keepalive.yml` runs `scripts/relay_loop.py` for ~5h30m per run, reading
+   `/api/telegram/queue` and calling `sendMessage`. It also sends the news,
+   market and weather digests, so the bot is proactive and not only reactive.
+
+Verify the relay with the **Relay Self-Test** workflow (`relay-selftest.yml`,
+`workflow_dispatch`). It is the fastest way to tell whether delivery is broken:
+a 401 on the queue endpoint means `TELEGRAM_WEBHOOK_SECRET` differs between the
+repo and the Space, and every queued reply is silently dropped for hours. The
+last run printed `queue endpoint -> HTTP 200`, `RESULT: OK - relay authenticated`
+and a healthy `getMe`, so the secrets match.
+
+### The telegram supervisord program must never exit
+
+`start_all_telegram_bots.py` serves nothing: the Flask app handles the webhook,
+and this program only holds its supervisord slot. It used to `return` when
+`setWebhook` failed, which on HF is always, so supervisord restarted it every
+10s until it hit `FATAL`. A failure there is now logged and the process stays
+up. Do not "fix" a `setWebhook` error in that file by returning — that is the
+bug, not the fix.
