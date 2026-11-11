@@ -77,7 +77,7 @@ class ScoringEngine:
         },
         
         # Google Gemini
-        "gemini-2.0-flash": {
+        "gemini-flash-latest": {
             "provider": "gemini",
             "capabilities": ["fast", "reasoning", "vision", "long_context"],
             "strengths": ["fast_responses", "reasoning", "cost_effective", "long_context"],
@@ -87,7 +87,7 @@ class ScoringEngine:
             "speed_tier": 1,
             "max_tokens": 8192,
         },
-        "gemini-1.5-pro": {
+        "gemini-2.5-pro": {
             "provider": "gemini",
             "capabilities": ["reasoning", "vision", "long_context", "analysis"],
             "strengths": ["long_context", "complex_reasoning", "analysis"],
@@ -97,7 +97,7 @@ class ScoringEngine:
             "speed_tier": 2,
             "max_tokens": 8192,
         },
-        "gemini-1.5-flash": {
+        "gemini-2.5-flash": {
             "provider": "gemini",
             "capabilities": ["fast", "vision", "reasoning"],
             "strengths": ["fast_responses", "cost_effective", "vision"],
@@ -161,7 +161,7 @@ class ScoringEngine:
             "max_tokens": 8192,
         },
         # Mistral
-        "mistral-large-latest": {
+        "ministral-8b-latest": {
             "provider": "mistral",
             "capabilities": ["coding", "reasoning", "creative", "analysis"],
             "strengths": ["code_generation", "reasoning", "creative"],
@@ -171,7 +171,7 @@ class ScoringEngine:
             "speed_tier": 2,
             "max_tokens": 32000,
         },
-        "mistral-small": {
+        "mistral-large-4": {
             "provider": "mistral",
             "capabilities": ["fast", "reasoning"],
             "strengths": ["fast_responses", "cost_effective"],
@@ -203,6 +203,65 @@ class ScoringEngine:
             "speed_tier": 1,
             "max_tokens": 4096,
         },
+        # OpenRouter (multi-model gateway)
+        "meta-llama/llama-3.3-70b-instruct": {
+            "provider": "openrouter",
+            "capabilities": ["reasoning", "coding", "analysis", "fast"],
+            "strengths": ["reasoning", "code_generation", "cost_effective"],
+            "weaknesses": ["vision"],
+            "context_window": 131072,
+            "cost_tier": 1,
+            "speed_tier": 2,
+            "max_tokens": 8192,
+        },
+
+        # Cerebras (fast inference)
+        "gpt-oss-120b": {
+            "provider": "cerebras",
+            "capabilities": ["fast", "reasoning", "coding", "cost_effective"],
+            "strengths": ["fast_responses", "reasoning", "code_generation"],
+            "weaknesses": ["creative_writing"],
+            "context_window": 131072,
+            "cost_tier": 1,
+            "speed_tier": 1,
+            "max_tokens": 8192,
+        },
+
+        # NVIDIA NIM
+        "meta/llama-3.2-90b-vision-instruct": {
+            "provider": "nvidia",
+            "capabilities": ["vision", "reasoning", "analysis"],
+            "strengths": ["reasoning", "analysis", "vision"],
+            "weaknesses": ["cost"],
+            "context_window": 131072,
+            "cost_tier": 2,
+            "speed_tier": 2,
+            "max_tokens": 8192,
+        },
+
+        # Free.ai
+        "qwen7b": {
+            "provider": "freeai",
+            "capabilities": ["fast", "cost_effective"],
+            "strengths": ["fast_responses", "cost_effective"],
+            "weaknesses": ["complex_tasks"],
+            "context_window": 32768,
+            "cost_tier": 1,
+            "speed_tier": 1,
+            "max_tokens": 4096,
+        },
+
+        # OrcaRouter
+        "qwen/qwen3.8-27b": {
+            "provider": "orcarouter",
+            "capabilities": ["reasoning", "coding"],
+            "strengths": ["reasoning", "code_generation"],
+            "weaknesses": ["cost"],
+            "context_window": 131072,
+            "cost_tier": 2,
+            "speed_tier": 2,
+            "max_tokens": 8192,
+        },
     }
     
     # Intent weights for scoring
@@ -210,22 +269,22 @@ class ScoringEngine:
         "coding": {
             "gpt-4o": 0.95, "gpt-4-turbo": 0.90, "gpt-4o-mini": 0.75,
             "claude-3-5-sonnet-20241022": 0.85, "claude-sonnet-4-20250514": 0.90,
-            "gemini-1.5-flash": 0.70, "gemini-2.0-flash": 0.75,
+            "gemini-2.5-flash": 0.70, "gemini-flash-latest": 0.75,
             "openai/gpt-oss-120b": 0.80, "mixtral-8x7b-32768": 0.70,
         },
         "creative": {
             "claude-3-5-sonnet-20241022": 0.95, "claude-sonnet-4-20250514": 0.98,
             "gpt-4o": 0.90, "gpt-4-turbo": 0.85,
-            "gemini-1.5-flash": 0.65, "gemini-2.0-flash": 0.70,
+            "gemini-2.5-flash": 0.65, "gemini-flash-latest": 0.70,
             "openai/gpt-oss-120b": 0.60, "mixtral-8x7b-32768": 0.50,
         },
         "reasoning": {
-            "gemini-1.5-pro": 0.95, "gpt-4o": 0.90,
+            "gemini-2.5-pro": 0.95, "gpt-4o": 0.90,
             "claude-3-5-sonnet-20241022": 0.88, "claude-sonnet-4-20250514": 0.92,
-            "gemini-2.0-flash": 0.85, "openai/gpt-oss-120b": 0.75,
+            "gemini-flash-latest": 0.85, "openai/gpt-oss-120b": 0.75,
         },
         "fast": {
-            "gemini-2.0-flash": 0.98, "gemini-1.5-flash": 0.95,
+            "gemini-flash-latest": 0.98, "gemini-2.5-flash": 0.95,
             "openai/gpt-oss-120b": 0.95, "mixtral-8x7b-32768": 0.90,
             "gpt-4o-mini": 0.85, "claude-3-haiku-20240307": 0.85,
             "deepseek-chat": 0.80, "mistral-small": 0.78,
@@ -237,18 +296,18 @@ class ScoringEngine:
             "deepseek-chat": 0.80, "mistral-small": 0.78,
         },
         "long_context": {
-            "gemini-1.5-pro": 0.98, "gemini-2.0-flash": 0.90,
+            "gemini-2.5-pro": 0.98, "gemini-flash-latest": 0.90,
             "claude-3-5-sonnet-20241022": 0.85, "claude-sonnet-4-20250514": 0.88,
             "gpt-4o": 0.80, "openai/gpt-oss-120b": 0.60,
         },
         "vision": {
-            "gpt-4o": 0.95, "gemini-1.5-pro": 0.95, "gemini-1.5-flash": 0.90,
-            "claude-3-5-sonnet-20241022": 0.85, "gemini-2.0-flash": 0.88,
+            "gpt-4o": 0.95, "gemini-2.5-pro": 0.95, "gemini-2.5-flash": 0.90,
+            "claude-3-5-sonnet-20241022": 0.85, "gemini-flash-latest": 0.88,
         },
         "analysis": {
             "claude-sonnet-4-20250514": 0.95, "gpt-4o": 0.92,
-            "gemini-1.5-pro": 0.90, "claude-3-5-sonnet-20241022": 0.88,
-            "gemini-2.0-flash": 0.80, "openai/gpt-oss-120b": 0.70,
+            "gemini-2.5-pro": 0.90, "claude-3-5-sonnet-20241022": 0.88,
+            "gemini-flash-latest": 0.80, "openai/gpt-oss-120b": 0.70,
         },
     }
     
@@ -478,7 +537,7 @@ class ScoringEngine:
         # Check for simple query bypass
         if self.is_simple_query(query):
             # Use fastest model for simple queries
-            fast_model = "gemini-2.0-flash" if "gemini" in available_providers else "openai/gpt-oss-120b"
+            fast_model = "gemini-flash-latest" if "gemini" in available_providers else "openai/gpt-oss-120b"
             self.logger.info(f"Simple query - bypassing planning, using {fast_model}")
             return ("gemini" if "gemini" in available_providers else "groq", fast_model, 0.95, intent)
         

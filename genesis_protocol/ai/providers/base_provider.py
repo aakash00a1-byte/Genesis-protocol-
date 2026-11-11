@@ -237,8 +237,8 @@ class BaseProvider(ABC):
             "llama-3.1-8b-instant": 0.20,
             "gpt-4o-mini": 0.15,
             "gpt-4o": 5.00,
-            "gemini-1.5-flash": 0.075,
-            "gemini-1.5-pro": 1.25,
+            "gemini-2.5-flash": 0.075,
+            "gemini-2.5-pro": 1.25,
         }
         
         rate = costs.get(model, 0.50)

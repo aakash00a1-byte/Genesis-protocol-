@@ -225,7 +225,7 @@ class TaskPlanner:
                 id=step_id,
                 description="Understand requirements and structure",
                 action="llm_analysis",
-                model_preference="gemini-1.5-pro"
+                model_preference="gemini-2.5-pro"
             ))
             step_id += 1
             
@@ -266,7 +266,7 @@ class TaskPlanner:
                 id=step_id,
                 description="Identify key search terms",
                 action="llm_analysis",
-                model_preference="gemini-2.0-flash"
+                model_preference="gemini-flash-latest"
             ))
             step_id += 1
             
@@ -282,7 +282,7 @@ class TaskPlanner:
                 id=step_id,
                 description="Analyze and synthesize results",
                 action="llm_synthesis",
-                model_preference="gemini-1.5-pro"
+                model_preference="gemini-2.5-pro"
             ))
             step_id += 1
             
@@ -323,7 +323,7 @@ class TaskPlanner:
                 id=step_id,
                 description="Identify learning objectives",
                 action="llm_analysis",
-                model_preference="gemini-1.5-pro"
+                model_preference="gemini-2.5-pro"
             ))
             step_id += 1
             

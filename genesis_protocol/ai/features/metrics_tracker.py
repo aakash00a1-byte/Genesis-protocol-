@@ -81,8 +81,8 @@ class MetricsTracker:
             "claude-3-opus": {"input": 15.00, "output": 75.00},
         },
         "gemini": {
-            "gemini-1.5-pro": {"input": 1.25, "output": 5.00},
-            "gemini-1.5-flash": {"input": 0.035, "output": 0.14},
+            "gemini-2.5-pro": {"input": 1.25, "output": 5.00},
+            "gemini-2.5-flash": {"input": 0.035, "output": 0.14},
         },
         "deepseek": {
             "deepseek-chat": {"input": 0.14, "output": 0.28},

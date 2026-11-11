@@ -24,6 +24,7 @@ class MistralProvider(BaseProvider):
         super().__init__("mistral")
         self.api_key = os.environ.get("MISTRAL_API_KEY")
         self.base_url = "https://api.mistral.ai/v1"
+        self.default_model = os.environ.get("MISTRAL_MODEL", "ministral-8b-latest")
 
     async def generate(self, request: AIRequest) -> AIResponse:
         """Generate response using Mistral API."""
@@ -38,7 +39,7 @@ class MistralProvider(BaseProvider):
         }
 
         payload = {
-            "model": request.model or "mistral-large-latest",
+            "model": request.model or self.default_model,
             "messages": request.messages,
             "temperature": request.temperature,
             "max_tokens": request.max_tokens,
@@ -95,4 +96,4 @@ class MistralProvider(BaseProvider):
 
     def get_default_model(self) -> str:
         """Get default Mistral model."""
-        return "mistral-large-latest"
+        return self.default_model

@@ -315,8 +315,8 @@ class QualityJudge:
             Best alternative model name or None
         """
         # Simple ranking - in production, use scoring engine
-        ranking = ["gpt-4o", "gemini-1.5-pro", "claude-3-5-sonnet-20241022", 
-                   "gemini-2.0-flash", "llama-3.3-70b-versatile"]
+        ranking = ["gpt-4o", "gemini-2.5-pro", "claude-3-5-sonnet-20241022", 
+                   "gemini-flash-latest", "llama-3.3-70b-versatile"]
         
         alternatives = [m for m in ranking if m in available_models and m != current_model]
         

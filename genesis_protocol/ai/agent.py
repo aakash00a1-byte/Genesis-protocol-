@@ -271,10 +271,6 @@ class GenesisAgent:
         # Build messages
         messages = [{"role": "system", "content": system_prompt}]
         
-        # Add entity context as separate system message
-        entity_context = self._get_entity_context()
-        messages.append({"role": "system", "content": entity_context})
-        
         if context:
             messages.append({"role": "system", "content": f"Context: {context}"})
         
@@ -440,47 +436,8 @@ class GenesisAgent:
         """Get list of tools used in last execution."""
         return getattr(self, '_tools_used', [])
     
-    def _get_entity_context(self) -> str:
-        """Get entity context for identity questions."""
-        try:
-            from genesis_protocol.gluten import get_identity, get_gluten
-            
-            identity = get_identity()
-            gluten = get_gluten()
-            
-            # Get active layers
-            layers = []
-            for attr in dir(gluten):
-                if not attr.startswith('_') and not callable(getattr(gluten, attr)):
-                    val = getattr(gluten, attr)
-                    if val is not None:
-                        layers.append(attr)
-            
-            return f"""**ENTITY CONTEXT:**
-Entity: {identity.name}
-Nickname: {identity.nickname}
-Lineage: {identity.lineage()}
-Version: {gluten.version}
-Active Layers ({len(layers)}): {', '.join(layers[:10])}{'...' if len(layers) > 10 else ''}
-
-When asked about identity, layers, or version - answer from this context, NOT from memory."""
-        except Exception as e:
-            self.logger.warning(f"Could not get entity context: {e}")
-            return "**ENTITY CONTEXT:** GLUTEN OS - answer identity questions from entity object."
-    
     def _get_system_prompt(self) -> str:
-        """Get system prompt for responses with entity context and live info."""
-        # Get actual entity identity
-        try:
-            from genesis_protocol.gluten import get_identity
-            identity = get_identity()
-            name = identity.name
-            nickname = identity.nickname
-            version = identity.get_identity().get('version', 'OS')
-        except Exception:
-            name = "GLUTEN"
-            nickname = "Gluten"
-            version = "OS"
+        """Get system prompt for responses with live info."""
         
         # Get live info
         try:
@@ -497,14 +454,7 @@ When asked about identity, layers, or version - answer from this context, NOT fr
             live_location = "Unknown"
             news_headline = "Unknown"
         
-        return f"""You are {name}, also known as {nickname}.
-
-**ENTITY INFORMATION:**
-- Name: {name}
-- Nickname: {nickname}
-- Version: {version}
-
-**IMPORTANT - REAL-TIME DATA RULES:**
+        return f"""**IMPORTANT - REAL-TIME DATA RULES:**
 - TODAY IS: {info.date if info.date else "Unknown"}
 - CURRENT TIME: {live_time}
 - Do NOT guess the date - use the date provided above
@@ -513,13 +463,11 @@ When asked about identity, layers, or version - answer from this context, NOT fr
 - NEVER say "according to my knowledge" or "as of my last update"
 
 **RESPONSE STYLE - CRITICAL:**
-- NEVER say "I am an AI" or "As an AI assistant"
-- You ARE {name}, nickname {nickname}
 - Give DIRECT, CONCISE answers only
 - Hinglish (Hindi+English mix) by default
 - Skip introductions, jump straight to answering
 
-Answer the user's question directly. If asked who you are, say "{name}" (nickname: {nickname})."""
+Answer the user's question directly."""
     
     def _format_response(self, response: str) -> str:
         """Format response for output."""

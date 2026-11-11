@@ -101,8 +101,8 @@ class OpenAIConfig(AIProviderConfig):
 class GeminiConfig(AIProviderConfig):
     """Google Gemini AI provider configuration."""
     endpoint: str = "https://generativelanguage.googleapis.com/v1beta"
-    default_model: str = "gemini-1.5-flash"
-    quality_model: str = "gemini-1.5-pro"
+    default_model: str = "gemini-2.5-flash"
+    quality_model: str = "gemini-2.5-pro"
     rate_limit_rpm: int = 60
     rate_limit_rpd: int = 1500
 
@@ -138,8 +138,8 @@ class DeepSeekConfig(AIProviderConfig):
 class MistralConfig(AIProviderConfig):
     """Mistral AI provider configuration."""
     endpoint: str = "https://api.mistral.ai/v1/chat/completions"
-    default_model: str = "mistral-small-latest"
-    quality_model: str = "mistral-large-latest"
+    default_model: str = "ministral-8b-latest"
+    quality_model: str = "mistral-large-4"
     rate_limit_rpm: int = 30
 
 
@@ -396,7 +396,7 @@ class Config:
         
         # Gemini
         config.gemini.api_key = os.getenv("GEMINI_API_KEY", "")
-        config.gemini.default_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        config.gemini.default_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         
         # HuggingFace
         config.huggingface.api_key = os.getenv("HUGGINGFACE_API_KEY", "")
@@ -412,7 +412,7 @@ class Config:
 
         # Mistral
         config.mistral.api_key = os.getenv("MISTRAL_API_KEY", "")
-        config.mistral.default_model = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
+        config.mistral.default_model = os.getenv("MISTRAL_MODEL", "ministral-8b-latest")
 
         # Cohere
         config.cohere.api_key = os.getenv("COHERE_API_KEY", "")

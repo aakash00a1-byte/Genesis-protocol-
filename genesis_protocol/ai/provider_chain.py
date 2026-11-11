@@ -12,7 +12,9 @@ from typing import Optional, List, Dict, Any
 from genesis_protocol.ai.providers import (
     BaseProvider, GroqProvider, OpenAIProvider, 
     GeminiProvider, HuggingFaceProvider, AIRequest, AIResponse,
-    DeepSeekProvider, MistralProvider
+    DeepSeekProvider, MistralProvider,
+    CerebrasProvider, NvidiaProvider, OpenRouterProvider,
+    OrcaRouterProvider, FreeAIProvider,
 )
 from genesis_protocol.ai.scoring_engine import get_scoring_engine
 from genesis_protocol.config import get_config
@@ -59,6 +61,11 @@ class ProviderChain:
             "huggingface": HuggingFaceProvider(),
             "deepseek": DeepSeekProvider(),
             "mistral": MistralProvider(),
+            "cerebras": CerebrasProvider(),
+            "nvidia": NvidiaProvider(),
+            "openrouter": OpenRouterProvider(),
+            "orcarouter": OrcaRouterProvider(),
+            "freeai": FreeAIProvider(),
         }
         
         # Initialize Claude if key available
@@ -66,7 +73,8 @@ class ProviderChain:
         
         # Base provider order (fallback priority)
         self._base_order = [
-            "openai", "gemini", "claude", "deepseek", "mistral", "huggingface", "groq"
+            "openai", "gemini", "claude", "deepseek", "mistral", "huggingface", "groq",
+            "openrouter", "cerebras", "nvidia", "freeai", "orcarouter",
         ]
         
         # Request logging

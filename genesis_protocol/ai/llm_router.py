@@ -94,22 +94,22 @@ class LLMRouter:
         ),
         
         # Google Models
-        "gemini-2.0-flash": ModelInfo(
-            name="gemini-2.0-flash",
+        "gemini-flash-latest": ModelInfo(
+            name="gemini-flash-latest",
             provider="gemini",
             capabilities=[ModelCapability.FAST, ModelCapability.CHEAP, ModelCapability.LONG_CONTEXT],
             context_window=1000000,
             priority=3
         ),
-        "gemini-1.5-pro": ModelInfo(
-            name="gemini-1.5-pro",
+        "gemini-2.5-pro": ModelInfo(
+            name="gemini-2.5-pro",
             provider="gemini",
             capabilities=[ModelCapability.LONG_CONTEXT, ModelCapability.REASONING, ModelCapability.VISION],
             context_window=2000000,
             priority=4
         ),
-        "gemini-1.5-flash": ModelInfo(
-            name="gemini-1.5-flash",
+        "gemini-2.5-flash": ModelInfo(
+            name="gemini-2.5-flash",
             provider="gemini",
             capabilities=[ModelCapability.FAST, ModelCapability.CHEAP, ModelCapability.VISION],
             context_window=1000000,
@@ -272,12 +272,12 @@ class LLMRouter:
     def _route_long_context(self) -> str:
         """Route to best long context model."""
         # Gemini 1.5 Pro for long context
-        return "gemini-1.5-pro"
+        return "gemini-2.5-pro"
     
     def _route_reasoning(self) -> str:
         """Route to best reasoning model."""
         # Try Gemini first, then OpenAI, then Claude
-        return "gemini-2.0-flash"
+        return "gemini-flash-latest"
     
     def _route_fast(self) -> str:
         """Route to fastest/cheapest model."""
@@ -286,7 +286,7 @@ class LLMRouter:
     
     def _route_default(self) -> str:
         """Default routing."""
-        return "gemini-2.0-flash"
+        return "gemini-flash-latest"
     
     def _get_best_for_provider(self, provider: str, categories: List[str]) -> Optional[str]:
         """Get best model for a specific provider."""
@@ -320,13 +320,13 @@ class LLMRouter:
         provider = self.get_provider_for_model(primary_model)
         
         if provider == "openai":
-            chain.extend(["gemini-2.0-flash", "claude-3-5-sonnet-20241022", "openai/gpt-oss-120b"])
+            chain.extend(["gemini-flash-latest", "claude-3-5-sonnet-20241022", "openai/gpt-oss-120b"])
         elif provider == "claude":
-            chain.extend(["gemini-2.0-flash", "gpt-4o", "openai/gpt-oss-120b"])
+            chain.extend(["gemini-flash-latest", "gpt-4o", "openai/gpt-oss-120b"])
         elif provider == "gemini":
             chain.extend(["gpt-4o", "claude-3-5-sonnet-20241022", "openai/gpt-oss-120b"])
         else:  # groq or unknown
-            chain.extend(["gemini-2.0-flash", "gpt-4o", "claude-3-5-sonnet-20241022"])
+            chain.extend(["gemini-flash-latest", "gpt-4o", "claude-3-5-sonnet-20241022"])
         
         return chain
 

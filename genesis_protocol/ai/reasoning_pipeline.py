@@ -177,7 +177,7 @@ class ReasoningPipeline:
                         steps=plan_data.get("steps", []),
                         tools_to_use=plan_data.get("tools", []),
                         estimated_complexity=plan_data.get("complexity", 0.5),
-                        preferred_model=plan_data.get("model", "gemini-2.0-flash")
+                        preferred_model=plan_data.get("model", "gemini-flash-latest")
                     )
                 except json.JSONDecodeError:
                     self.logger.warning("Could not parse plan JSON")
