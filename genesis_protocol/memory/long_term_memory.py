@@ -143,8 +143,16 @@ class LongTermMemory:
         limit: int = 5,
         min_importance: MemoryImportance = MemoryImportance.LOW
     ) -> List[MemoryEntry]:
-        """Search memories by semantic similarity."""
+        """Search a single user's memories by semantic similarity.
+
+        ``user_id`` is required. A missing, zero or falsy id previously
+        meant "no filter" and returned every user's memories, so a caller
+        that forgot to pass it leaked data. Failing closed keeps one
+        user's memories out of another's results.
+        """
         results = []
+        if not user_id:
+            raise ValueError("user_id is required to search memories")
         
         if self._collection:
             try:
@@ -157,7 +165,7 @@ class LongTermMemory:
                     entry = self._memory_index.get(doc_id)
                     if entry:
                         # Filter by user and importance
-                        if user_id and entry.user_id != user_id:
+                        if entry.user_id != user_id:
                             continue
                         if entry.importance.value < min_importance.value:
                             continue
@@ -169,7 +177,7 @@ class LongTermMemory:
         if not results:
             query_lower = query.lower()
             for entry in self._memory_index.values():
-                if (not user_id or entry.user_id == user_id) and \
+                if entry.user_id == user_id and \
                    entry.importance.value >= min_importance.value:
                     if query_lower in entry.content.lower():
                         results.append(entry)
