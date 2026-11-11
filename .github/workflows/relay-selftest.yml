@@ -99,8 +99,16 @@ jobs:
                   timeout=90,
               )
               text = body.decode(errors="replace")
-              if status == 200 and '"ok": true' in text:
-                  print(f"RESULT: OK - provider chain answered: {text[:160]}")
+              try:
+                  payload = json.loads(text)
+              except Exception:
+                  payload = None
+              # Parse the JSON; do not substring-match it. Flask emits compact
+              # JSON ({"ok":true}, no space) and reorders keys, so a literal
+              # '"ok": true' check reports a failure for a working AI.
+              if status == 200 and isinstance(payload, dict) and payload.get("briefing"):
+                  print(f"RESULT: OK - provider chain answered: "
+                          f"{str(payload['briefing'])[:160]}")
               else:
                   print(f"RESULT: FAIL - AI unavailable (HTTP {status}): {text[:220]}")
                   raise SystemExit(1)
