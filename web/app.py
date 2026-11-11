@@ -1174,36 +1174,15 @@ def api_debug_telegram():
         except Exception as e:
             logs[logfile] = f'Cannot read: {e}'
     
-    # Network egress test. Telegram is expected to fail on HF's free tier; the
-    # others tell us how wide the block is (allowlist vs. a single host), which
-    # decides whether a relay host is reachable from here at all.
+    # Network egress test: can we reach telegram.org?
     net_test = {}
     import requests as req
-    hosts = [
-        ('https://api.telegram.org/', 'telegram.org'),
-        ('https://api.cloudflare.com/', 'cloudflare.com'),
-        ('https://www.cloudflare.com/', 'www.cloudflare.com'),
-        ('https://api.github.com/', 'github.com'),
-        ('https://www.google.com/', 'google.com'),
-        ('https://api.groq.com/', 'groq.com'),
-        ('https://huggingface.co/', 'huggingface.co'),
-    ]
-    for url, name in hosts:
+    for url, name in [('https://api.telegram.org/', 'telegram.org'), ('https://api.groq.com/', 'groq.com'), ('https://huggingface.co/', 'huggingface.co')]:
         try:
             r = req.get(url, timeout=15)
             net_test[name] = f'OK (HTTP {r.status_code}, {r.elapsed.total_seconds()}s)'
         except Exception as e:
             net_test[name] = f'FAILED: {str(e)[:100]}'
-
-    # Optional: probe one caller-supplied https URL so a relay host can be
-    # checked without a redeploy. Read-only GET, https only.
-    probe = request.args.get('url', '')
-    if probe.startswith('https://'):
-        try:
-            r = req.get(probe, timeout=15)
-            net_test[f'probe:{probe[:60]}'] = f'OK (HTTP {r.status_code}, {r.elapsed.total_seconds()}s)'
-        except Exception as e:
-            net_test[f'probe:{probe[:60]}'] = f'FAILED: {str(e)[:100]}'
     
     return jsonify({
         'env': env_status,
@@ -1211,59 +1190,6 @@ def api_debug_telegram():
         'logs': logs,
         'network_egress_test': net_test,
     })
-
-
-@app.route('/api/debug/cloudflare', methods=['GET'])
-def api_debug_cloudflare():
-    """Debug endpoint: can this Space use its Cloudflare token to relay Telegram?
-
-    Read-only. Reports token validity and account/worker facts; never returns
-    the token itself. A relay Worker would let the Space reach Telegram without
-    GitHub Actions, which HF's outbound block otherwise forces.
-    """
-    import requests as req
-    token = os.environ.get('CLOUDFLARE_API_TOKEN', '')
-    out = {'token_present': bool(token)}
-    if not token:
-        return jsonify(out)
-    api = 'https://api.cloudflare.com/client/v4'
-    headers = {'Authorization': f'Bearer {token}'}
-    try:
-        j = req.get(f'{api}/user/tokens/verify', headers=headers, timeout=15).json()
-        out['verify'] = {
-            'success': j.get('success'),
-            'status': (j.get('result') or {}).get('status'),
-            'errors': [e.get('message') for e in (j.get('errors') or [])],
-        }
-    except Exception as e:
-        out['verify'] = f'FAILED: {str(e)[:120]}'
-        return jsonify(out)
-    # Only the account id (not its name) is needed to deploy a Worker; it is not
-    # a credential. Worker names and the subdomain decide the relay URL.
-    try:
-        j = req.get(f'{api}/accounts', headers=headers, timeout=15).json()
-        accounts = [a.get('id') for a in (j.get('result') or [])]
-        out['account_ids'] = accounts
-        out['account_errors'] = [e.get('message') for e in (j.get('errors') or [])]
-    except Exception as e:
-        out['account_ids'] = f'FAILED: {str(e)[:120]}'
-        return jsonify(out)
-    if out.get('account_ids'):
-        account_id = out['account_ids'][0]
-        try:
-            j = req.get(
-                f'{api}/accounts/{account_id}/workers/subdomain', headers=headers, timeout=15
-            ).json()
-            out['workers_subdomain'] = (j.get('result') or {}).get('subdomain')
-            out['subdomain_errors'] = [e.get('message') for e in (j.get('errors') or [])]
-            j2 = req.get(
-                f'{api}/accounts/{account_id}/workers/scripts', headers=headers, timeout=15
-            ).json()
-            out['workers'] = [s.get('id') for s in (j2.get('result') or [])]
-            out['workers_errors'] = [e.get('message') for e in (j2.get('errors') or [])]
-        except Exception as e:
-            out['workers'] = f'FAILED: {str(e)[:120]}'
-    return jsonify(out)
 
 
 TELEGRAM_REPLY_QUEUE = '/tmp/telegram_reply_queue.json'

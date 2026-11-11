@@ -603,3 +603,32 @@ What *is* already healthy: the webhook is registered and current
 password prompt. `gh` is authenticated with the live token, so point git at it:
 `git config --global credential."https://github.com".helper '!gh auth git-credential'`
 and strip the token from the remote URL. Pushes then work non-interactively.
+
+## HF Space egress is a host denylist, not a blanket block
+
+Probed from the live Space on 2026-11-11 via `/api/debug/telegram?url=...`.
+This changes what is possible: most of the internet *is* reachable, so a relay
+does not have to live on GitHub Actions.
+
+- **Reachable from the Space:** `github.com`, `api.github.com`,
+  `raw.githubusercontent.com`, `google.com`, `groq.com`, `huggingface.co`,
+  `api.openai.com`, `cloudflare.com`/`www.cloudflare.com`, `vercel.com`,
+  `*.vercel.app`, `netlify.com`, `*.netlify.app`, `railway.app`, `pages.dev`,
+  `*.ngrok-free.app`, `script.google.com`, `api.render.com`.
+- **Blocked (read timeout, not DNS failure):** `api.telegram.org`,
+  `core.telegram.org`, `api.cloudflare.com`, `*.workers.dev`, `*.deno.dev`,
+  `*.fly.dev`, `api.allorigins.win`, `api.codetabs.com`.
+- **Consequence for the Cloudflare Worker plan:** the Space holds
+  `CLOUDFLARE_API_TOKEN`, but `api.cloudflare.com` is blocked, so the Space
+  cannot deploy or manage a Worker itself. And `*.workers.dev` is blocked, so a
+  Worker on its default domain would be unreachable even after deployment. A
+  Worker bound to a **custom domain** would be the only working variant.
+- **Credential notes.** The sandbox `Claudflare` secret is a `cfat_` token
+  valid only from an allowlisted IP (`Cannot use the access token from location`).
+  `New` is the OrcaRouter key (`sk-orca-`), not a deploy credential. `AGENT_GH_TOKEN`
+  and `OH_GIT_CREDENTIAL_ACCESS_TOKEN_GITHUB` are dead. The injected `GITHUB_TOKEN`
+  is a GitHub App token: repo admin, but it cannot change visibility, create
+  repos, or write Actions secrets (all 403).
+- **Do not relay through public CORS proxies.** Some are reachable
+  (`corsproxy.io` answered), but they would carry the bot token in the URL to an
+  untrusted third party. That is a credential disclosure, not a fix.
