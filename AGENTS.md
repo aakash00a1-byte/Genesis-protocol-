@@ -701,3 +701,39 @@ actually answer a user.
 - **`_telegram_secret_ok` / `_telegram_is_admin` fail open when their env vars
   are unset** (by design, so an existing deployment keeps working). Both are set
   in production, so the live Space is closed; treat them as required config.
+
+## Agentic capability layer (upgrade 2026-11-11)
+
+The GLUTEN upgrade lives in `genesis_protocol/agentic/`. It adds real
+capabilities on top of the existing architecture, and it deliberately does not
+claim more than it does.
+
+- **Memory** (`agentic/memory.py`): a SQLite store that actually persists to
+  disk. Writes are opt-in (`approved=True`), credential-shaped content is
+  refused, and every read is scoped by `user_id`. The prior
+  `memory/unified_memory.py` long-term store was an in-memory ChromaDB client
+  despite its "persistent" docstring; it now uses `PersistentClient` and a real
+  on-disk path. Do not store secrets in memory: refuse them at the door.
+- **Sandbox** (`agentic/sandbox.py`): bounded code execution via subprocess with
+  wall-clock timeout, CPU/memory/file-size rlimits and a scrubbed environment
+  (no inherited secrets). It is a guardrail for model-generated code, not a
+  security boundary against a determined attacker.
+- **Agent loop** (`agentic/agent_loop.py`): understand -> plan -> tool -> policy
+  -> execute -> verify. Code generation and code execution are separate step
+  types. A step is reported successful only when it actually succeeded.
+- **Policy** (`agentic/policy.py`): fail-closed. Unknown tool or permission is
+  denied. Privileged operations (deploy, secret change, write main, merge,
+  self-approve, permission grant) are always denied to the agent and require
+  owner action outside it. The agent never grants itself permission and never
+  approves its own action.
+- **Tasks** (`agentic/tasks.py`): durable task state and per-step history; a
+  failed step is retried on resume.
+- **Identity** (`agentic/identity.py`, `GET /api/identity`): reports the real
+  provider and model names read from runtime configuration, and never leaks a
+  credential value. There is no background autonomy: no scheduler drives tasks
+  on a timer, and `GET /api/capabilities` says so.
+- **Owner config**: set `GLUTEN_OWNER_IDS` (comma-separated user ids). Without
+  it, restricted tools and code execution are denied to everyone (fail closed).
+
+State files default to `data/` (gitignored): `gluten_memory.db`,
+`gluten_tasks.json`, `gluten_audit.jsonl`.

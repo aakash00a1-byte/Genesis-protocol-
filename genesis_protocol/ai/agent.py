@@ -181,6 +181,8 @@ class GenesisAgent:
             
             # Retrieve relevant memory context
             memory_context = self.memory.get_context(chat_id, query) if chat_id else ""
+            # Add durable, user-approved cross-session memory (agentic store).
+            memory_context = self._with_durable_memory(user_id, query, memory_context)
             
             # In NORMAL mode: Simple direct response
             if not is_autonomous:
@@ -373,6 +375,27 @@ class GenesisAgent:
             # Fallback to normal mode
             return await self._process_normal(query, context)
     
+    def _with_durable_memory(self, user_id: int, query: str, base_context: str) -> str:
+        """Append durable, user-approved memory to the chat context.
+
+        Only approved facts from this user's own store are eligible, so recall
+        is cross-session but never cross-user. Any failure here is swallowed:
+        memory is an enhancement, and must not break chat.
+        """
+        if not user_id:
+            return base_context
+        try:
+            from genesis_protocol.agentic.memory import get_agent_memory
+
+            recalled = get_agent_memory().recall(user_id, query, limit=5)
+        except Exception:
+            return base_context
+        if not recalled:
+            return base_context
+        lines = "\n".join(f"- {m['content'][:200]}" for m in recalled)
+        block = f"Known facts about this user (approved memory):\n{lines}"
+        return f"{base_context}\n\n{block}" if base_context else block
+
     def _detect_tool_needs(self, query: str) -> List[str]:
         """Detect which tools are needed for the query."""
         tools = []
