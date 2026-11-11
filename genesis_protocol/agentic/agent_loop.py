@@ -32,6 +32,15 @@ from genesis_protocol.agentic.tasks import TaskStore, get_task_store
 
 STEP_TYPES = {"tool", "generate_code", "execute_code", "respond"}
 
+# A caller-supplied plan is capped so one request cannot occupy a worker
+# indefinitely. The loop is synchronous, so an unbounded list is a cheap DoS.
+MAX_STEPS = 50
+
+# Tools that read or write per-user state. The authoritative ``user_id`` is
+# injected server-side; any value the caller put in ``params`` is discarded so
+# a user cannot read another user's data by passing a different id.
+USER_SCOPED_TOOLS = {"memory_search", "history_search", "task_manager", "image_analyzer"}
+
 
 class AgentLoop:
     def __init__(
@@ -61,11 +70,13 @@ class AgentLoop:
     def plan(self, goal: str, steps: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
         """Return the steps to run.
 
-        When the caller supplies steps they are used as-is (and validated).
-        Otherwise a minimal, honest plan is produced: a single ``respond`` step.
-        No fabricated tool calls are invented here.
+        When the caller supplies steps they are used as-is (and validated),
+        up to ``MAX_STEPS``. Otherwise a minimal, honest plan is produced: a
+        single ``respond`` step. No fabricated tool calls are invented here.
         """
         if steps is not None:
+            if len(steps) > MAX_STEPS:
+                raise ValueError(f"too many steps: {len(steps)} (max {MAX_STEPS})")
             return [self._validate_step(s) for s in steps]
         return [{"type": "respond", "goal": goal}]
 
@@ -149,7 +160,14 @@ class AgentLoop:
         self, user_id: int, step: Dict[str, Any], owner_approved: bool
     ) -> Dict[str, Any]:
         name = step["tool"]
-        params = step.get("params", {}) or {}
+        params = dict(step.get("params", {}) or {})
+
+        # Never trust a caller-supplied user_id: it is the key to another
+        # user's memories and tasks. Drop it and bind the tool to the
+        # authenticated user instead.
+        if name in USER_SCOPED_TOOLS:
+            params.pop("user_id", None)
+            params["user_id"] = user_id
 
         tool = None
         try:

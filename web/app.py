@@ -11,6 +11,7 @@ import json
 import hmac
 import hashlib
 import logging
+import re
 import time
 import threading
 from datetime import datetime, timedelta
@@ -192,6 +193,38 @@ def string_field(data: dict, key: str,
     return value
 
 
+USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+MIN_PASSWORD_LENGTH = 8
+MAX_PASSWORD_LENGTH = 1024
+
+
+def validate_registration(username: str, email: str, password: str) -> Optional[str]:
+    """Return an error message for bad signup input, or None when it is valid.
+
+    Registration is open to the public, so the shape of the input is checked
+    here rather than stored as-is: a username becomes a path/URL component and
+    a display name, and an unvalidated email is useless for account recovery.
+    """
+    if not USERNAME_PATTERN.match(username or ""):
+        return "Username must be 3-32 characters (letters, digits, dot, dash, underscore)"
+    if not EMAIL_PATTERN.match(email or "") or len(email) > MAX_FIELD_LENGTH:
+        return "Enter a valid email address"
+    if not password or len(password) < MIN_PASSWORD_LENGTH:
+        return f"Password must be at least {MIN_PASSWORD_LENGTH} characters"
+    if len(password) > MAX_PASSWORD_LENGTH:
+        return f"Password must be at most {MAX_PASSWORD_LENGTH} characters"
+    return None
+
+
+def _rate_limit_exempt() -> bool:
+    """Skip rate limits under test so the suite stays deterministic."""
+    return bool(app.config.get("TESTING"))
+
+
+AUTH_RATE_LIMIT = "10 per minute"
+
+
 def init_db():
     """Initialize database tables."""
     conn = get_db()
@@ -340,6 +373,7 @@ def admin_required(f):
 # ============================================================================
 
 @app.route('/api/auth/login', methods=['POST'])
+@limiter.limit(AUTH_RATE_LIMIT, exempt_when=_rate_limit_exempt)
 def api_auth_login():
     """Mobile API login endpoint."""
     data = json_body()
@@ -389,18 +423,20 @@ def api_auth_login():
 
 
 @app.route('/api/auth/register', methods=['POST'])
+@limiter.limit(AUTH_RATE_LIMIT, exempt_when=_rate_limit_exempt)
 def api_auth_register():
     """Mobile API registration endpoint."""
     data = json_body()
     username = string_field(data, 'username')
     email = string_field(data, 'email')
-    password = string_field(data, 'password', max_length=1024)
-    
+    password = string_field(data, 'password', max_length=MAX_PASSWORD_LENGTH)
+
     if not username or not email or not password:
         return jsonify({'error': 'All fields required'}), 400
-    
-    if len(password) < 8:
-        return jsonify({'error': 'Password must be at least 8 characters'}), 400
+
+    error = validate_registration(username, email, password)
+    if error:
+        return jsonify({'error': error}), 400
     
     try:
         conn = get_db()
@@ -571,6 +607,7 @@ def api_chat_history_by_id(chat_id):
 
 # Authentication routes
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit(AUTH_RATE_LIMIT, exempt_when=_rate_limit_exempt)
 def login():
     """User login."""
     if request.method == 'POST':
@@ -623,19 +660,21 @@ def login():
 
 
 @app.route('/register', methods=['GET', 'POST'])
+@limiter.limit(AUTH_RATE_LIMIT, exempt_when=_rate_limit_exempt)
 def register():
     """User registration."""
     if request.method == 'POST':
         data = json_body() if request.is_json else request.form
         username = string_field(data, 'username')
         email = string_field(data, 'email')
-        password = string_field(data, 'password', max_length=1024)
-        
+        password = string_field(data, 'password', max_length=MAX_PASSWORD_LENGTH)
+
         if not username or not email or not password:
             return jsonify({'error': 'All fields required'}), 400
-        
-        if len(password) < 6:
-            return jsonify({'error': 'Password must be at least 6 characters'}), 400
+
+        error = validate_registration(username, email, password)
+        if error:
+            return jsonify({'error': error}), 400
         
         try:
             conn = get_db()
