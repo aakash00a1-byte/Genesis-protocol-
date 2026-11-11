@@ -662,3 +662,24 @@ and this program only holds its supervisord slot. It used to `return` when
 10s until it hit `FATAL`. A failure there is now logged and the process stays
 up. Do not "fix" a `setWebhook` error in that file by returning — that is the
 bug, not the fix.
+
+### AI replies were never verified until the probe was added
+
+Transport health did not imply the bot could answer. The local run of the
+webhook handler showed a plain message producing `❌ Error: All providers failed`
+while every transport check still passed, because the probe only read the queue
+and never inspected the reply.
+
+Two traps made this hard to see, and both are now avoided:
+
+- **Do not judge the AI by the reply queue.** `keepalive.yml` clears the queue
+  every 60s, so an empty queue is indistinguishable from a delivered reply. Use
+  `/api/briefing` instead: it is synchronous and secret-gated, so a 200 proves
+  the provider chain answered and a 503 proves it did not.
+- **Do not substring-match Flask JSON.** It emits compact `{"ok":true}` with no
+  space and reorders keys, so `'"ok": true' in text` fails on a working response.
+  Parse the body.
+
+With both fixed, the probe reports `RESULT: OK - provider chain answered` and
+`RESULT: OK - AI queued a reply`, which is the only evidence that the bot can
+actually answer a user.
