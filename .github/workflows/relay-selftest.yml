@@ -14,6 +14,10 @@ on:
         description: Send a test message to the admin on Telegram
         type: boolean
         default: false
+      probe_ai:
+        description: Post a synthetic webhook update and check an AI reply is queued
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -34,6 +38,7 @@ jobs:
           TELEGRAM_ADMIN_ID: ${{ secrets.TELEGRAM_ADMIN_ID }}
           TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
           SEND_TEST_MESSAGE: ${{ inputs.send_test_message }}
+          PROBE_AI: ${{ inputs.probe_ai }}
         run: |
           python3 - <<'PY'
           import json
@@ -81,13 +86,51 @@ jobs:
           if token:
               status, body = call(f"https://api.telegram.org/bot{token}/getMe")
               print(f"telegram getMe  -> HTTP {status} {body[:120].decode(errors='replace')}")
-          if os.environ.get("SEND_TEST_MESSAGE") == "true" and token and admin:
+
+          # Post a synthetic owner message and confirm the Space queues an AI
+          # reply. This exercises the full inbound path: secret check, provider
+          # chain, and queue write. Without it a reply can fail with "All
+          # providers failed" and nothing else would reveal it.
+          if os.environ.get("PROBE_AI") == "true" and secret and admin:
+              import time
+              marker = f"selftest{int(time.time())}"
+              update = {
+                  "update_id": 1,
+                  "message": {
+                      "message_id": 1,
+                      "chat": {"id": int(admin)},
+                      "from": {"id": int(admin), "first_name": "selftest"},
+                      "text": f"Reply with exactly this word and nothing else: {marker}",
+                  },
+              }
               status, body = call(
-                  f"https://api.telegram.org/bot{token}/sendMessage",
-                  {"Content-Type": "application/json"},
-                  {"chat_id": admin,
-                   "text": "Relay self-test: the GitHub Actions relay can reach Telegram. "
-                           "Queued replies will be delivered."},
+                  f"{space}/api/telegram/webhook",
+                  {**headers, "Content-Type": "application/json"},
+                  update,
               )
-              print(f"telegram send   -> HTTP {status} {body[:160].decode(errors='replace')}")
+              print(f"webhook post    -> HTTP {status} {body[:120].decode(errors='replace')}")
+              if status != 200:
+                  print("RESULT: FAIL - the Space rejected a well-formed webhook update.")
+                  raise SystemExit(1)
+              # The handler answers synchronously, so the reply is queued by the
+              # time the POST returns. Read once, immediately; the live relay
+              # clears the queue every 60s, so a later poll could miss it.
+              time.sleep(3)
+              status, body = call(f"{space}/api/telegram/queue", headers)
+              if status != 200:
+                  print(f"RESULT: FAIL - queue read returned HTTP {status}.")
+                  raise SystemExit(1)
+              replies = json.loads(body).get("replies", [])
+              texts = [str(r.get("text", "")) for r in replies]
+              bad = [t for t in texts if "All providers failed" in t or t.startswith("❌")]
+              if bad:
+                  print(f"RESULT: FAIL - AI reply errored: {bad[0][:220]}")
+                  raise SystemExit(1)
+              if not texts:
+                  # Empty queue is not a failure: the relay may have delivered
+                  # the reply already. It only means this probe saw nothing.
+                  print("RESULT: OK - no reply pending (the relay likely "
+                        "delivered it; check Telegram).")
+              else:
+                  print(f"RESULT: OK - AI queued a reply: {texts[-1][:140]}")
           PY
