@@ -75,16 +75,8 @@ class CalculatorTool(Tool):
         """Execute calculation."""
         try:
             # Safe evaluation
-            expr = expression.replace('^', '**')
-            expr = expr.replace('sqrt', 'math.sqrt')
-            expr = expr.replace('sin', 'math.sin')
-            expr = expr.replace('cos', 'math.cos')
-            expr = expr.replace('tan', 'math.tan')
-            expr = expr.replace('log', 'math.log')
-            expr = expr.replace('pi', str(math.pi))
-            expr = expr.replace('e', str(math.e))
-            
-            result = eval(expr, {"__builtins__": {}}, math.__dict__)
+            from genesis_protocol.tools.safe_math import safe_math_eval
+            result = safe_math_eval(expression)
             
             return {
                 'success': True,

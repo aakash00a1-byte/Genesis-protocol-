@@ -383,7 +383,8 @@ class ToolExecutor:
     
     async def _calculate(self, expression: str, **kwargs) -> Dict:
         try:
-            result = eval(expression, {"__builtins__": {}}, {})
+            from genesis_protocol.tools.safe_math import safe_math_eval
+            result = safe_math_eval(expression)
             return {"success": True, "expression": expression, "result": result}
         except Exception as e:
             return {"success": False, "error": str(e)}
