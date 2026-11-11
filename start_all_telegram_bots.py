@@ -305,27 +305,28 @@ def main():
     print(f"Webhook URL: {webhook_url}")
     
     # Register the webhook. On Hugging Face egress to Telegram is blocked, so
-    # this usually times out; GitHub Actions registers the webhook instead
-    # (scripts/register_telegram_webhook.py). Never delete the webhook here:
-    # that only risks wiping what Actions set up.
+    # this call normally times out; GitHub Actions registers the webhook instead
+    # (scripts/register_telegram_webhook.py). A failure here is expected and must
+    # NOT end the process: the Flask app serves the webhook, and this program
+    # only exists to keep its supervisord slot occupied. Returning on failure
+    # made supervisord restart it until it hit FATAL.
     import requests
     try:
-        # Set new webhook
         resp = requests.post(f"{api}/setWebhook", json={
             "url": webhook_url,
             "max_connections": 5,
             "allowed_updates": ["message"]
-        }, timeout=10).json()
-        
+        }, timeout=5).json()
+
         if resp.get("ok"):
             print(f"✅ Webhook set successfully!")
             print(f"   Telegram will POST updates to: {webhook_url}")
         else:
-            print(f"❌ Webhook setup failed: {resp.get('description')}")
-            return
+            print(f"⚠️ Webhook setup rejected: {resp.get('description')}")
+            print("   GitHub Actions registers it instead.")
     except Exception as e:
-        print(f"❌ Network error setting webhook: {e}")
-        return
+        print(f"⚠️ setWebhook unreachable ({type(e).__name__}); expected on HF.")
+        print("   GitHub Actions registers the webhook instead.")
     
     # Send startup notification
     admin_ids = [int(x) for x in admin_ids_str.split(",") if x.strip()]

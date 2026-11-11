@@ -1,0 +1,93 @@
+name: Relay Self-Test
+
+# Answers one question in under a minute: does the Actions relay actually get
+# past the Space's shared-secret check? A 401 here means TELEGRAM_WEBHOOK_SECRET
+# in the repo does not match the Space, and every queued reply is being dropped.
+#
+# This exists because that failure is otherwise invisible: the relay retries a
+# 401 silently for 5h30m, and its log is only readable once the job ends.
+
+on:
+  workflow_dispatch:
+    inputs:
+      send_test_message:
+        description: Send a test message to the admin on Telegram
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/relay-selftest.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe the Space queue and Telegram
+        env:
+          HF_SPACE_URL: https://genesisno-genesis-automaton.hf.space
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ADMIN_ID: ${{ secrets.TELEGRAM_ADMIN_ID }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          SEND_TEST_MESSAGE: ${{ inputs.send_test_message }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          space = os.environ["HF_SPACE_URL"].rstrip("/")
+          secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
+          token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+          admin = os.environ.get("TELEGRAM_ADMIN_ID", "").strip()
+
+          def call(url, headers=None, payload=None, timeout=30):
+              data = json.dumps(payload).encode() if payload is not None else None
+              req = urllib.request.Request(url, data=data, headers=headers or {})
+              try:
+                  with urllib.request.urlopen(req, timeout=timeout) as resp:
+                      return resp.status, resp.read()
+              except urllib.error.HTTPError as exc:
+                  return exc.code, exc.read()
+              except Exception as exc:
+                  return None, str(exc).encode()
+
+          headers = {"Accept": "application/json"}
+          if secret:
+              headers["X-Telegram-Bot-Api-Secret-Token"] = secret
+
+          status, body = call(f"{space}/api/telegram/queue", headers)
+          print(f"queue endpoint  -> HTTP {status}")
+          if status == 401:
+              print("RESULT: FAIL - the repo secret does not match the Space.")
+              print("Every queued reply is being discarded. Set the repo secret")
+              print("TELEGRAM_WEBHOOK_SECRET to the Space's value and re-run.")
+              raise SystemExit(1)
+          if status != 200:
+              print(f"RESULT: FAIL - unexpected status. Body: {body[:200]!r}")
+              raise SystemExit(1)
+          try:
+              payload = json.loads(body)
+              print(f"RESULT: OK - relay authenticated; {payload.get('count', 0)} "
+                    "reply/replies waiting.")
+          except Exception:
+              print("RESULT: OK - relay authenticated (queue body not JSON).")
+
+          if token:
+              status, body = call(f"https://api.telegram.org/bot{token}/getMe")
+              print(f"telegram getMe  -> HTTP {status} {body[:120].decode(errors='replace')}")
+          if os.environ.get("SEND_TEST_MESSAGE") == "true" and token and admin:
+              status, body = call(
+                  f"https://api.telegram.org/bot{token}/sendMessage",
+                  {"Content-Type": "application/json"},
+                  {"chat_id": admin,
+                   "text": "Relay self-test: the GitHub Actions relay can reach Telegram. "
+                           "Queued replies will be delivered."},
+              )
+              print(f"telegram send   -> HTTP {status} {body[:160].decode(errors='replace')}")
+          PY
