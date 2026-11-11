@@ -520,3 +520,40 @@ stays on old code, which is how the "hello" fix appeared not to work.
   exhausted in about a day. It is written for a **public** repo, where Actions
   minutes are unlimited. Keep the repo private only if you also raise the
   Actions spending limit.
+
+## Provider wiring: secrets alone are not enough
+
+- **A key in the Space secrets does nothing until the provider is in the chain.**
+  `ProviderChain.__init__` builds `_providers` from an explicit dict in
+  `genesis_protocol/ai/provider_chain.py`, and `get_available_providers()` only
+  returns names that are both registered *and* `is_configured()`. Adding a
+  secret without a provider class is invisible at runtime.
+- **The fallback chain silently masks a missing provider.** `pc.call(provider="x")`
+  does not fail when `x` is unregistered or erroring — it walks
+  `_get_fallback_chain()` and returns the first success. So `provider_used` in
+  the result is the real signal, not the `provider` you passed. A key that looks
+  "working" may never have been called.
+- **Provider model names go stale and the failure mode is confusing.** A valid
+  key on a retired model returns `404` (Gemini `gemini-1.5-*`/`gemini-2.0-*`) or
+  `403 tier_not_allowed` (Mistral `mistral-small-latest`), which reads like a
+  bad key. Probe the vendor's own `/models` list before assuming the key is dead.
+  Working as of this writing: Gemini `gemini-2.5-flash` / `gemini-2.5-pro` /
+  `gemini-flash-latest`, Mistral `ministral-8b-latest`, NVIDIA
+  `meta/llama-3.2-90b-vision-instruct`.
+- **Replacing model names needs distinct targets.** A blanket
+  `s/dash-flash/dash-flash-latest/` collapses `gemini-2.0-flash` and
+  `gemini-1.5-flash` into the same dict key, which silently drops one catalog
+  entry. After any rename, scan for duplicate keys:
+  `python3 -c "import ast,pathlib; ..."` over the `MODEL_CATALOG`/`ModelInfo` dicts.
+- **Deploy is two legs.** `git push origin main` updates GitHub; the Space is a
+  standalone repo and only updates when `scripts/hf_deploy.sh` mirrors into it
+  (normally via `.github/workflows/deploy-space.yml`, or `HF_TOKEN=$Huggingface
+  bash scripts/hf_deploy.sh` by hand). Pushing to GitHub alone leaves the Space
+  on the old code.
+- **The embedded `origin` URL token can be expired.** When `git push` prompts for
+  a password, push with the live secret instead:
+  `git push "https://x-access-token:${GITHUB_TOKEN}@github.com/<owner>/<repo>.git" main`.
+- **`telegram` exiting with status 0 in the Space logs is expected**, not a
+  regression. HF egress to `api.telegram.org` is blocked, so
+  `start_all_telegram_bots.py` returns after the webhook call times out; the
+  webhook is registered by GitHub Actions instead. Only `web` must reach RUNNING.
