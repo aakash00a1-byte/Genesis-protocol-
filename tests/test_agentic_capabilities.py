@@ -283,6 +283,42 @@ def test_sandbox_runs_in_isolated_dir():
     assert result.stdout.strip().startswith("gluten_sandbox_")
 
 
+def test_sandbox_caps_captured_output(monkeypatch):
+    """A child that floods stdout must not grow this process without bound.
+
+    ``capture_output=True`` buffered the pipes in the parent, so a chatty child
+    grew the parent's RSS (measured ~570 MB for 200 MB of output). The capture
+    is now capped, so the parent's growth stays small regardless of output.
+    """
+    import resource
+
+    from genesis_protocol.agentic.sandbox import run_python
+
+    before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    result = run_python(
+        "import sys\nfor _ in range(2000): sys.stdout.write('x' * 100000)",
+        timeout=10,
+        memory_mb=128,
+        max_capture_bytes=50_000,
+    )
+    after = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    growth_kb = after - before
+    # 200 MB of child output; capped capture keeps the parent well under it.
+    assert growth_kb < 200_000, f"parent grew {growth_kb} KB"
+    assert len(result.stdout) <= 8000  # returned text still honours max_output_bytes
+    assert result.limits["max_capture_bytes"] == 50_000
+
+
+def test_sandbox_captures_normal_output_fully():
+    """The cap must not truncate ordinary, small output."""
+    from genesis_protocol.agentic.sandbox import run_python
+
+    result = run_python("print('hello'); import sys; sys.stderr.write('warn')")
+    assert result.success is True
+    assert result.stdout.strip() == "hello"
+    assert result.stderr.strip() == "warn"
+
+
 # ---------------------------------------------------------------------------
 # 7. Failed task recovery
 # ---------------------------------------------------------------------------
