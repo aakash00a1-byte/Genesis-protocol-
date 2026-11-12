@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Flask, request, jsonify, session, render_template, redirect, url_for
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.middleware.proxy_fix import ProxyFix
 import sqlite3
 
 # Import channel isolation
@@ -96,6 +97,16 @@ if app.secret_key == _DEFAULT_SECRET_KEY:
         "SECRET_KEY is unset; using the public default. Session cookies and "
         "mobile bearer tokens are forgeable until SECRET_KEY is set."
     )
+
+# Behind the reverse proxy (HF Spaces, Railway) the socket peer is the proxy,
+# so request.remote_addr rotates per request and every IP-keyed control — the
+# rate limiter above all — keys on a value that never repeats. Trust one hop of
+# X-Forwarded-For so the limiter sees the real client. The proxy appends the
+# real address, so a client-supplied X-Forwarded-For cannot spoof the key.
+app.wsgi_app = ProxyFix(
+    app.wsgi_app,
+    x_for=int(os.environ.get("TRUSTED_PROXY_HOPS", "1")),
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
