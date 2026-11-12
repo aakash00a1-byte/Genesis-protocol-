@@ -117,3 +117,6 @@ android/
 
 # Node modules
 mobile-app/node_modules/
+
+# Expo build cache
+mobile-app/.expo/
