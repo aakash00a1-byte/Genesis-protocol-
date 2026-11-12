@@ -179,3 +179,35 @@ def test_register_endpoint_rejects_bad_username(client):
         json={"username": "bad user", "email": "u@example.com", "password": "longenough1"},
     )
     assert r.status_code == 400
+
+
+# -- rate limiter has a working fallback --------------------------------------
+
+
+def test_rate_limiter_backend_is_reported():
+    from web.app import RATE_LIMITER_BACKEND
+
+    assert RATE_LIMITER_BACKEND in {"flask-limiter", "in-process"}
+
+
+def test_in_process_rate_limiter_blocks_after_limit():
+    """The fallback must actually limit; a no-op once hid a dead limiter."""
+    from web.app import app, _MemoryRateLimiter
+
+    rl = _MemoryRateLimiter()
+
+    @rl.limit("2 per minute")
+    def view():
+        return "ok"
+
+    app.config["TESTING"] = False
+    try:
+        with app.test_request_context("/x", environ_base={"REMOTE_ADDR": "1.2.3.4"}):
+            assert view() == "ok"
+            assert view() == "ok"
+            blocked = view()
+            if isinstance(blocked, tuple):
+                blocked = app.make_response(blocked)
+            assert blocked.status_code == 429
+    finally:
+        app.config["TESTING"] = True
