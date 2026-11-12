@@ -211,3 +211,24 @@ def test_in_process_rate_limiter_blocks_after_limit():
             assert blocked.status_code == 429
     finally:
         app.config["TESTING"] = True
+
+
+def test_rate_limit_keys_on_forwarded_client_ip(client):
+    """Behind a proxy the socket peer rotates; the limiter must key on the
+    forwarded client address or every request lands in a fresh bucket."""
+    from web.app import app
+
+    app.config["TESTING"] = False
+    try:
+        codes = [
+            client.post(
+                "/api/auth/login",
+                headers={"X-Forwarded-For": "203.0.113.99"},
+                environ_base={"REMOTE_ADDR": f"10.0.0.{i % 7}"},
+                json={"username": "nobody", "password": "wrongpass1"},
+            ).status_code
+            for i in range(13)
+        ]
+    finally:
+        app.config["TESTING"] = True
+    assert 429 in codes, codes
