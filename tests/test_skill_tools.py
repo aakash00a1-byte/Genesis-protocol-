@@ -50,14 +50,24 @@ def test_tools_for_skill_returns_only_runnable_names():
 
 
 def test_unavailable_cli_tool_fails_honestly():
-    from genesis_protocol.tools.tool_registry import get_tool_registry
+    from genesis_protocol.tools.skill_tools import _cli
 
-    registry = get_tool_registry()
-    # kubectl is not installed in the test environment; the tool must say so
-    # rather than pretend to have run.
-    result = registry.execute("kubectl", {"args": "get pods"})
+    # A binary that is guaranteed absent: the tool must say so rather than
+    # pretend to have run. (Checking a real CLI like kubectl is
+    # environment-dependent - CI runners ship several of them.)
+    missing = _cli("absent_cli", "definitely-not-a-real-binary-xyz")()
+    result = missing.execute(args="get pods")
     assert result["success"] is False
-    assert "kubectl" in result["error"]
+    assert "not installed" in result["error"]
+
+
+def test_installed_cli_tool_reports_a_nonzero_exit():
+    from genesis_protocol.tools.skill_tools import _cli
+
+    tool = _cli("sh_cli", "sh")()
+    result = tool.execute(args='-c "exit 3"')
+    assert result["success"] is False
+    assert result["returncode"] == 3
 
 
 def test_runner_executes_a_safe_tool_and_skips_unused_ones():
