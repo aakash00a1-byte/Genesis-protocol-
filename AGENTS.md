@@ -625,7 +625,13 @@ does not have to live on GitHub Actions.
   Worker bound to a **custom domain** would be the only working variant.
 - **Credential notes.** The sandbox `Claudflare` secret is a `cfat_` token
   valid only from an allowlisted IP (`Cannot use the access token from location`).
-  `New` is the OrcaRouter key (`sk-orca-`), not a deploy credential. `AGENT_GH_TOKEN`
+  `New` is the OrcaRouter key (`sk-orca-`), not a deploy credential. Verified
+  live 2026-11-12 against `https://api.orcarouter.ai/v1/models`: HTTP 200, 7
+  models (`orcarouter/auto`, `orcarouter/fusion`, `orcarouter/fusion-flash`,
+  `orcarouter/fusion-mini`, `orcarouter/pod`, `orcarouter/free`,
+  `qwen/qwen3.8-27b`). The Space also registers `ORCAROUTER_API_KEY`, wired
+  through `OrcaRouterProvider` (`genesis_protocol/ai/providers/openai_compatible.py`,
+  `BASE_URL = https://api.orcarouter.ai/v1`). `AGENT_GH_TOKEN`
   and `OH_GIT_CREDENTIAL_ACCESS_TOKEN_GITHUB` are dead. The injected `GITHUB_TOKEN`
   is a GitHub App token: repo admin, but it cannot change visibility, create
   repos, or write Actions secrets (all 403).
