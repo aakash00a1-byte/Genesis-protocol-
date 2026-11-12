@@ -78,6 +78,12 @@ jobs:
           # Weather for one city (WEATHER_CITY=all for every configured city).
           WEATHER_ENABLED: "1"
           WEATHER_CITY: "Delhi"
+          # Proactive broadcasts only inside 10:00-22:00 IST. Outside it the
+          # relay still delivers the admin's own replies, but sends no news,
+          # market, briefing, weather or heartbeat, which keeps the chat small.
+          RELAY_ACTIVE_START_HOUR: "10"
+          RELAY_ACTIVE_END_HOUR: "22"
+          RELAY_TIMEZONE: "Asia/Kolkata"
           # Post the digest to a channel instead of the admin DM by setting the
           # TELEGRAM_NEWS_CHAT_ID repo secret to a channel id (e.g. -100...).
           TELEGRAM_NEWS_CHAT_ID: ${{ secrets.TELEGRAM_NEWS_CHAT_ID }}
