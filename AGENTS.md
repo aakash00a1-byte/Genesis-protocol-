@@ -766,3 +766,33 @@ claim more than it does.
 
 State files default to `data/` (gitignored): `gluten_memory.db`,
 `gluten_tasks.json`, `gluten_audit.jsonl`.
+
+## Telegram active-hours window (2026-11-12)
+
+The relay used to broadcast 24/7: news (3-4 categories), market, AI briefing,
+weather and heartbeat every 45 minutes, all day. `scripts/relay_loop.py` now
+gates **proactive** sends to an active-hours window.
+
+- Env: `RELAY_ACTIVE_START_HOUR`, `RELAY_ACTIVE_END_HOUR` (0-23), `RELAY_TIMEZONE`
+  (default `Asia/Kolkata`). `keepalive.yml` sets 10-22 IST.
+- Gated: `news_digest`, `_send_report` (market/weather), `agent_briefing`,
+  `heartbeat`. User replies still relay 24/7 - the window only stops broadcasts.
+- Leave the hours unset to get the old 24/7 behaviour (opt-in).
+- Manual subcommands (`heartbeat|news|market|briefing|weather`) bypass the window.
+- `RELAY_IGNORE_ACTIVE_WINDOW=1` forces the window off.
+
+`health_check.py` is deliberately NOT gated: it messages only on failure, so
+suppressing it would hide outages.
+
+## Build artifacts are untracked (2026-11-12)
+
+`genesis-protocol.apk` (66 MB), `mobile-app/node_modules/` (25k files) and
+`mobile-app/.expo/` were tracked despite being in `.gitignore` - ignore rules do
+not apply to already-tracked files. They are now untracked (files remain on
+disk; restore with `npm ci` / rebuild). Tracked files: 26,420 -> 947. History
+still contains the old blobs; a `git filter-repo` rewrite would be needed to
+shrink the pack, and that requires a force-push.
+
+`mobile-build.yml` `build-android` has failed on every run since June 2026:
+Node was pinned at 18 but `eas-cli` needs 22+. Bumped to 22; the job now reaches
+the EAS step and fails only because the `EXPO_TOKEN` repo secret is unset.
