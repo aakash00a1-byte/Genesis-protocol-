@@ -131,8 +131,52 @@ def _cache_backend_status():
     return 'redis (client installed; connection verified at first use)'
 
 
-# Rate limiting. flask-limiter is optional: fall back to a no-op decorator so a
-# missing optional dependency can never break app import (it previously did).
+# Rate limiting. flask-limiter is optional; when it cannot be imported we fall
+# back to a small in-process limiter rather than a no-op. A no-op fallback hid
+# a broken limiter in production once already: every auth route answered
+# normally, with no error, so the guard was silently absent.
+class _MemoryRateLimiter:
+    """Fixed-window limiter used only when flask-limiter is unavailable.
+
+    The auth routes are served by a single process, so an in-process counter
+    is enough to blunt brute force. It is deliberately simple: one window per
+    (endpoint, client), reset when the window elapses.
+    """
+
+    def __init__(self):
+        self._hits: Dict[Any, Any] = {}
+        self._lock = threading.Lock()
+
+    def limit(self, rate: str, **_kwargs):
+        count_str, _, window = rate.partition(" per ")
+        try:
+            count = int(count_str)
+        except ValueError:
+            count = 10
+        seconds = 60 if window.strip().startswith("minute") else 1
+
+        def decorator(func):
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                if _rate_limit_exempt():
+                    return func(*args, **kwargs)
+                key = (func.__name__, request.remote_addr or "unknown")
+                now = time.time()
+                with self._lock:
+                    start, hits = self._hits.get(key, (now, 0))
+                    if now - start >= seconds:
+                        start, hits = now, 0
+                    hits += 1
+                    self._hits[key] = (start, hits)
+                if hits > count:
+                    return jsonify({'error': 'Too many requests, slow down'}), 429
+                return func(*args, **kwargs)
+
+            return wrapper
+
+        return decorator
+
+
 try:
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
@@ -143,15 +187,14 @@ try:
         default_limits=[],
         storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
     )
-except Exception:  # pragma: no cover - optional dependency
-    class _NoopLimiter:
-        def limit(self, *args, **kwargs):
-            def decorator(func):
-                return func
-
-            return decorator
-
-    limiter = _NoopLimiter()
+    RATE_LIMITER_BACKEND = "flask-limiter"
+except Exception as _limiter_error:  # pragma: no cover - optional dependency
+    logging.getLogger(__name__).warning(
+        "flask-limiter unavailable (%s); using in-process rate limiter",
+        _limiter_error,
+    )
+    limiter = _MemoryRateLimiter()
+    RATE_LIMITER_BACKEND = "in-process"
 
 # Database setup
 DATABASE = 'genesis.db'
@@ -1418,7 +1461,8 @@ def api_health():
     """Basic health check - is the server responding?"""
     return jsonify({
         'status': 'healthy',
-        'entrypoint': 'web/app.py'
+        'entrypoint': 'web/app.py',
+        'rate_limiter': RATE_LIMITER_BACKEND,
     })
 
 
