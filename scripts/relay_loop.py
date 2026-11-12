@@ -113,6 +113,23 @@ WEATHER_ENABLED = os.environ.get("WEATHER_ENABLED", "1").strip().lower() not in 
     "",
 }
 WEATHER_CITY = os.environ.get("WEATHER_CITY", "Delhi").strip() or "Delhi"
+
+# Active hours for the proactive broadcasts (news, market, AI briefing, weather,
+# heartbeat). Outside this window nothing proactive is sent, so the admin is not
+# flooded overnight and the chat history stays small. Replies to the admin's own
+# messages are NOT gated: the relay still delivers those at any hour.
+# The window is opt-in. Set RELAY_ACTIVE_START_HOUR and RELAY_ACTIVE_END_HOUR
+# (0-23) to enable it; leave them unset to keep the old always-on behaviour.
+_ACTIVE_START_RAW = os.environ.get("RELAY_ACTIVE_START_HOUR", "").strip()
+_ACTIVE_END_RAW = os.environ.get("RELAY_ACTIVE_END_HOUR", "").strip()
+ACTIVE_START_HOUR = int(_ACTIVE_START_RAW) if _ACTIVE_START_RAW.isdigit() else None
+ACTIVE_END_HOUR = int(_ACTIVE_END_RAW) if _ACTIVE_END_RAW.isdigit() else None
+# Local timezone the window is measured in (the bot's audience is IST).
+RELAY_TIMEZONE = os.environ.get("RELAY_TIMEZONE", "Asia/Kolkata").strip() or "Asia/Kolkata"
+# Ignore the window (manual runs, tests). Never set this in the scheduled job.
+RELAY_IGNORE_ACTIVE_WINDOW = os.environ.get(
+    "RELAY_IGNORE_ACTIVE_WINDOW", ""
+).strip().lower() not in {"", "0", "false", "no", "off"}
 # (label, latitude, longitude) — one city keeps it simple; extend if needed.
 WEATHER_PLACES: list[tuple[str, float, float]] = [
     ("Delhi", 28.6139, 77.2090),
@@ -314,6 +331,47 @@ def _telegram_send(chat_id: str, text: str) -> bool:
         return False
 
 
+def _local_now() -> datetime:
+    """Current time in the configured relay timezone (falls back to UTC)."""
+    try:
+        from zoneinfo import ZoneInfo
+
+        return datetime.now(ZoneInfo(RELAY_TIMEZONE))
+    except Exception:  # noqa: BLE001 - a bad tz name must not break the relay
+        return datetime.now(UTC)
+
+
+def within_active_window(now: datetime | None = None) -> bool:
+    """Is a proactive broadcast allowed right now?
+
+    Unset hours mean "no window" (always allowed), so behaviour is unchanged
+    unless the operator opts in. The window is inclusive of the start hour and
+    exclusive of the end hour: 10..22 covers 10:00 up to 21:59:59.
+    """
+    if RELAY_IGNORE_ACTIVE_WINDOW:
+        return True
+    if ACTIVE_START_HOUR is None or ACTIVE_END_HOUR is None:
+        return True
+    hour = (now or _local_now()).hour
+    if ACTIVE_START_HOUR <= ACTIVE_END_HOUR:
+        return ACTIVE_START_HOUR <= hour < ACTIVE_END_HOUR
+    # Window crosses midnight, e.g. 22 -> 6.
+    return hour >= ACTIVE_START_HOUR or hour < ACTIVE_END_HOUR
+
+
+def _proactive_allowed(label: str) -> bool:
+    """Gate a proactive broadcast on the active-hours window."""
+    if within_active_window():
+        return True
+    now = _local_now()
+    _log(
+        f"{label} skipped: outside active hours "
+        f"({now.strftime('%H:%M')} {RELAY_TIMEZONE}, window "
+        f"{ACTIVE_START_HOUR:02d}-{ACTIVE_END_HOUR:02d})"
+    )
+    return False
+
+
 def relay_once() -> int:
     """Deliver every queued reply. Returns how many were sent."""
     raw = _get(f"{HF_SPACE_URL}/api/telegram/queue")
@@ -373,6 +431,8 @@ def heartbeat() -> None:
     """Send one proactive status message to the admin (no message needed from them)."""
     if not TELEGRAM_ADMIN_ID:
         _log("heartbeat skipped: TELEGRAM_ADMIN_ID is not set")
+        return
+    if not _proactive_allowed("heartbeat"):
         return
 
     # Report only what we actually verified. A failed probe is stated as such.
@@ -516,6 +576,8 @@ def _send_report(label: str, build: Callable[[], str | None], reason: str, ok: s
     if not NEWS_CHAT_ID:
         _log(f"{label} skipped: no news chat id is set")
         return
+    if not _proactive_allowed(label):
+        return
     text = build()
     if text is None:
         _log(f"{label} skipped: {reason}")
@@ -532,6 +594,8 @@ def news_digest() -> None:
     """
     if not NEWS_CHAT_ID:
         _log("news skipped: no news chat id is set")
+        return
+    if not _proactive_allowed("news"):
         return
 
     if NEWS_SEPARATE_MESSAGES:
@@ -712,6 +776,8 @@ def agent_briefing() -> None:
     if not NEWS_CHAT_ID:
         _log("briefing skipped: no news chat id is set")
         return
+    if not _proactive_allowed("briefing"):
+        return
     headlines = collect_headlines()
     market_lines = collect_market_lines()
     if not headlines and not market_lines:
@@ -793,6 +859,12 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # A manual subcommand is an explicit operator action, so it always sends,
+    # regardless of the active-hours window. The module-level flag is already
+    # bound at import, so set the global directly rather than the environment.
+    _manual = {"heartbeat", "news", "market", "briefing", "weather"}
+    if len(sys.argv) > 1 and sys.argv[1] in _manual:
+        globals()["RELAY_IGNORE_ACTIVE_WINDOW"] = True
     if len(sys.argv) > 1 and sys.argv[1] == "heartbeat":
         heartbeat()
         sys.exit(0)

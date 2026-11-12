@@ -127,6 +127,17 @@ delivers them.
 Set `TELEGRAM_NEWS_CHAT_ID` to a channel id to broadcast to a channel instead
 of the admin DM. One-shot tests: `python3 scripts/relay_loop.py news|market|briefing|weather`.
 
+**Active-hours window (why the admin is not flooded).** These broadcasts run
+24/7 by default, so every 45 minutes the admin gets ~6-7 messages (news
+categories + market + briefing + weather) around the clock, which piles up in
+the chat. Set `RELAY_ACTIVE_START_HOUR`/`RELAY_ACTIVE_END_HOUR` (0-23, in
+`RELAY_TIMEZONE`, default `Asia/Kolkata`) to confine every *proactive* send
+(news, market, briefing, weather, heartbeat) to a window; `keepalive.yml` uses
+`10`-`22`. The window is opt-in: leave the hours unset and behaviour is
+unchanged. It gates proactive sends only — replies to the admin's own messages
+still relay at any hour. `RELAY_IGNORE_ACTIVE_WINDOW=1` disables the gate
+(manual `news|market|briefing|weather|heartbeat` subcommands set it for you).
+
 ## Agent self-improvement (Level B, continuous)
 `scripts/self_improve.py` gives the agent a continuous job on the repo itself.
 It is a long-running loop (like the relay): every `SELF_IMPROVE_INTERVAL_SECONDS`

@@ -27,6 +27,10 @@ def _load(monkeypatch, **env):
         "TELEGRAM_NEWS_CHAT_ID",
         "RELAY_STATE_FILE",
         "TELEGRAM_WEBHOOK_SECRET",
+        "RELAY_ACTIVE_START_HOUR",
+        "RELAY_ACTIVE_END_HOUR",
+        "RELAY_TIMEZONE",
+        "RELAY_IGNORE_ACTIVE_WINDOW",
     ):
         monkeypatch.delenv(key, raising=False)
     for key, value in env.items():
@@ -602,4 +606,139 @@ def test_weather_report_sends_to_news_chat(monkeypatch, tmp_path) -> None:
     )
     relay.weather_report()
     assert sent == [("42", "weather-body")]
+
+
+# --- active-hours window --------------------------------------------------
+
+
+def _hour(h: int):
+    from datetime import datetime
+
+    return datetime(2026, 1, 1, h, 30)
+
+
+def test_active_window_unset_means_always_allowed(monkeypatch, tmp_path) -> None:
+    relay = _load(monkeypatch, TELEGRAM_BOT_TOKEN="tok")
+    assert relay.ACTIVE_START_HOUR is None
+    assert relay.within_active_window(_hour(3)) is True
+
+
+def test_active_window_bounds_the_hours(monkeypatch, tmp_path) -> None:
+    relay = _load(
+        monkeypatch,
+        TELEGRAM_BOT_TOKEN="tok",
+        RELAY_ACTIVE_START_HOUR="10",
+        RELAY_ACTIVE_END_HOUR="22",
+    )
+    assert relay.within_active_window(_hour(10)) is True
+    assert relay.within_active_window(_hour(21)) is True
+    assert relay.within_active_window(_hour(9)) is False
+    assert relay.within_active_window(_hour(22)) is False
+    assert relay.within_active_window(_hour(0)) is False
+
+
+def test_active_window_can_cross_midnight(monkeypatch, tmp_path) -> None:
+    relay = _load(
+        monkeypatch,
+        TELEGRAM_BOT_TOKEN="tok",
+        RELAY_ACTIVE_START_HOUR="22",
+        RELAY_ACTIVE_END_HOUR="6",
+    )
+    assert relay.within_active_window(_hour(23)) is True
+    assert relay.within_active_window(_hour(2)) is True
+    assert relay.within_active_window(_hour(12)) is False
+
+
+def test_news_digest_is_skipped_outside_active_hours(monkeypatch, tmp_path, capsys) -> None:
+    relay = _load(
+        monkeypatch,
+        TELEGRAM_BOT_TOKEN="tok",
+        TELEGRAM_ADMIN_ID="42",
+        RELAY_ACTIVE_START_HOUR="10",
+        RELAY_ACTIVE_END_HOUR="22",
+    )
+    monkeypatch.setattr(relay, "_local_now", lambda: _hour(3))
+    sent = {"n": 0}
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: sent.__setitem__("n", sent["n"] + 1) or True
+    )
+    relay.news_digest()
+    assert sent["n"] == 0
+    assert "outside active hours" in capsys.readouterr().out
+
+
+def test_market_and_weather_are_skipped_outside_active_hours(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    relay = _load(
+        monkeypatch,
+        TELEGRAM_BOT_TOKEN="tok",
+        TELEGRAM_ADMIN_ID="42",
+        RELAY_ACTIVE_START_HOUR="10",
+        RELAY_ACTIVE_END_HOUR="22",
+    )
+    monkeypatch.setattr(relay, "_local_now", lambda: _hour(23))
+    monkeypatch.setattr(relay, "build_market_report", lambda: "mkt")
+    monkeypatch.setattr(relay, "build_weather_report", lambda: "wx")
+    sent = {"n": 0}
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: sent.__setitem__("n", sent["n"] + 1) or True
+    )
+    relay.market_report()
+    relay.weather_report()
+    assert sent["n"] == 0
+    assert capsys.readouterr().out.count("outside active hours") == 2
+
+
+def test_heartbeat_is_skipped_outside_active_hours(monkeypatch, tmp_path, capsys) -> None:
+    relay = _load(
+        monkeypatch,
+        TELEGRAM_BOT_TOKEN="tok",
+        TELEGRAM_ADMIN_ID="42",
+        RELAY_ACTIVE_START_HOUR="10",
+        RELAY_ACTIVE_END_HOUR="22",
+    )
+    monkeypatch.setattr(relay, "_local_now", lambda: _hour(2))
+    monkeypatch.setattr(relay, "_get", lambda url, timeout=30: None)
+    sent = {"n": 0}
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: sent.__setitem__("n", sent["n"] + 1) or True
+    )
+    relay.heartbeat()
+    assert sent["n"] == 0
+    assert "outside active hours" in capsys.readouterr().out
+
+
+def test_replies_are_still_relayed_outside_active_hours(monkeypatch, tmp_path) -> None:
+    # The window must gate proactive broadcasts only; the admin's own replies
+    # still flow at any hour.
+    relay = _load(
+        monkeypatch,
+        TELEGRAM_BOT_TOKEN="tok",
+        TELEGRAM_ADMIN_ID="42",
+        RELAY_ACTIVE_START_HOUR="10",
+        RELAY_ACTIVE_END_HOUR="22",
+    )
+    monkeypatch.setattr(relay, "_local_now", lambda: _hour(3))
+    payload = json.dumps(
+        {"replies": [{"id": "r1", "chat_id": "42", "text": "hello"}]}
+    ).encode()
+    monkeypatch.setattr(relay, "_get", lambda url, timeout=30: payload)
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        relay, "_telegram_send", lambda cid, text: sent.append((cid, text)) or True
+    )
+    assert relay.relay_once() == 1
+    assert sent == [("42", "hello")]
+
+
+def test_ignore_flag_disables_the_window(monkeypatch, tmp_path) -> None:
+    relay = _load(
+        monkeypatch,
+        TELEGRAM_BOT_TOKEN="tok",
+        RELAY_ACTIVE_START_HOUR="10",
+        RELAY_ACTIVE_END_HOUR="22",
+        RELAY_IGNORE_ACTIVE_WINDOW="1",
+    )
+    assert relay.within_active_window(_hour(3)) is True
 
