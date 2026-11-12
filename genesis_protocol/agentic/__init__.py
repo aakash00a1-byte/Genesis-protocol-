@@ -7,6 +7,7 @@ Genesis architecture (provider chain, task queue, tool registry):
                   correction, deletion and secret redaction.
 * ``sandbox``   - resource-bounded code execution (subprocess + rlimits).
 * ``agent_loop``- a real plan -> tool -> policy -> execute -> verify loop.
+* ``skills``    - run a skill through the tools it declares, policy-checked.
 * ``tasks``     - durable task state and execution history.
 * ``identity``  - provider/model/limit reporting read from runtime config.
 * ``policy``    - fail-closed authorization for privileged operations.

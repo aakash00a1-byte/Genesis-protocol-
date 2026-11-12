@@ -231,7 +231,7 @@ class ToolExecutor:
             elif operation == "create_pr":
                 return manager.create_pr(params.get("title", ""), params.get("body", ""))
         
-        return {"message": f"Skill {skill.name} executed", "params": params}
+        return {"success": False, "error": f"skill '{skill.name}' has no executor in this deployment"}
     
     async def _execute_function(self, action: Action) -> Action:
         """Execute a registered function."""

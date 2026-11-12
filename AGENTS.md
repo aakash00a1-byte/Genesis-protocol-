@@ -738,6 +738,18 @@ claim more than it does.
   provider and model names read from runtime configuration, and never leaks a
   credential value. There is no background autonomy: no scheduler drives tasks
   on a timer, and `GET /api/capabilities` says so.
+- **Skills** (`agentic/skills.py`, `tools/skill_tools.py`): a skill is a
+  capability bundle that declares the tools it needs. That binding was broken:
+  skills declared `file_read`, `subprocess`, `docker`, `tavily`, ... but none of
+  those names existed in the tool registry (which had `read_file`, `run_bash`,
+  `web_search`), so every declared tool resolved to nothing and no skill could
+  run. `tools/skill_tools.py` now gives each declared name a real
+  implementation and permission level, and `ToolRegistry` registers them, so a
+  declared tool always resolves. `SkillRunner` runs a skill through the tools
+  it declares, policy-checked per call; a tool without parameters is reported
+  skipped, never implied to have run. Surfaces: `GET /api/skills`,
+  `GET /api/skills/<name>`, `POST /api/agent/skill`. The agent loop gained a
+  `skill` step type.
 - **Owner config**: set `GLUTEN_OWNER_IDS` (comma-separated user ids). Without
   it, restricted tools and code execution are denied to everyone (fail closed).
 

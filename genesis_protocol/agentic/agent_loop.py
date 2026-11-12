@@ -30,7 +30,7 @@ from genesis_protocol.agentic.policy import AgentPolicy, get_agent_policy
 from genesis_protocol.agentic.sandbox import run_python
 from genesis_protocol.agentic.tasks import TaskStore, get_task_store
 
-STEP_TYPES = {"tool", "generate_code", "execute_code", "respond"}
+STEP_TYPES = {"tool", "skill", "generate_code", "execute_code", "respond"}
 
 # A caller-supplied plan is capped so one request cannot occupy a worker
 # indefinitely. The loop is synchronous, so an unbounded list is a cheap DoS.
@@ -87,6 +87,8 @@ class AgentLoop:
             raise ValueError(f"unknown step type '{stype}' (allowed: {sorted(STEP_TYPES)})")
         if stype == "tool" and not step.get("tool"):
             raise ValueError("tool step requires a 'tool' name")
+        if stype == "skill" and not step.get("skill"):
+            raise ValueError("skill step requires a 'skill' name")
         if stype == "execute_code" and "code" not in step:
             raise ValueError("execute_code step requires 'code'")
         return step
@@ -150,6 +152,8 @@ class AgentLoop:
         stype = step["type"]
         if stype == "tool":
             return self._run_tool_step(user_id, step, owner_approved)
+        if stype == "skill":
+            return self._run_skill_step(user_id, step, owner_approved)
         if stype == "generate_code":
             return self._run_generate_code_step(user_id, step)
         if stype == "execute_code":
@@ -218,6 +222,29 @@ class AgentLoop:
             "result": result,
             "policy": decision.to_dict(),
             "error": None if verified else result.get("error", "verification failed"),
+        }
+
+    def _run_skill_step(
+        self, user_id: int, step: Dict[str, Any], owner_approved: bool
+    ) -> Dict[str, Any]:
+        """Run a skill through the tools it declares."""
+        from genesis_protocol.agentic.skills import SkillRunner
+
+        runner = SkillRunner(registry=self.registry, policy=self.policy, audit=self.audit)
+        outcome = runner.run(
+            user_id=user_id,
+            skill_name=step["skill"],
+            tool_params=step.get("tool_params", {}),
+            owner_approved=owner_approved,
+        )
+        return {
+            "type": "skill",
+            "skill": step["skill"],
+            "success": bool(outcome.get("success")),
+            "executed": bool(outcome.get("executed")),
+            "denied": bool(outcome.get("denied")),
+            "result": outcome,
+            "error": None if outcome.get("success") else outcome.get("error", "skill did not fully run"),
         }
 
     @staticmethod

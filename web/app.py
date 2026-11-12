@@ -983,17 +983,35 @@ def api_capabilities():
     from genesis_protocol.agentic.identity import describe_runtime
 
     runtime = describe_runtime()
+    from genesis_protocol.skills import get_skill_registry
+    from genesis_protocol.tools.skill_tools import tools_for_skill
+
+    skill_registry = get_skill_registry()
+    skills = []
+    for skill in skill_registry.list_all_skills():
+        declared = list(skill.tools or [])
+        runnable = tools_for_skill(skill.name)
+        skills.append({
+            'name': skill.name,
+            'category': skill.category.value,
+            'runnable_tools': runnable,
+            'unavailable_tools': [t for t in declared if t not in runnable],
+        })
     return jsonify({
         'persistent_memory': True,
         'bounded_code_execution': True,
         'durable_task_state': True,
+        'skill_execution': True,
         'background_autonomy': False,
         'notes': [
             'background_autonomy is False: there is no scheduler driving tasks '
             'on a timer; execution is caller-driven.',
             'Code generation and code execution are separate steps.',
+            'Skills run through the tools they declare; each tool call is '
+            'policy-checked, and restricted tools require the owner.',
         ],
         'tools': runtime['tools'],
+        'skills': skills,
         'providers_available': runtime['providers_available'],
         'providers_unavailable': runtime['providers_unavailable'],
         'limits': runtime['limits'],
@@ -1125,6 +1143,73 @@ def api_agent_run():
         )
     except (ValueError, KeyError) as exc:
         return jsonify({'error': str(exc)}), 400
+    return jsonify(result)
+
+
+@app.route('/api/skills', methods=['GET'])
+@login_required
+def api_skills_list():
+    """List skills with the tools each declares and which of them can run."""
+    from genesis_protocol.skills import get_skill_registry
+    from genesis_protocol.tools.skill_tools import tools_for_skill
+
+    registry = get_skill_registry()
+    out = []
+    for skill in registry.list_all_skills():
+        declared = list(skill.tools or [])
+        runnable = tools_for_skill(skill.name)
+        out.append({
+            'name': skill.name,
+            'category': skill.category.value,
+            'description': skill.description,
+            'declared_tools': declared,
+            'runnable_tools': runnable,
+            'unavailable_tools': [t for t in declared if t not in runnable],
+        })
+    return jsonify({'count': len(out), 'skills': out})
+
+
+@app.route('/api/skills/<skill_name>', methods=['GET'])
+@login_required
+def api_skill_get(skill_name):
+    """Inspect one skill: declared tools vs runnable tools."""
+    from genesis_protocol.agentic.skills import SkillRunner
+
+    info = SkillRunner().resolve(skill_name)
+    if not info.get('found'):
+        return jsonify({'error': f"unknown skill '{skill_name}'"}), 404
+    return jsonify(info)
+
+
+@app.route('/api/agent/skill', methods=['POST'])
+@login_required
+def api_agent_skill():
+    """Run a skill through the tools it declares.
+
+    A skill's tools are executed only for the parameters the caller supplies;
+    each call passes the fail-closed policy check. Restricted tools need the
+    owner; a non-owner gets a denial recorded, not a silent skip.
+    """
+    from genesis_protocol.agentic.skills import SkillRunner
+
+    data = request.get_json(silent=True) or {}
+    skill_name = (data.get('skill') or '').strip()
+    tool_params = data.get('tool_params') or {}
+    owner_approved = bool(data.get('owner_approved', False))
+    if not skill_name:
+        return jsonify({'error': 'skill required'}), 400
+    if not isinstance(tool_params, dict):
+        return jsonify({'error': 'tool_params must be an object'}), 400
+
+    user_id = session['user_id']
+    result = SkillRunner().run(
+        user_id=user_id,
+        skill_name=skill_name,
+        tool_params=tool_params,
+        owner_approved=owner_approved,
+    )
+    if not result.get('steps') and result.get('error'):
+        return jsonify(result), 404
     return jsonify(result)
 
 
