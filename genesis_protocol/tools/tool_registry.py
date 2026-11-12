@@ -372,6 +372,13 @@ class ToolRegistry:
         
         for tool in tools:
             self.register(tool)
+
+        # Names that skills declare (file_read, subprocess, git, docker, ...).
+        # Registering them here means a declared tool always resolves to a real
+        # implementation instead of silently vanishing.
+        from .skill_tools import register_skill_tools
+
+        register_skill_tools(self)
     
     def register(self, tool: Tool):
         """Register a new tool."""
