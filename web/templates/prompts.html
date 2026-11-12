@@ -1,6 +1,6 @@
 {% extends "base_v4.html" %}
-{% block title %}Prompts - Gluten OS{% endblock %}
-{% block header_title %}📝 GLUTEN PROMPTS{% endblock %}
+{% block title %}Prompts — GLUTEN{% endblock %}
+{% block header_title %}Prompts{% endblock %}
 {% block content %}
 {% set fp_icon = "📝" %}
 {% set fp_title = "Commands and Persona" %}
@@ -19,8 +19,11 @@
     <div class="fp-row"><span class="k">/council &lt;question&gt;</span><span class="v">ask several models, then reconcile</span></div>
     <div class="fp-row"><span class="k">/status</span><span class="v">report current state</span></div>
     <div class="fp-row"><span class="k">/do &lt;instruction&gt;</span><span class="v">queue a work order for the agent</span></div>
-    <div class="fp-row"><span class="k">/updates</span><span class="v">list agent pull requests</span></div>
-    <div class="fp-row"><span class="k">/approve &lt;id&gt;</span><span class="v">merge an approved change</span></div>
+    <div class="fp-row"><span class="k">/tasks</span><span class="v">list your work orders</span></div>
+    <div class="fp-row"><span class="k">/cancel &lt;id&gt;</span><span class="v">cancel a work order</span></div>
+    <div class="fp-row"><span class="k">/updates</span><span class="v">list pending agent proposals</span></div>
+    <div class="fp-row"><span class="k">/approve &lt;id&gt;</span><span class="v">merge and deploy an approved change</span></div>
+    <div class="fp-row"><span class="k">/reject &lt;id&gt; [reason]</span><span class="v">reject a proposal</span></div>
 </div>
 {% endset %}
 {% set fp_actions = [ {'label':'Identity Context','url':'/api/entity','method':'GET'} ] %}

@@ -171,8 +171,8 @@ docker-compose down
 ### Local Development
 
 ```bash
-# Web server
-python web/server_simple.py
+# Web server (the single production entrypoint)
+python web/app.py
 
 # Telegram bot (separate terminal)
 python start_telegram.py

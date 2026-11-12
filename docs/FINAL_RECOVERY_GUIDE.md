@@ -277,11 +277,8 @@ pip install -r web/requirements.txt
 cp .env.example .env
 # Edit .env with your keys
 
-# Initialize database
-python -c "from web.server_simple import init_db; init_db()"
-
-# Start development server
-python web/server_simple.py
+# Start development server (initialises the database on first run)
+python web/app.py
 ```
 
 ### Step 3: Docker Setup

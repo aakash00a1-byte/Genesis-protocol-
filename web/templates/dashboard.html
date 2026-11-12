@@ -1,267 +1,106 @@
-{% extends "base.html" %}
+{% extends "base_v4.html" %}
 
-{% block title %}Dashboard - Genesis Protocol{% endblock %}
+{% block title %}Dashboard — GLUTEN{% endblock %}
+{% block header_title %}Dashboard{% endblock %}
 
-{% block extra_styles %}
+{% block extra_head %}
 <style>
-    .welcome-banner {
-        background: linear-gradient(135deg, rgba(0, 255, 136, 0.1), rgba(0, 212, 255, 0.1));
-        border: 1px solid var(--neon-green);
-        border-radius: 12px;
-        padding: 30px;
-        text-align: center;
-        margin-bottom: 25px;
-    }
-    
-    .welcome-title {
-        font-size: 24px;
-        color: var(--neon-green);
-        margin-bottom: 10px;
-    }
-    
-    .welcome-subtitle {
-        color: var(--text-secondary);
-        font-size: 13px;
-    }
-    
-    .quick-actions {
-        display: flex;
-        gap: 15px;
-        margin-top: 20px;
-        flex-wrap: wrap;
-    }
-    
-    .quick-btn {
-        flex: 1;
-        min-width: 150px;
-        padding: 20px;
-        background: var(--panel-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 12px;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.3s;
-    }
-    
-    .quick-btn:hover {
-        border-color: var(--neon-green);
-        transform: translateY(-3px);
-    }
-    
-    .quick-btn-icon {
-        font-size: 30px;
-        margin-bottom: 10px;
-    }
-    
-    .quick-btn-text {
-        color: var(--text-primary);
-        font-size: 13px;
-    }
-    
-    .activity-list {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
-    
-    .activity-item {
-        display: flex;
-        align-items: center;
-        gap: 15px;
-        padding: 15px;
-        background: var(--dark-bg);
-        border-radius: 8px;
-        border-left: 3px solid var(--neon-green);
-    }
-    
-    .activity-icon {
-        font-size: 20px;
-    }
-    
-    .activity-content {
-        flex: 1;
-    }
-    
-    .activity-title {
-        font-size: 13px;
-        color: var(--text-primary);
-    }
-    
-    .activity-time {
-        font-size: 11px;
-        color: var(--text-muted);
-    }
-    
-    .provider-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 15px;
-    }
-    
-    .provider-card {
-        padding: 20px;
-        background: var(--dark-bg);
-        border-radius: 10px;
-        border: 1px solid var(--border-color);
-    }
-    
-    .provider-name {
-        font-size: 14px;
-        color: var(--neon-cyan);
-        margin-bottom: 5px;
-    }
-    
-    .provider-status {
-        font-size: 11px;
-        color: var(--text-muted);
-    }
-    
-    .provider-status.active {
-        color: var(--neon-green);
-    }
+.stat-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+}
+.stat-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); }
+.stat-value { font-size: 24px; font-weight: 600; margin-top: 6px; font-variant-numeric: tabular-nums; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="app-layout">
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="sidebar-logo">Ω</div>
-        <nav class="sidebar-nav">
-            <a href="/chat" class="nav-link" title="Chat">
-                💬
-                <span class="tooltip">Chat</span>
-            </a>
-            <a href="/dashboard" class="nav-link active" title="Dashboard">
-                📊
-                <span class="tooltip">Dashboard</span>
-            </a>
-            <a href="/settings" class="nav-link" title="Settings">
-                ⚙️
-                <span class="tooltip">Settings</span>
-            </a>
-            {% if session.get('role') == 'admin' %}
-            <a href="/admin" class="nav-link" title="Admin">
-                🔐
-                <span class="tooltip">Admin</span>
-            </a>
-            {% endif %}
-        </nav>
-        <div class="sidebar-footer">
-            <a href="/logout" class="nav-link" title="Logout">
-                🚪
-                <span class="tooltip">Logout</span>
-            </a>
+<div class="stack">
+    <div class="card">
+        <div class="card-title">Welcome back, {{ session.get('username', 'there') }}</div>
+        <p class="card-note">
+            Everything on this page is read from the running service. Nothing here is a
+            placeholder.
+        </p>
+        <div style="display:flex; gap:10px; margin-top:16px; flex-wrap:wrap;">
+            <a href="/chat" class="btn btn-primary btn-sm">New chat</a>
+            <a href="/agent" class="btn btn-secondary btn-sm">Agent workspace</a>
+            <a href="/settings" class="btn btn-ghost btn-sm">Settings</a>
         </div>
     </div>
-    
-    <!-- Main Content -->
-    <div class="main-content">
-        <div class="welcome-banner">
-            <div class="welcome-title">Welcome back, {{ session.get('username', 'User') }}</div>
-            <div class="welcome-subtitle">Genesis Protocol v2.0 | Status: Online</div>
-            <div class="quick-actions">
-                <a href="/chat" class="quick-btn">
-                    <div class="quick-btn-icon">💬</div>
-                    <div class="quick-btn-text">New Chat</div>
-                </a>
-                <a href="/settings" class="quick-btn">
-                    <div class="quick-btn-icon">⚙️</div>
-                    <div class="quick-btn-text">Settings</div>
-                </a>
-            </div>
+
+    <div class="stat-grid">
+        <div class="stat">
+            <div class="stat-label">Status</div>
+            <div class="stat-value" id="dashStatus">—</div>
         </div>
-        
-        <div class="grid grid-4">
-            <div class="stat-card">
-                <div class="stat-value">0</div>
-                <div class="stat-label">Total Chats</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">0</div>
-                <div class="stat-label">Messages</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">0</div>
-                <div class="stat-label">API Calls</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">v2.0</div>
-                <div class="stat-label">Version</div>
-            </div>
+        <div class="stat">
+            <div class="stat-label">Uptime</div>
+            <div class="stat-value" id="dashUptime">—</div>
         </div>
-        
-        <div class="grid grid-2">
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title">// AI PROVIDERS</span>
-                </div>
-                <div class="provider-grid">
-                    <div class="provider-card">
-                        <div class="provider-name">Groq</div>
-                        <div class="provider-status active">● Active</div>
-                    </div>
-                    <div class="provider-card">
-                        <div class="provider-name">OpenAI</div>
-                        <div class="provider-status">○ Inactive</div>
-                    </div>
-                    <div class="provider-card">
-                        <div class="provider-name">Gemini</div>
-                        <div class="provider-status">○ Inactive</div>
-                    </div>
-                    <div class="provider-card">
-                        <div class="provider-name">HuggingFace</div>
-                        <div class="provider-status">○ Inactive</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title">// RECENT ACTIVITY</span>
-                </div>
-                <div class="activity-list">
-                    <div class="activity-item">
-                        <span class="activity-icon">🟢</span>
-                        <div class="activity-content">
-                            <div class="activity-title">System Online</div>
-                            <div class="activity-time">Just now</div>
-                        </div>
-                    </div>
-                    <div class="activity-item">
-                        <span class="activity-icon">🔐</span>
-                        <div class="activity-content">
-                            <div class="activity-title">Logged in</div>
-                            <div class="activity-time">Today</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div class="stat">
+            <div class="stat-label">Providers live</div>
+            <div class="stat-value" id="dashProviders">—</div>
         </div>
-        
+        <div class="stat">
+            <div class="stat-label">Version</div>
+            <div class="stat-value" id="dashVersion">—</div>
+        </div>
+    </div>
+
+    <div class="grid grid-2">
         <div class="card">
-            <div class="card-header">
-                <span class="card-title">// SYSTEM STATUS</span>
-            </div>
-            <div class="grid grid-3">
-                <div class="stat-card">
-                    <div class="stat-value" style="font-size: 20px;">●</div>
-                    <div class="stat-label">Web Server</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" style="font-size: 20px;">●</div>
-                    <div class="stat-label">Database</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" style="font-size: 20px;">●</div>
-                    <div class="stat-label">API Gateway</div>
-                </div>
-            </div>
+            <div class="card-title">Model providers</div>
+            <div id="dashProviderList" class="card-note">Reading…</div>
         </div>
-        
-        <div class="footer">
-            Genesis Protocol Ω | Built with Autonomous AI | v2.0
+        <div class="card">
+            <div class="card-title">Runtime</div>
+            <div class="kv" id="dashRuntime"><div class="card-note">Reading…</div></div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+}
+(async function () {
+    try {
+        const s = await (await fetch('/api/status', { headers: { 'Accept': 'application/json' } })).json();
+        document.getElementById('dashStatus').textContent = s.status || '—';
+        const up = Math.floor((s.metrics && s.metrics.uptime_seconds) || 0);
+        document.getElementById('dashUptime').textContent =
+            Math.floor(up / 3600) + 'h ' + Math.floor((up % 3600) / 60) + 'm';
+        document.getElementById('dashRuntime').innerHTML =
+            '<div class="kv-row"><span class="kv-key">Requests</span><span class="kv-value">' + esc(s.metrics && s.metrics.request_count) + '</span></div>' +
+            '<div class="kv-row"><span class="kv-key">Errors</span><span class="kv-value">' + esc(s.metrics && s.metrics.error_count) + '</span></div>' +
+            '<div class="kv-row"><span class="kv-key">Avg latency</span><span class="kv-value">' + esc(s.metrics && s.metrics.avg_latency_ms) + ' ms</span></div>';
+    } catch (e) {
+        document.getElementById('dashRuntime').innerHTML = '<div class="card-note">Could not read runtime status.</div>';
+    }
+    try {
+        const v = await (await fetch('/api/version', { headers: { 'Accept': 'application/json' } })).json();
+        document.getElementById('dashVersion').textContent = v.version || '—';
+    } catch (e) {}
+    try {
+        const id = await (await fetch('/api/identity', { headers: { 'Accept': 'application/json' } })).json();
+        const avail = (id.providers || []).filter(p => p.available);
+        document.getElementById('dashProviders').textContent = avail.length;
+        document.getElementById('dashProviderList').innerHTML = (id.providers || []).map(p =>
+            '<div class="kv-row"><span class="kv-key">' + esc(p.name) + '</span>' +
+            '<span class="kv-value"><span class="badge ' + (p.available ? 'success' : '') + '">' +
+            (p.available ? (p.model || 'available') : 'not configured') + '</span></span></div>'
+        ).join('') || 'No providers reported.';
+    } catch (e) {
+        document.getElementById('dashProviderList').textContent = 'Could not read provider configuration.';
+    }
+})();
+</script>
 {% endblock %}

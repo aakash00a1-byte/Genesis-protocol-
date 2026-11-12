@@ -1,106 +1,107 @@
 {% extends "base_v4.html" %}
 
-{% block title %}Infinity - Gluten OS v4{% endblock %}
+{% block title %}Infinity — GLUTEN{% endblock %}
+{% block header_title %}Infinity{% endblock %}
 
-{% block header_title %}♾️ GLUTEN INFINITY{% endblock %}
-
-{% block content %}
+{% block extra_head %}
 <style>
-.inf-wrap { max-width: 1100px; margin: 0 auto; padding: 20px; }
-.inf-hero {
-    background: rgba(10, 10, 26, 0.8);
-    border: 1px solid #1a1a3a;
-    border-radius: 12px;
-    padding: 30px;
-    margin-bottom: 20px;
-}
-.inf-hero h2 { color: #00ff9d; margin: 0 0 10px; font-size: 22px; }
-.inf-hero p { color: #7070a0; margin: 0; font-size: 13px; }
-.inf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px; }
-.inf-card {
-    background: rgba(10, 10, 26, 0.8);
-    border: 1px solid #1a1a3a;
-    border-radius: 12px;
-    padding: 20px;
-}
-.inf-card h3 { color: #00e5ff; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 12px; }
-.inf-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #12122a; font-size: 13px; }
-.inf-row:last-child { border-bottom: none; }
-.inf-label { color: #7070a0; }
-.inf-value { color: #e0e0ff; }
-.inf-value.on { color: #00ff9d; }
-.inf-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
-.inf-btn {
-    background: transparent;
-    border: 1px solid #00ff9d;
-    color: #00ff9d;
-    padding: 10px 18px;
-    border-radius: 8px;
-    font-family: inherit;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    cursor: pointer;
-}
-.inf-btn:hover { background: rgba(0, 255, 157, 0.1); }
+.inf-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .inf-log {
-    background: rgba(0, 5, 10, 0.9);
-    border: 1px solid #00e5ff;
-    border-radius: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
     padding: 16px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    color: #00e5ff;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--text-secondary);
     white-space: pre-wrap;
-    max-height: 260px;
+    word-break: break-word;
+    max-height: 420px;
     overflow-y: auto;
+    line-height: 1.6;
 }
 </style>
+{% endblock %}
 
-<div class="inf-wrap">
-    <div class="inf-hero">
-        <h2>♾️ Infinity Layer</h2>
-        <p>Continuous self-evolution. Learning, emotion, and roadmap state for GLUTEN.</p>
+{% block content %}
+<div class="stack">
+    <div class="card">
+        <div class="card-title">Infinity layer</div>
+        <p class="card-note">
+            Self-evolution, learning and emotional-intelligence state for GLUTEN.
+            Every value below is read from the running service. Nothing is
+            assumed: a layer that reports zero interactions is shown as idle,
+            not as "active".
+        </p>
     </div>
 
-    <div class="inf-actions">
-        <button class="inf-btn" onclick="infCall('/api/infinity/status', 'GET')">Status</button>
-        <button class="inf-btn" onclick="infCall('/api/infinity/evolve', 'POST')">Evolve</button>
-        <button class="inf-btn" onclick="infCall('/api/infinity/learn', 'POST')">Learn</button>
-        <button class="inf-btn" onclick="infCall('/api/infinity/roadmap', 'GET')">Roadmap</button>
+    <div class="card">
+        <div class="card-title">Live state</div>
+        <div class="kv" id="infState"><div class="card-note">Reading…</div></div>
     </div>
 
-    <div class="inf-grid">
-        <div class="inf-card">
-            <h3>Layer Status</h3>
-            <div class="inf-row"><span class="inf-label">User</span><span class="inf-value on">{{ username }}</span></div>
-            <div class="inf-row"><span class="inf-label">Evolution</span><span class="inf-value on">Enabled</span></div>
-            <div class="inf-row"><span class="inf-label">Lineage</span><span class="inf-value">GENESIS → GLUTTONY → GLUTEN</span></div>
+    <div class="card">
+        <div class="card-title">Actions</div>
+        <div class="inf-actions">
+            <button class="btn btn-secondary btn-sm" onclick="infCall('/api/infinity/status','GET')">Status</button>
+            <button class="btn btn-secondary btn-sm" onclick="infCall('/api/infinity/evolve','POST')">Evolve</button>
+            <button class="btn btn-secondary btn-sm" onclick="infCall('/api/infinity/learn','POST')">Learn</button>
+            <button class="btn btn-secondary btn-sm" onclick="infCall('/api/infinity/roadmap','GET')">Roadmap</button>
         </div>
-        <div class="inf-card">
-            <h3>Capabilities</h3>
-            <div class="inf-row"><span class="inf-label">Self-evolution</span><span class="inf-value on">active</span></div>
-            <div class="inf-row"><span class="inf-label">Learning</span><span class="inf-value on">active</span></div>
-            <div class="inf-row"><span class="inf-label">Emotion model</span><span class="inf-value on">active</span></div>
-        </div>
+        <div class="inf-log" id="inf-log" style="margin-top:14px;">Choose an action to read the raw response.</div>
     </div>
-
-    <div class="inf-log" id="inf-log">Press a button above to query the Infinity layer.</div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+}
 async function infCall(url, method) {
     const log = document.getElementById('inf-log');
-    log.textContent = method + ' ' + url + ' ...';
+    log.textContent = method + ' ' + url + ' …';
     try {
-        const res = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: method === 'POST' ? '{}' : undefined });
-        const data = await res.json();
-        log.textContent = JSON.stringify(data, null, 2);
+        const opts = { method: method, headers: { 'Accept': 'application/json' } };
+        if (method === 'POST') {
+            opts.headers['Content-Type'] = 'application/json';
+            opts.body = '{}';
+        }
+        const res = await fetch(url, opts);
+        let data;
+        try { data = await res.json(); } catch (e) { data = { note: 'response was not JSON' }; }
+        log.textContent = 'HTTP ' + res.status + '\n' + JSON.stringify(data, null, 2);
     } catch (e) {
-        log.textContent = 'Error: ' + e;
+        log.textContent = 'Request failed: ' + e;
     }
 }
+
+(async function () {
+    const box = document.getElementById('infState');
+    try {
+        const s = await (await fetch('/api/infinity/status', { headers: { 'Accept': 'application/json' } })).json();
+        const evo = (s.components && s.components.self_evolution) || {};
+        const road = (s.components && s.components.future_roadmap) || {};
+        const emo = (s.components && s.components.emotional_intelligence) || {};
+        const rows = [
+            ['Evolution level', evo.evolution_level],
+            ['Interactions recorded', (evo.metrics || {}).total_interactions],
+            ['Learnings', (evo.metrics || {}).learnings_count],
+            ['Ready to evolve', evo.ready_to_evolve],
+            ['Tracked users (emotion)', emo.tracked_users],
+            ['Roadmap progress', (road.average_progress != null ? road.average_progress + '%' : null)],
+        ];
+        box.innerHTML = rows.map(function (r) {
+            let v = r[1];
+            if (v === true || v === false) v = v ? 'yes' : 'no';
+            return '<div class="kv-row"><span class="kv-key">' + esc(r[0]) + '</span>' +
+                   '<span class="kv-value">' + esc(v == null ? '—' : v) + '</span></div>';
+        }).join('');
+    } catch (e) {
+        box.innerHTML = '<div class="card-note">Could not read Infinity state.</div>';
+    }
+})();
 </script>
 {% endblock %}

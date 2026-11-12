@@ -1,253 +1,175 @@
 {% extends "base_v4.html" %}
 
-{% block title %}Gluten OS v4 - AI Operating System{% endblock %}
+{% block title %}GLUTEN — a governed AI agent{% endblock %}
+{% block header_title %}Overview{% endblock %}
 
-{% block header_title %}⚡ GLUTEN{% endblock %}
+{% block extra_head %}
+<style>
+.hero {
+    padding: 40px 0 8px;
+    max-width: 760px;
+}
+.hero h2 {
+    font-size: clamp(30px, 5vw, 46px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 18px;
+}
+.hero p {
+    font-size: 17px;
+    color: var(--text-secondary);
+    line-height: 1.75;
+    margin-bottom: 28px;
+}
+.hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.hero-meta { margin-top: 22px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+.section-title {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    font-weight: 600;
+    margin: 44px 0 16px;
+}
+
+.provider-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.provider {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 13px;
+}
+.provider.on { border-color: rgba(52, 211, 153, 0.3); }
+.provider.off { opacity: 0.55; }
+.provider .name { color: var(--text); font-weight: 500; }
+.provider .model { color: var(--text-muted); font-family: var(--mono); font-size: 11.5px; }
+
+.loading { color: var(--text-muted); font-size: 14px; }
+</style>
+{% endblock %}
 
 {% block content %}
-<style>
-.hero-container {
-    min-height: calc(100vh - 120px);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 40px 20px;
-    text-align: center;
-}
-
-.hero-logo {
-    width: 120px;
-    height: 120px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 60px;
-    background: linear-gradient(135deg, var(--neon-red), var(--neon-purple));
-    border-radius: 30px;
-    margin-bottom: 32px;
-    animation: heroPulse 3s ease-in-out infinite;
-    box-shadow: var(--glow-red), 0 0 60px rgba(255, 0, 60, 0.3);
-}
-
-@keyframes heroPulse {
-    0%, 100% { transform: scale(1); box-shadow: var(--glow-red), 0 0 60px rgba(255, 0, 60, 0.3); }
-    50% { transform: scale(1.05); box-shadow: 0 0 40px rgba(255, 0, 60, 0.8), 0 0 80px rgba(255, 0, 60, 0.5); }
-}
-
-.hero-title {
-    font-size: 56px;
-    font-weight: 800;
-    letter-spacing: 4px;
-    margin-bottom: 16px;
-    background: linear-gradient(90deg, var(--neon-red), var(--neon-purple), var(--neon-red));
-    background-size: 200% auto;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: gradientShift 3s linear infinite;
-}
-
-@keyframes gradientShift {
-    0% { background-position: 0% center; }
-    100% { background-position: 200% center; }
-}
-
-.hero-subtitle {
-    font-size: 18px;
-    color: var(--text-secondary);
-    margin-bottom: 40px;
-    letter-spacing: 6px;
-    text-transform: uppercase;
-}
-
-.hero-description {
-    max-width: 600px;
-    color: var(--text-secondary);
-    font-size: 16px;
-    line-height: 1.8;
-    margin-bottom: 48px;
-}
-
-.hero-buttons {
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-    justify-content: center;
-}
-
-.hero-btn {
-    padding: 16px 32px;
-    font-size: 16px;
-    border-radius: 12px;
-}
-
-.features-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 24px;
-    max-width: 1200px;
-    margin: 60px auto;
-    padding: 0 20px;
-}
-
-.feature-card {
-    background: var(--bg-card);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
-    padding: 32px;
-    text-align: left;
-    transition: all var(--transition-medium);
-    position: relative;
-    overflow: hidden;
-}
-
-.feature-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, var(--neon-red), var(--neon-purple));
-    transform: scaleX(0);
-    transform-origin: left;
-    transition: transform var(--transition-medium);
-}
-
-.feature-card:hover {
-    border-color: var(--neon-red);
-    box-shadow: var(--glow-red);
-    transform: translateY(-4px);
-}
-
-.feature-card:hover::before {
-    transform: scaleX(1);
-}
-
-.feature-icon {
-    width: 56px;
-    height: 56px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 28px;
-    background: rgba(255, 0, 60, 0.1);
-    border-radius: 14px;
-    margin-bottom: 20px;
-}
-
-.feature-title {
-    font-size: 20px;
-    font-weight: 600;
-    margin-bottom: 12px;
-    color: var(--text-primary);
-}
-
-.feature-desc {
-    color: var(--text-secondary);
-    font-size: 14px;
-    line-height: 1.6;
-}
-
-.cta-section {
-    max-width: 800px;
-    margin: 80px auto;
-    padding: 60px 40px;
-    background: var(--bg-card);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--border-color);
-    border-radius: 24px;
-    text-align: center;
-    position: relative;
-    overflow: hidden;
-}
-
-.cta-section::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: radial-gradient(circle, rgba(255, 0, 60, 0.1) 0%, transparent 50%);
-    animation: ctaGlow 10s linear infinite;
-}
-
-@keyframes ctaGlow {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-.cta-title {
-    font-size: 32px;
-    font-weight: 700;
-    margin-bottom: 16px;
-    position: relative;
-}
-
-.cta-desc {
-    color: var(--text-secondary);
-    margin-bottom: 32px;
-    position: relative;
-}
-</style>
-
-<div class="hero-container">
-    <div class="hero-logo">⚡</div>
-    <h1 class="hero-title">GLUTEN</h1>
-    <p class="hero-subtitle">AI ENTITY v4</p>
-    <p class="hero-description">
-        Self-operating AI agent with multi-LLM intelligence, autonomous planning, 
-        and tool-using capabilities. Chat like never before with the future of AI interaction.
+<section class="hero">
+    <h2>A governed AI agent, not a black box.</h2>
+    <p>
+        GLUTEN routes each request to a configured model provider, keeps persistent
+        memory, and puts every tool call through an authority gate — policy, then
+        permission, then the sandbox, then audit. What follows is read from the
+        running system, not from a brochure.
     </p>
-    <div class="hero-buttons">
-        <a href="/chat" class="btn btn-primary hero-btn">🚀 Start Chatting</a>
-        <a href="/register" class="btn btn-secondary hero-btn">📝 Create Account</a>
+    <div class="hero-actions">
+        <a href="/chat" class="btn btn-primary">Start a chat</a>
+        <a href="/register" class="btn btn-secondary">Create account</a>
+        <a href="/agent" class="btn btn-ghost">Open the agent workspace</a>
+    </div>
+    <div class="hero-meta">
+        <span class="badge" id="heroVersion">version —</span>
+        <span class="badge" id="heroUptime">uptime —</span>
+        <span class="badge" id="heroProviders">providers —</span>
+    </div>
+</section>
+
+<h3 class="section-title">Model providers</h3>
+<div id="providerBox" class="loading">Reading live configuration…</div>
+<p class="small muted" style="margin-top:12px;">
+    A provider appears as available only when a credential is configured and the
+    runtime reports it usable. Unavailable providers are listed with the reason.
+</p>
+
+<h3 class="section-title">What the system reports about itself</h3>
+<div class="grid grid-2">
+    <div class="card">
+        <div class="card-title">Capabilities</div>
+        <div class="kv" id="capabilitiesBox">
+            <div class="loading">Reading…</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-title">Honesty notes</div>
+        <ul class="card-note" id="notesBox" style="padding-left:18px; display:flex; flex-direction:column; gap:8px;">
+            <li>Reading…</li>
+        </ul>
     </div>
 </div>
+{% endblock %}
 
-<div class="features-grid">
-    <div class="feature-card">
-        <div class="feature-icon">🧠</div>
-        <h3 class="feature-title">Multi-LLM Routing</h3>
-        <p class="feature-desc">Automatically selects the best AI model based on your query type — GPT-4 for coding, Claude for creativity, Gemini for reasoning.</p>
-    </div>
-    <div class="feature-card">
-        <div class="feature-icon">📋</div>
-        <h3 class="feature-title">Task Planning</h3>
-        <p class="feature-desc">Complex requests are automatically broken into steps and executed with verification at each stage.</p>
-    </div>
-    <div class="feature-card">
-        <div class="feature-icon">🔍</div>
-        <h3 class="feature-title">Web Search</h3>
-        <p class="feature-desc">Real-time web search powered by Tavily for current information, news, and research.</p>
-    </div>
-    <div class="feature-card">
-        <div class="feature-icon">💾</div>
-        <h3 class="feature-title">Memory System</h3>
-        <p class="feature-desc">Remembers your conversation context and learns from past interactions for better responses.</p>
-    </div>
-    <div class="feature-card">
-        <div class="feature-icon">✅</div>
-        <h3 class="feature-title">Quality Check</h3>
-        <p class="feature-desc">Responses are evaluated for quality and regenerated with alternative models if needed.</p>
-    </div>
-    <div class="feature-card">
-        <div class="feature-icon">🎤</div>
-        <h3 class="feature-title">Voice Assistant</h3>
-        <p class="feature-desc">Natural voice input and output with speech-to-text and text-to-speech capabilities.</p>
-    </div>
-</div>
+{% block scripts %}
+<script>
+async function getJSON(url) {
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+}
 
-<div class="cta-section">
-    <h2 class="cta-title">Ready to Experience GLUTEN?</h2>
-    <p class="cta-desc">Join now and chat with the most advanced autonomous AI agent.</p>
-    <a href="/register" class="btn btn-primary hero-btn">Start Chatting Free</a>
-</div>
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+}
 
-<footer style="text-align: center; padding: 40px 20px; color: var(--text-muted); border-top: 1px solid var(--border-color);">
-    <p>Gluten OS v4.0 — Powered by Multi-LLM AI</p>
-</footer>
+(async function () {
+    // Identity: providers + version
+    try {
+        const id = await getJSON('/api/identity');
+        const avail = (id.providers || []).filter(p => p.available);
+        const box = document.getElementById('providerBox');
+        box.className = '';
+        box.innerHTML = '<div class="provider-list">' + (id.providers || []).map(p =>
+            '<span class="provider ' + (p.available ? 'on' : 'off') + '" title="' + esc(p.reason || 'available') + '">' +
+            '<span class="dot ' + (p.available ? 'online' : 'unknown') + '"></span>' +
+            '<span class="name">' + esc(p.name) + '</span>' +
+            (p.model ? '<span class="model">' + esc(p.model) + '</span>' : '') +
+            '</span>'
+        ).join('') + '</div>';
+
+        const hv = document.getElementById('heroProviders');
+        hv.textContent = avail.length + ' provider' + (avail.length === 1 ? '' : 's') + ' live';
+        hv.className = 'badge ' + (avail.length ? 'success' : 'warning');
+    } catch (e) {
+        document.getElementById('providerBox').textContent = 'Could not read provider configuration.';
+    }
+
+    // Version + uptime
+    try {
+        const v = await getJSON('/api/version');
+        document.getElementById('heroVersion').textContent = 'version ' + (v.version || '—');
+    } catch (e) { /* leave placeholder */ }
+    try {
+        const s = await getJSON('/api/status');
+        const up = Math.floor((s.metrics && s.metrics.uptime_seconds) || 0);
+        const h = Math.floor(up / 3600), m = Math.floor((up % 3600) / 60);
+        document.getElementById('heroUptime').textContent = 'uptime ' + (h ? h + 'h ' : '') + m + 'm';
+    } catch (e) { /* leave placeholder */ }
+
+    // Capabilities — reported verbatim
+    try {
+        const c = await getJSON('/api/capabilities');
+        const rows = [
+            ['Persistent memory', c.persistent_memory],
+            ['Bounded code execution', c.bounded_code_execution],
+            ['Durable task state', c.durable_task_state],
+            ['Background autonomy', c.background_autonomy],
+        ];
+        document.getElementById('capabilitiesBox').innerHTML = rows.map(([k, val]) =>
+            '<div class="kv-row"><span class="kv-key">' + esc(k) + '</span>' +
+            '<span class="kv-value"><span class="badge ' + (val ? 'success' : 'warning') + '">' +
+            (val ? 'yes' : 'no') + '</span></span></div>'
+        ).join('');
+
+        const notes = c.notes || [];
+        document.getElementById('notesBox').innerHTML = notes.length
+            ? notes.map(n => '<li>' + esc(n) + '</li>').join('')
+            : '<li>No notes reported.</li>';
+    } catch (e) {
+        document.getElementById('capabilitiesBox').innerHTML =
+            '<div class="card-note">Could not read capabilities.</div>';
+        document.getElementById('notesBox').innerHTML = '<li>Could not read capabilities.</li>';
+    }
+})();
+</script>
 {% endblock %}

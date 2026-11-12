@@ -301,13 +301,12 @@ stays on old code, which is how the "hello" fix appeared not to work.
 
 ## Live runtime gotchas (found by driving the real Space)
 
-- **Chat answers "Sorry, I encountered an error" when no provider is
-  configured.** Three faults stacked up, all fixed in `c77f474e`:
-  1. `/` served `genesis_ultra.html` (a chat page) to logged-out visitors, but
-     `/api/chat` is `@login_required`, so every message was a 401 that the
-     template flattened into the generic error. `/` now renders
-     `index_v4.html` for logged-out visitors; both chat templates redirect a
-     401 to `/login`.
+- **Chat answers a generic error when no provider is configured.** Three
+  faults stacked up, all fixed in `c77f474e`:
+  1. `/` served a chat page to logged-out visitors, but `/api/chat` is
+     `@login_required`, so every message was a 401 that the template flattened
+     into the generic error. `/` now renders `index_v4.html` for logged-out
+     visitors; every chat template redirects a 401 to `/login`.
   2. The empty-response path always reported `PROVIDER_EMPTY`, whose text
      advised "try rephrasing your question". With no key that advice is wrong.
      `FailureType.NO_PROVIDERS` now names the missing key and the fix.
@@ -317,23 +316,50 @@ stays on old code, which is how the "hello" fix appeared not to work.
   To see the real cause when chat misbehaves, check
   `/api/diagnostics` -> `environment.*_configured`, then the server log for
   `NO AI PROVIDERS CONFIGURED`.
-- **Fix every chat template, not just the one you are looking at.** The first
-  pass only fixed `genesis_ultra.html`, but login redirects to `/chat`, which
-  renders `chat.html` -- so the user still hit the bug. Four routed templates
-  post to `/api/chat` and all four needed the same 401 handling, dynamic model
-  label and real transport badge: `genesis_ultra.html`, `genesis_gemini.html`,
-  `chat.html`, `agent_workspace.html`. `settings.html` also listed a dead
-  `Groq LLama-3` in a dropdown that was never wired to anything; it now renders
-  the provider status the route already passes. When you touch one chat
-  template, grep the others (`grep -rl api/chat web/templates/`) and fix them
-  together. Regression: `tests/test_web_routes.py::test_chat_template_handles_401`
-  and friends, parameterized over all four.
+- **There is one chat UI now.** The app once shipped three chat pages that
+  drifted apart and disagreed about the same API: `genesis_ultra.html` (1435
+  lines), `genesis_gemini.html` (1030 lines) and `chat.html`. Two were dead
+  weight with fabricated history and stub buttons (`shareChat`, `openSettings`,
+  `loadChat` all just showed a toast). Both were deleted; `/ultra` and `/gemini`
+  now 302 to `/chat`, and `/` sends signed-in users to `/chat` too. Regression:
+  `tests/test_web_routes.py::test_legacy_chat_urls_redirect_to_chat` and
+  `test_logged_in_homepage_redirects_to_the_single_chat_page`. If you add a chat
+  page, do not add a second one — extend `chat.html`.
+- **Every routed template that posts to `/api/chat` must handle a 401** and
+  must not hardcode a model label. Two remain: `chat.html` and
+  `agent_workspace.html`. `grep -rl api/chat web/templates/` finds them.
+  Regression: `test_chat_template_handles_401` and
+  `test_chat_template_has_no_hardcoded_model`, parameterized over both.
+- **A template must not invent status.** `dashboard.html` and
+  `agent_workspace.html` used to hardcode "Online", "AUTONOMOUS", "Groq ●
+  Active" and fake recent-task rows. Both now read `/api/status`,
+  `/api/identity`, `/api/capabilities` and `/api/agent/tasks`. A capability is
+  shown as available only when the API says so. `settings.html` likewise reports
+  the live provider list instead of a dead `Groq LLama-3` dropdown.
 - **Never report a backend or model that is not there.** `/api/diagnostics`
   used to hardcode `vector_db: 'chroma'` and `cache: 'redis'` regardless of
   what was installed, and reported only groq. It now probes the optional
   dependency and reports every provider as a boolean. Regression:
   `tests/test_failure_communicator.py::test_diagnostics_reports_every_provider_and_no_fake_backends`.
-- **There is no `/ws` route.** `genesis_ultra.html` opened a WebSocket to it
+- **One web server, one entrypoint.** `web/app.py` is the only web server.
+  `web/server_simple.py` and `web/realtime_server.py` were dead code: nothing
+  imported them, `supervisord.conf`, `supervisord.hf.conf` and both
+  `render.yaml` files all launched `app.py`, and the templates they rendered
+  (`index.html`, `realtime_chat.html`, `reset_password.html`, `base.html`) were
+  reachable from no route. All were removed. Do not add a second server; add
+  routes to `web/app.py` above the `if __name__ == '__main__':` block.
+- **`/agents` lists skills, read live.** The page was named "Agents" and
+  hardcoded "Built-in Agents (8)" with invented names (`planning`, `qa`,
+  `generic`) that no registry defines — the only real unit is a *skill*
+  (`get_skill_registry()`, 30 of them). `/agents` now reads `/api/skills` and
+  shows each skill's declared tools, flagging any that do not resolve. The
+  sidebar label was corrected to "Skills". Never hardcode an inventory; read it.
+- **A template must use defined CSS classes.** `knowledge.html` used
+  `.fp-input`/`.fp-btn`, which `app.css` does not define, so its search box
+  rendered unstyled. Use the real classes (`.input`, `.btn.btn-secondary`,
+  `.btn-sm`, `.card`, `.badge.success/.warning/.danger/.accent`). When adding
+  markup, check `web/static/css/app.css` first.
+- **There is no `/ws` route.** A deleted chat page opened a WebSocket to it
   and retried every 3s forever, which is why the status bar said
   "Reconnecting...". Chat is HTTP-only; the page now probes once and reports
   HTTP mode. Regression: `tests/test_web_routes.py`.

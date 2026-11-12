@@ -76,18 +76,40 @@ def test_sidebar_pages_are_registered(path):
 # --- cannot answer them.
 
 def test_logged_out_homepage_is_a_landing_page_not_the_chat():
-    """`/` used to render genesis_ultra.html for logged-out visitors.
+    """`/` used to render a chat page for logged-out visitors.
 
     That page posts to /api/chat, which is @login_required, so every message
-    came back 401 and the UI showed "Sorry, I encountered an error". The
-    logged-out homepage must be a landing page instead.
+    came back 401 and the UI showed a generic error. The logged-out homepage
+    must be a landing page instead.
     """
     client = app.test_client()
     resp = client.get("/")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
-    assert "genesis_ultra.html" not in body
     assert "Message GLUTEN" not in body
+
+
+def test_logged_in_homepage_redirects_to_the_single_chat_page():
+    """`/` sent signed-in users to a legacy chat UI. There is one chat now."""
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = 1
+        sess["username"] = "t"
+    resp = client.get("/")
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/chat")
+
+
+def test_legacy_chat_urls_redirect_to_chat():
+    """`/ultra` and `/gemini` were separate chat UIs that drifted apart."""
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = 1
+        sess["username"] = "t"
+    for path in ("/ultra", "/gemini"):
+        resp = client.get(path)
+        assert resp.status_code == 302, path
+        assert resp.headers["Location"].endswith("/chat"), path
 
 
 def test_chat_api_requires_login_and_says_so_as_json():
@@ -100,39 +122,12 @@ def test_chat_api_requires_login_and_says_so_as_json():
     assert data.get("error")
 
 
-def test_chat_templates_redirect_on_401():
-    """Both chat templates must send an expired session to /login."""
-    templates = Path(__file__).parent.parent / "web" / "templates"
-    for name in ("genesis_ultra.html", "genesis_gemini.html"):
-        text = (templates / name).read_text()
-        assert "response.status === 401" in text, name
-        assert "window.location.href = '/login'" in text, name
-
-
-def test_chat_templates_have_no_websocket_reconnect_loop():
-    """There is no /ws route; a reconnect loop hammered the server forever."""
-    templates = Path(__file__).parent.parent / "web" / "templates"
-    text = (templates / "genesis_ultra.html").read_text()
-    assert "setTimeout(initWebSocket" not in text
-    assert "Reconnecting..." not in text
-
-
-def test_chat_page_does_not_hardcode_a_model_name():
-    """The status bar claimed "Model: Groq LLama-3.1" with nothing configured."""
-    templates = Path(__file__).parent.parent / "web" / "templates"
-    text = (templates / "genesis_ultra.html").read_text()
-    assert "Groq LLama" not in text
-    assert 'id="modelLabel"' in text
-
-
 # --- Every template that posts to /api/chat must handle a 401 the same way.
-# --- Missing this is what produced the original "Sorry, I encountered an
-# --- error": the page rendered a chat, the API answered 401, and the template
-# --- turned it into a generic failure instead of sending the user to /login.
+# --- Missing this is what produced the original generic chat error: the page
+# --- rendered a chat, the API answered 401, and the template turned it into a
+# --- generic failure instead of sending the user to /login.
 
 CHAT_TEMPLATES = [
-    "genesis_ultra.html",
-    "genesis_gemini.html",
     "chat.html",
     "agent_workspace.html",
 ]
@@ -157,6 +152,20 @@ def test_chat_template_has_no_generic_sorry(name):
     assert "Sorry, I encountered an error" not in text, f"{name} shows a generic error"
 
 
+def test_chat_page_does_not_hardcode_a_model_name():
+    """A status bar once claimed "Model: Groq LLama-3.1" with nothing configured."""
+    text = (Path(__file__).parent.parent / "web" / "templates" / "chat.html").read_text()
+    assert "Groq LLama" not in text
+    assert 'id="modelLabel"' in text
+
+
+def test_chat_page_has_no_websocket_reconnect_loop():
+    """There is no /ws route; a reconnect loop hammered the server forever."""
+    text = (Path(__file__).parent.parent / "web" / "templates" / "chat.html").read_text()
+    assert "setTimeout(initWebSocket" not in text
+    assert "Reconnecting..." not in text
+
+
 def test_login_lands_on_a_template_that_handles_401():
     """Login redirects to /chat, so chat.html must be one of the fixed ones."""
     from web.app import app as _app
@@ -177,5 +186,78 @@ def test_settings_page_reports_real_providers():
     body = client.get("/settings").get_data(as_text=True)
     assert "AI Providers" in body
     assert "Groq LLama" not in body
+
+
+# --- One web server, one entrypoint. There used to be two more Flask apps on
+# --- disk (server_simple.py, realtime_server.py) that nothing imported but
+# --- that deployment files pointed at, so a reader could not tell which one
+# --- was live. They and their exclusive templates are gone.
+
+WEB_DIR = Path(__file__).parent.parent / "web"
+TEMPLATES = WEB_DIR / "templates"
+REPO_ROOT = Path(__file__).parent.parent
+
+DEAD_SERVERS = ["server_simple.py", "realtime_server.py"]
+DEAD_TEMPLATES = ["index.html", "realtime_chat.html", "reset_password.html", "base.html"]
+
+
+@pytest.mark.parametrize("name", DEAD_SERVERS)
+def test_dead_servers_stay_deleted(name):
+    assert not (WEB_DIR / name).exists(), f"{name} is back; there is one web server"
+
+
+@pytest.mark.parametrize("name", DEAD_TEMPLATES)
+def test_dead_templates_stay_deleted(name):
+    assert not (TEMPLATES / name).exists(), f"{name} is unreachable; delete it again"
+
+
+def test_no_file_points_at_a_deleted_server():
+    """A deploy config that launches a deleted module is a silent outage."""
+    for name in DEAD_SERVERS:
+        stem = name[:-3]
+        for cfg in ("render.yaml", "web/render.yaml", "supervisord.conf",
+                    "supervisord.hf.conf", "Dockerfile", "Dockerfile.hf",
+                    "web/Dockerfile"):
+            path = REPO_ROOT / cfg
+            if not path.exists():
+                continue
+            text = path.read_text()
+            assert f"{stem}:app" not in text, f"{cfg} still launches {name}"
+            assert f"python {stem}.py" not in text, f"{cfg} still launches {name}"
+
+
+def test_every_template_is_rendered_or_included():
+    """An orphan template is dead weight that drifts from the live pages."""
+    source = "\n".join(p.read_text() for p in (WEB_DIR / "app.py",) )
+    templates = {p.name for p in TEMPLATES.glob("*.html")}
+    referenced = set()
+    for t in templates:
+        body = (TEMPLATES / t).read_text()
+        referenced.add(t)
+        for other in templates:
+            if f'"{other}"' in body or f"'{other}'" in body:
+                referenced.add(other)
+    for t in templates:
+        if f"'{t}'" in source or f'"{t}"' in source:
+            referenced.add(t)
+    orphans = sorted(templates - referenced)
+    assert orphans == [], f"templates reachable from no route or include: {orphans}"
+
+
+def test_skills_page_reads_live_skills():
+    """`/agents` used to hardcode "Built-in Agents (8)" — a list no code defines."""
+    body = (TEMPLATES / "agents.html").read_text()
+    assert "/api/skills" in body, "skills page must read the live registry"
+    assert "Built-in Agents (8)" not in body
+
+
+@pytest.mark.parametrize("name", ["knowledge.html", "agents.html"])
+def test_template_uses_defined_css_classes(name):
+    """`.fp-input`/`.fp-btn` are not in app.css, so the search box was unstyled."""
+    css = (WEB_DIR / "static" / "css" / "app.css").read_text()
+    body = (TEMPLATES / name).read_text()
+    for cls in ("fp-input", "fp-btn"):
+        if cls in body:
+            assert f".{cls}" in css, f"{name} uses .{cls}, which app.css does not define"
 
 

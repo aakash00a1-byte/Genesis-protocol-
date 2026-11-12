@@ -1,707 +1,345 @@
 {% extends "base_v4.html" %}
 
-{% block title %}Agent Workspace - Gluten OS{% endblock %}
-
-{% block header_title %}⚡ GLUTEN AI Agent{% endblock %}
+{% block title %}Agent — GLUTEN{% endblock %}
+{% block header_title %}Agent workspace{% endblock %}
 
 {% block extra_head %}
 <style>
-.agent-workspace {
+.agent-layout {
     display: grid;
-    grid-template-columns: 320px 1fr;
-    gap: 1.5rem;
-    height: calc(100vh - 120px);
-    padding: 1rem;
+    grid-template-columns: 320px minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+}
+@media (max-width: 1024px) {
+    .agent-layout { grid-template-columns: 1fr; }
 }
 
-/* Left Panel - Agent Status */
-.agent-sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    overflow-y: auto;
+.agent-col { display: flex; flex-direction: column; gap: 16px; }
+
+.status-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--text-faint);
+    flex-shrink: 0;
+}
+.status-dot.ok { background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
+.status-dot.down { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+
+.status-line {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 13.5px; color: var(--text-secondary);
 }
 
-/* Live Status Card */
-.agent-status-card {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    border: 1px solid #00d4ff;
-    border-radius: 12px;
-    padding: 1rem;
+.cap-list { display: flex; flex-direction: column; gap: 2px; }
+.cap-row {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 9px 0; border-bottom: 1px solid var(--border);
+}
+.cap-row:last-child { border-bottom: none; }
+.cap-name { font-size: 13.5px; color: var(--text); }
+.cap-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; line-height: 1.5; }
+.cap-row .badge { margin-left: auto; flex-shrink: 0; }
+
+.task-list { display: flex; flex-direction: column; gap: 8px; }
+.task {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+}
+.task-goal { font-size: 13px; color: var(--text); word-break: break-word; }
+.task-meta {
+    margin-top: 6px; display: flex; align-items: center; gap: 8px;
+    font-size: 11.5px; color: var(--text-faint); font-family: var(--mono);
 }
 
-.status-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-}
-
-.status-badge {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: #00ff00;
-    animation: pulse-status 2s infinite;
-}
-
-.status-badge.offline { background: #ff4757; }
-.status-badge.busy { background: #ffa502; }
-
-@keyframes pulse-status {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.7; transform: scale(1.2); }
-}
-
-.status-text {
-    font-weight: bold;
-    color: #00d4ff;
-    font-size: 1.1rem;
-}
-
-.status-mode {
-    margin-left: auto;
-    background: #667eea;
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    color: white;
-}
-
-.live-info-mini {
-    display: grid;
-    gap: 0.5rem;
-}
-
-.info-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem;
-    background: rgba(255,255,255,0.05);
-    border-radius: 8px;
-}
-
-.info-label { color: #888; font-size: 0.85rem; }
-.info-value { color: #fff; font-weight: bold; }
-.info-icon { margin-right: 0.5rem; }
-
-/* Capabilities Card */
-.capabilities-card {
-    background: var(--card-bg);
-    border-radius: 12px;
-    padding: 1rem;
-}
-
-.capabilities-card h3 {
-    margin: 0 0 1rem 0;
-    font-size: 1rem;
-    color: #fff;
-}
-
-.capability-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.capability-item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem;
-    background: rgba(255,255,255,0.03);
-    border-radius: 8px;
-    transition: all 0.3s;
-}
-
-.capability-item:hover {
-    background: rgba(102, 126, 234, 0.2);
-}
-
-.capability-icon {
-    font-size: 1.5rem;
-    width: 40px;
-    text-align: center;
-}
-
-.capability-text {
-    flex: 1;
-}
-
-.capability-name {
-    font-weight: bold;
-    color: #fff;
-    font-size: 0.9rem;
-}
-
-.capability-desc {
-    font-size: 0.75rem;
-    color: #888;
-}
-
-.capability-active {
-    color: #00ff00;
-    font-size: 0.8rem;
-}
-
-/* Tasks Card */
-.tasks-card {
-    background: var(--card-bg);
-    border-radius: 12px;
-    padding: 1rem;
-}
-
-.tasks-card h3 {
-    margin: 0 0 1rem 0;
-    font-size: 1rem;
-    color: #fff;
-}
-
-.task-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-.task-item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem;
-    background: rgba(255,255,255,0.03);
-    border-radius: 8px;
-    border-left: 3px solid #667eea;
-}
-
-.task-item.completed { border-left-color: #00ff00; }
-.task-item.failed { border-left-color: #ff4757; }
-.task-item.running { border-left-color: #ffa502; }
-
-.task-icon { font-size: 1.2rem; }
-.task-text { flex: 1; font-size: 0.85rem; }
-.task-time { font-size: 0.7rem; color: #666; }
-
-/* Main Chat Area */
-.agent-main {
-    display: flex;
-    flex-direction: column;
-    background: var(--card-bg);
-    border-radius: 12px;
+.chat-panel {
+    display: flex; flex-direction: column;
+    min-height: 520px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
     overflow: hidden;
 }
-
-.chat-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1rem 1.5rem;
-    background: rgba(255,255,255,0.03);
-    border-bottom: 1px solid rgba(255,255,255,0.1);
+.chat-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
 }
-
-.chat-header-left {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
+.chat-top .label { font-size: 12.5px; color: var(--text-muted); font-family: var(--mono); }
+.msgs { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.msg { display: flex; gap: 12px; }
+.msg-avatar {
+    width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600;
+    background: var(--surface-3); color: var(--text-secondary);
 }
-
-.model-indicator {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 20px;
-    font-size: 0.85rem;
+.msg.user .msg-avatar { background: var(--accent-soft); color: var(--accent-hover); }
+.msg-body {
+    padding: 12px 15px; border-radius: var(--radius);
+    font-size: 14px; line-height: 1.7; white-space: pre-wrap;
+    word-wrap: break-word; overflow-wrap: anywhere; max-width: 100%;
 }
+.msg.assistant .msg-body { background: var(--surface-2); border: 1px solid var(--border); }
+.msg.user .msg-body { background: var(--accent-soft); border: 1px solid var(--accent-border); }
+.msg-meta { margin-top: 7px; font-size: 11.5px; color: var(--text-faint); font-family: var(--mono); }
 
-.quality-badge {
-    padding: 0.25rem 0.75rem;
-    background: rgba(0,255,0,0.1);
-    border: 1px solid #00ff00;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    color: #00ff00;
+.composer { padding: 14px 18px; border-top: 1px solid var(--border); }
+.quick-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.composer-row { display: flex; gap: 10px; align-items: flex-end; }
+.composer-row textarea {
+    flex: 1; resize: none; min-height: 48px; max-height: 160px;
+    background: var(--bg-subtle); border: 1px solid var(--border);
+    border-radius: var(--radius); color: var(--text);
+    padding: 12px 14px; font-size: 14px; font-family: inherit;
 }
-
-/* Messages */
-.agent-messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 1.5rem;
-}
-
-.agent-message {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-
-.agent-message.user { flex-direction: row-reverse; }
-
-.message-avatar-agent {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.2rem;
-}
-
-.message-avatar-user {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: #00d4ff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.2rem;
-}
-
-.message-bubble {
-    max-width: 70%;
-    padding: 1rem 1.25rem;
-    border-radius: 16px;
-    line-height: 1.6;
-}
-
-.agent-message.user .message-bubble {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-bottom-right-radius: 4px;
-}
-
-.agent-message.bot .message-bubble {
-    background: rgba(255,255,255,0.05);
-    border-bottom-left-radius: 4px;
-}
-
-.message-meta {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-    font-size: 0.75rem;
-    color: #666;
-}
-
-.tools-used {
-    display: flex;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-}
-
-.tool-badge {
-    padding: 0.25rem 0.5rem;
-    background: rgba(102, 126, 234, 0.2);
-    border: 1px solid #667eea;
-    border-radius: 12px;
-    font-size: 0.7rem;
-    color: #667eea;
-}
-
-/* Agent Composer */
-.agent-composer {
-    padding: 1rem 1.5rem;
-    background: rgba(255,255,255,0.03);
-    border-top: 1px solid rgba(255,255,255,0.1);
-}
-
-.composer-row {
-    display: flex;
-    gap: 1rem;
-    align-items: flex-end;
-}
-
-.agent-input {
-    flex: 1;
-    padding: 1rem 1.25rem;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 12px;
-    color: #fff;
-    font-size: 1rem;
-    resize: none;
-    min-height: 50px;
-    max-height: 150px;
-}
-
-.agent-input:focus {
-    outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
-}
-
-.send-agent-btn {
-    width: 50px;
-    height: 50px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: none;
-    border-radius: 12px;
-    color: white;
-    font-size: 1.5rem;
-    cursor: pointer;
-    transition: all 0.3s;
-}
-
-.send-agent-btn:hover {
-    transform: scale(1.05);
-    box-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
-}
-
-/* Quick Actions */
-.quick-actions {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-    flex-wrap: wrap;
-}
-
-.quick-action {
-    padding: 0.5rem 1rem;
-    background: rgba(102, 126, 234, 0.1);
-    border: 1px solid rgba(102, 126, 234, 0.3);
-    border-radius: 20px;
-    color: #667eea;
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: all 0.3s;
-}
-
-.quick-action:hover {
-    background: rgba(102, 126, 234, 0.3);
-    border-color: #667eea;
-}
-
-/* Responsive */
-@media (max-width: 1024px) {
-    .agent-workspace {
-        grid-template-columns: 1fr;
-    }
-    
-    .agent-sidebar {
-        flex-direction: row;
-        overflow-x: auto;
-    }
-    
-    .agent-sidebar > * {
-        min-width: 280px;
-    }
-}
+.composer-row textarea:focus { outline: none; border-color: var(--accent-border); }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="agent-workspace">
-    <!-- Left Sidebar -->
-    <div class="agent-sidebar">
-        <!-- Agent Status -->
-        <div class="agent-status-card">
-            <div class="status-header">
-                <div class="status-badge" id="agentStatusDot"></div>
-                <span class="status-text" id="agentStatus">Online</span>
-                <span class="status-mode" id="agentMode">AUTONOMOUS</span>
+<div class="agent-layout">
+    <div class="agent-col">
+        <div class="card">
+            <div class="card-title">Agent status</div>
+            <div class="status-line">
+                <span class="status-dot" id="agentDot"></span>
+                <span id="agentStatus">Checking…</span>
             </div>
-            <div class="live-info-mini">
-                <div class="info-row">
-                    <span class="info-label"><span class="info-icon">🕐</span>Time</span>
-                    <span class="info-value" id="liveTime">--:--</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label"><span class="info-icon">🌤️</span>Weather</span>
-                    <span class="info-value" id="liveWeather">--°C</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label"><span class="info-icon">📍</span>Location</span>
-                    <span class="info-value" id="liveLocation">-</span>
-                </div>
-                <div class="info-row" style="background: rgba(255, 165, 0, 0.1); border: 1px solid #ffa500;">
-                    <span class="info-label"><span class="info-icon">₿</span>Bitcoin</span>
-                    <span class="info-value" id="btcPrice" style="color: #ffa500;">Loading...</span>
-                </div>
+            <div class="kv" style="margin-top:12px;">
+                <div class="kv-row"><span class="kv-key">Entity</span><span class="kv-value" id="agentEntity">—</span></div>
+                <div class="kv-row"><span class="kv-key">Uptime</span><span class="kv-value" id="agentUptime">—</span></div>
+                <div class="kv-row"><span class="kv-key">Providers</span><span class="kv-value" id="agentProviders">—</span></div>
+                <div class="kv-row"><span class="kv-key">Autonomy</span><span class="kv-value" id="agentAutonomy">—</span></div>
             </div>
         </div>
-        
-        <!-- Capabilities -->
-        <div class="capabilities-card">
-            <h3>🎯 Agent Capabilities</h3>
-            <div class="capability-list">
-                <div class="capability-item">
-                    <span class="capability-icon">🔍</span>
-                    <div class="capability-text">
-                        <div class="capability-name">Web Search</div>
-                        <div class="capability-desc">Real-time information</div>
-                    </div>
-                    <span class="capability-active">✓</span>
-                </div>
-                <div class="capability-item">
-                    <span class="capability-icon">💻</span>
-                    <div class="capability-text">
-                        <div class="capability-name">Code Execution</div>
-                        <div class="capability-desc">Run Python code</div>
-                    </div>
-                    <span class="capability-active">✓</span>
-                </div>
-                <div class="capability-item">
-                    <span class="capability-icon">🧠</span>
-                    <div class="capability-text">
-                        <div class="capability-name">Memory</div>
-                        <div class="capability-desc">Persistent context</div>
-                    </div>
-                    <span class="capability-active">✓</span>
-                </div>
-                <div class="capability-item">
-                    <span class="capability-icon">📋</span>
-                    <div class="capability-text">
-                        <div class="capability-name">Task Planning</div>
-                        <div class="capability-desc">Multi-step execution</div>
-                    </div>
-                    <span class="capability-active">✓</span>
-                </div>
-                <div class="capability-item">
-                    <span class="capability-icon">🔄</span>
-                    <div class="capability-text">
-                        <div class="capability-name">Auto-Retry</div>
-                        <div class="capability-desc">Self-correction</div>
-                    </div>
-                    <span class="capability-active">✓</span>
-                </div>
+
+        <div class="card">
+            <div class="card-title">Capabilities</div>
+            <div class="cap-list" id="capList">
+                <div class="card-note">Reading…</div>
             </div>
         </div>
-        
-        <!-- Recent Tasks -->
-        <div class="tasks-card">
-            <h3>📋 Recent Tasks</h3>
+
+        <div class="card">
+            <div class="card-title">Recent tasks</div>
             <div class="task-list" id="taskList">
-                <div class="task-item completed">
-                    <span class="task-icon">✓</span>
-                    <span class="task-text">Weather search completed</span>
-                    <span class="task-time">2m ago</span>
-                </div>
-                <div class="task-item running">
-                    <span class="task-icon">⚡</span>
-                    <span class="task-text">Processing request...</span>
-                    <span class="task-time">now</span>
-                </div>
+                <div class="card-note">Reading…</div>
             </div>
         </div>
     </div>
-    
-    <!-- Main Chat Area -->
-    <div class="agent-main">
-        <div class="chat-header">
-            <div class="chat-header-left">
-                <div class="model-indicator">
-                    <span>⚡</span>
-                    <span id="currentModel">GLUTEN Agent v2</span>
-                </div>
-                <div class="quality-badge" id="qualityScore">
-                    Quality: --
-                </div>
-            </div>
-            <div>
-                <select id="modeSelect" style="background: var(--card-bg); color: white; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem 1rem; border-radius: 8px;">
-                    <option value="autonomous">🤖 Autonomous</option>
-                    <option value="normal">💬 Normal</option>
-                </select>
-            </div>
+
+    <div class="chat-panel">
+        <div class="chat-top">
+            <div class="label" id="modelLabel">model: detecting…</div>
+            <div class="label" id="transportLabel">transport: http</div>
         </div>
-        
-        <div class="agent-messages" id="agentMessages">
-            <!-- Welcome Message -->
-            <div class="agent-message bot">
-                <div class="message-avatar-agent">⚡</div>
-                <div class="message-bubble">
-                    <p><strong>Welcome to GLUTEN AI Agent!</strong></p>
-                    <p>I'm not just a chatbot - I'm an <strong>autonomous AI agent</strong> with:</p>
-                    <ul>
-                        <li>🔍 Real-time web search for current information</li>
-                        <li>💻 Code execution and data analysis</li>
-                        <li>🧠 Persistent memory across conversations</li>
-                        <li>📋 Multi-step task planning and execution</li>
-                        <li>🔄 Self-correction and quality verification</li>
-                    </ul>
-                    <p>Ask me anything or give me a task to complete!</p>
-                </div>
-            </div>
-        </div>
-        
-        <div class="agent-composer">
-            <div class="quick-actions">
-                <button class="quick-action" onclick="quickAction('Search latest AI news')">🔍 AI News</button>
-                <button class="quick-action" onclick="quickAction('What is the weather today?')">🌤️ Weather</button>
-                <button class="quick-action" onclick="quickAction('Build a todo app in Python')">💻 Code Task</button>
-                <button class="quick-action" onclick="quickAction('Explain blockchain technology')">📚 Explain</button>
+        <div class="msgs" id="msgs"></div>
+        <div class="composer">
+            <div class="quick-row">
+                <button class="btn btn-ghost btn-sm" onclick="quick('Search the latest AI news')">🔍 AI news</button>
+                <button class="btn btn-ghost btn-sm" onclick="quick('What can you actually do right now?')">🎯 Capabilities</button>
+                <button class="btn btn-ghost btn-sm" onclick="quick('Write a Python function that reverses a linked list')">💻 Code</button>
             </div>
             <div class="composer-row">
-                <textarea 
-                    class="agent-input" 
-                    id="agentInput" 
-                    placeholder="Ask GLUTEN Agent or give a task..."
-                    rows="1"
-                    onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); sendAgentMessage(); }"
-                ></textarea>
-                <button class="send-agent-btn" onclick="sendAgentMessage()">➤</button>
+                <textarea id="agentInput" rows="1" placeholder="Ask GLUTEN or describe a task…"
+                    onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();send();}"></textarea>
+                <button class="btn btn-primary" onclick="send()">Send</button>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
-// Live Info Update
-function updateLiveInfo() {
-    fetch('/api/live-info')
-        .then(r => r.json())
-        .then(data => {
-            document.getElementById('liveTime').textContent = data.time || '--:--';
-            if (data.weather) {
-                document.getElementById('liveWeather').textContent = 
-                    (data.weather.icon || '🌤️') + ' ' + (data.weather.temp || '--') + '°C';
-            }
-            if (data.location) {
-                document.getElementById('liveLocation').textContent = 
-                    data.location.city || '-';
-            }
-        });
-    
-    // Also fetch Bitcoin price
-    fetch('/api/crypto/bitcoin')
-        .then(r => r.json())
-        .then(data => {
-            if (data.price_formatted) {
-                const changeEmoji = data.change_24h >= 0 ? '📈' : '📉';
-                document.getElementById('btcPrice').textContent = 
-                    data.price_formatted + ' ' + changeEmoji;
-            }
-        })
-        .catch(err => {
-            document.getElementById('btcPrice').textContent = 'Unavailable';
-        });
+const msgs = document.getElementById('msgs');
+let sending = false;
+
+function scrollDown() { msgs.scrollTop = msgs.scrollHeight; }
+
+function addMessage(role, text, meta) {
+    const el = document.createElement('div');
+    el.className = 'msg ' + role;
+    el.innerHTML = '<div class="msg-avatar">' + (role === 'user' ? 'You' : '⚡') + '</div>' +
+                   '<div class="msg-body"></div>';
+    const body = el.querySelector('.msg-body');
+    body.textContent = text;
+    if (meta) {
+        const parts = [];
+        if (meta.model) parts.push('model: ' + meta.model);
+        if (meta.provider) parts.push('provider: ' + meta.provider);
+        if (meta.quality != null) parts.push('quality: ' + meta.quality);
+        if (meta.tools_used && meta.tools_used.length) parts.push('tools: ' + meta.tools_used.join(', '));
+        if (parts.length) {
+            const m = document.createElement('div');
+            m.className = 'msg-meta';
+            m.textContent = parts.join(' · ');
+            body.appendChild(m);
+        }
+    }
+    msgs.appendChild(el);
+    scrollDown();
 }
 
-// Send Message
-function sendAgentMessage() {
+function addTyping() {
+    const el = document.createElement('div');
+    el.className = 'msg assistant';
+    el.id = 'typing';
+    el.innerHTML = '<div class="msg-avatar">⚡</div><div class="msg-body">Thinking…</div>';
+    msgs.appendChild(el);
+    scrollDown();
+}
+
+async function send() {
+    if (sending) return;
     const input = document.getElementById('agentInput');
     const message = input.value.trim();
     if (!message) return;
-    
-    const messagesDiv = document.getElementById('agentMessages');
-    
-    // Add user message
-    messagesDiv.innerHTML += `
-        <div class="agent-message user">
-            <div class="message-avatar-user">👤</div>
-            <div class="message-bubble">
-                ${escapeHtml(message)}
-            </div>
-        </div>
-    `;
-    
+    sending = true;
+    addMessage('user', message);
     input.value = '';
-    
-    // Add typing indicator
-    messagesDiv.innerHTML += `
-        <div class="agent-message bot" id="typingMsg">
-            <div class="message-avatar-agent">⚡</div>
-            <div class="message-bubble">
-                <div class="typing-indicator">
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                </div>
-                Thinking...
-            </div>
-        </div>
-    `;
-    
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    
-    // Send to API
-    fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: message })
-    })
-    .then(r => {
-        if (r.status === 401) {
+    addTyping();
+
+    try {
+        const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: message })
+        });
+        document.getElementById('typing')?.remove();
+
+        if (res.status === 401) {
             window.location.href = '/login';
-            throw new Error('redirecting to login');
+            return;
         }
-        return r.json();
-    })
-    .then(data => {
-        document.getElementById('typingMsg').remove();
-        
-        if (data.error) {
-            messagesDiv.innerHTML += `
-                <div class="agent-message bot">
-                    <div class="message-avatar-agent">⚡</div>
-                    <div class="message-bubble" style="color: #ff4757;">
-                        Error: ${data.error}
-                    </div>
-                </div>
-            `;
+        if (res.ok) {
+            const data = await res.json();
+            addMessage('assistant', data.response || data.message || '(empty response)', data);
         } else {
-            let toolsHtml = '';
-            if (data.tools_used && data.tools_used.length > 0) {
-                toolsHtml = '<div class="tools-used">' + 
-                    data.tools_used.map(t => `<span class="tool-badge">${t}</span>`).join('') + 
-                    '</div>';
-            }
-            
-            messagesDiv.innerHTML += `
-                <div class="agent-message bot">
-                    <div class="message-avatar-agent">⚡</div>
-                    <div class="message-bubble">
-                        ${data.response}
-                        ${toolsHtml}
-                        <div class="message-meta">
-                            <span>Model: ${data.model_used || 'Unknown'}</span>
-                            <span>Score: ${data.quality_score || '--'}</span>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            // Update quality badge
-            if (data.quality_score) {
-                document.getElementById('qualityScore').textContent = 'Quality: ' + data.quality_score;
-            }
+            let detail = '';
+            try { detail = (await res.json()).error || ''; } catch (e) {}
+            addMessage('assistant',
+                'The server rejected that request (HTTP ' + res.status + ').' +
+                (detail ? ' ' + detail : ' Check /api/diagnostics.'));
         }
-        
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    })
-    .catch(err => {
-        document.getElementById('typingMsg').remove();
-        messagesDiv.innerHTML += `
-            <div class="agent-message bot">
-                <div class="message-avatar-agent">⚡</div>
-                <div class="message-bubble" style="color: #ff4757;">
-                    Network error. Please try again.
-                </div>
-            </div>
-        `;
-    });
+    } catch (e) {
+        document.getElementById('typing')?.remove();
+        addMessage('assistant', 'Network error: ' + e);
+    } finally {
+        sending = false;
+        scrollDown();
+    }
 }
 
-function quickAction(text) {
+function quick(text) {
     document.getElementById('agentInput').value = text;
-    sendAgentMessage();
+    send();
 }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
 }
 
-// Initialize
-updateLiveInfo();
-setInterval(updateLiveInfo, 60000);
+async function loadStatus() {
+    try {
+        const s = await (await fetch('/api/status', { headers: { 'Accept': 'application/json' } })).json();
+        const ok = s.status === 'ok' || s.status === 'healthy';
+        document.getElementById('agentDot').className = 'status-dot ' + (ok ? 'ok' : 'down');
+        document.getElementById('agentStatus').textContent = s.status || 'unknown';
+        const up = Math.floor((s.metrics && s.metrics.uptime_seconds) || 0);
+        document.getElementById('agentUptime').textContent =
+            Math.floor(up / 3600) + 'h ' + Math.floor((up % 3600) / 60) + 'm';
+    } catch (e) {
+        document.getElementById('agentDot').className = 'status-dot down';
+        document.getElementById('agentStatus').textContent = 'unreachable';
+    }
+    try {
+        const id = await (await fetch('/api/identity', { headers: { 'Accept': 'application/json' } })).json();
+        document.getElementById('agentEntity').textContent = id.entity || '—';
+        const avail = (id.providers || []).filter(p => p.available);
+        document.getElementById('agentProviders').textContent =
+            avail.length ? avail.map(p => p.name).join(', ') : 'none configured';
+    } catch (e) {}
+}
+
+async function loadCapabilities() {
+    const box = document.getElementById('capList');
+    try {
+        const c = await (await fetch('/api/capabilities', { headers: { 'Accept': 'application/json' } })).json();
+        document.getElementById('agentAutonomy').textContent =
+            c.background_autonomy ? 'background' : 'caller-driven';
+
+        const rows = [
+            ['Web search', 'Reach the web through configured tools', (c.tools || []).some(t => t.name === 'web_search')],
+            ['Bounded code execution', 'Run code inside sandbox limits', !!c.bounded_code_execution],
+            ['Persistent memory', 'Memory survives restarts', !!c.persistent_memory],
+            ['Durable task state', 'A task can be inspected and resumed', !!c.durable_task_state],
+            ['Skill execution', 'Skills run through the tools they declare', !!c.skill_execution],
+        ];
+        box.innerHTML = rows.map(function (r) {
+            return '<div class="cap-row"><div><div class="cap-name">' + esc(r[0]) + '</div>' +
+                   '<div class="cap-desc">' + esc(r[1]) + '</div></div>' +
+                   '<span class="badge ' + (r[2] ? 'success' : '') + '">' +
+                   (r[2] ? 'available' : 'unavailable') + '</span></div>';
+        }).join('');
+
+        const l = c.limits || {};
+        box.innerHTML += '<div class="cap-desc" style="margin-top:12px;">Sandbox: ' +
+            esc(l.code_execution_timeout_s) + 's · ' + esc(l.code_execution_memory_mb) + 'MB · ' +
+            esc(l.code_execution_cpu_s) + 's CPU</div>';
+    } catch (e) {
+        box.innerHTML = '<div class="card-note">Could not read capabilities.</div>';
+    }
+}
+
+async function loadTasks() {
+    const box = document.getElementById('taskList');
+    try {
+        const res = await fetch('/api/agent/tasks', { headers: { 'Accept': 'application/json' } });
+        if (res.status === 401) { window.location.href = '/login'; return; }
+        const d = await res.json();
+        const tasks = d.tasks || [];
+        if (!tasks.length) {
+            box.innerHTML = '<div class="card-note">No tasks yet. Tasks appear here after a bounded run.</div>';
+            return;
+        }
+        box.innerHTML = tasks.slice(0, 8).map(function (t) {
+            const badge = t.state === 'completed' ? 'success'
+                        : t.state === 'failed' ? 'danger'
+                        : t.state === 'running' ? 'accent' : '';
+            return '<div class="task"><div class="task-goal">' + esc(t.goal) + '</div>' +
+                   '<div class="task-meta"><span class="badge ' + badge + '">' + esc(t.state) + '</span>' +
+                   '<span>' + esc((t.steps || []).length) + ' steps</span></div></div>';
+        }).join('');
+    } catch (e) {
+        box.innerHTML = '<div class="card-note">Could not read task history.</div>';
+    }
+}
+
+async function loadModelLabel() {
+    try {
+        const d = await (await fetch('/api/diagnostics', { headers: { 'Accept': 'application/json' } })).json();
+        const env = d.environment || {};
+        const configured = Object.keys(env).filter(k => k.endsWith('_configured') && env[k]);
+        document.getElementById('modelLabel').textContent = configured.length
+            ? 'providers configured: ' + configured.map(k => k.replace('_configured', '')).join(', ')
+            : 'model: none configured';
+    } catch (e) {
+        document.getElementById('modelLabel').textContent = 'model: unknown';
+    }
+}
+
+addMessage('assistant',
+    'GLUTEN agent workspace. This page shows what the running service can actually do — ' +
+    'capabilities and tasks are read live, not hardcoded. Ask a question or describe a task.');
+
+loadStatus();
+loadCapabilities();
+loadTasks();
+loadModelLabel();
+setInterval(loadStatus, 30000);
 </script>
 {% endblock %}

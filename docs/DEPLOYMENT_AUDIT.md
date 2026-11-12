@@ -32,18 +32,21 @@
 
 ## Actual Entrypoint
 
-**Primary Web Server:** `web/server_simple.py`
+**Primary (and only) Web Server:** `web/app.py`
 
-The Dockerfile uses `supervisord` to run TWO processes:
+There is one web server. `supervisord.conf` (Docker) and `supervisord.hf.conf`
+(Hugging Face Space) both run it; the HF Space Dockerfile sets
+`FLASK_APP=web/app.py`. `web/server_simple.py` and `web/realtime_server.py`
+were dead code (never imported, never deployed) and were removed.
 
 ```bash
-# In supervisord.conf
+# In supervisord.conf and supervisord.hf.conf
 [program:web]
-command=python web/server_simple.py
+command=python web/app.py
 directory=/app
 
 [program:telegram]
-command=python start_telegram.py
+command=python start_all_telegram_bots.py
 directory=/app
 ```
 
@@ -77,7 +80,7 @@ docker run -p 5000:5000 \
 
 ```bash
 # Web only
-python web/server_simple.py
+python web/app.py
 
 # Telegram only
 python start_telegram.py
@@ -89,9 +92,9 @@ python start_telegram.py
 
 ```
 supervisord (PID 1)
-├── python web/server_simple.py (web)
+├── python web/app.py (web)
 │   └── Flask app on port 5000
-└── python start_telegram.py (telegram)
+└── python start_all_telegram_bots.py (telegram)
     └── Aiogram bot polling Telegram API
 ```
 
@@ -101,12 +104,10 @@ supervisord (PID 1)
 
 | File | Purpose | Used By |
 |------|---------|---------|
-| `web/server_simple.py` | Web server (DEPLOYED) | Railway, Docker |
-| `web/app.py` | Full web server (NOT deployed) | Development only |
-| `web/app_v3.py` | Legacy v3 (DEAD CODE) | None |
-| `start_telegram.py` | Telegram bot (DEPLOYED) | Railway, Docker |
-| `genesis_protocol/` | Core AI logic | Both web servers |
-| `genesis.db` | SQLite database | Both services |
+| `web/app.py` | Web server (the only one) | Docker, HF Space |
+| `start_all_telegram_bots.py` | Telegram bot | Docker, HF Space |
+| `genesis_protocol/` | Core AI logic | Web + bots |
+| `genesis.db` | SQLite database | All services |
 
 ---
 
@@ -167,11 +168,11 @@ The GitHub Action deploys to Render, not Railway. Railway may need manual redepl
 1. Railway Dashboard → Service → Redeploy
 2. Or update GitHub Action to deploy to Railway
 
-### 2. Two Web Entry Points
-- `server_simple.py` - Production (deployed)
-- `app.py` - Development (not deployed)
-
-Only `server_simple.py` should be modified for production changes.
+### 2. Single Web Entry Point
+`web/app.py` is the only web server. The former "second" entry point
+(`server_simple.py`) was dead code and has been removed, along with
+`realtime_server.py` and the templates only they rendered. Do not reintroduce a
+second server; add routes to `web/app.py` above the `__main__` guard.
 
 ---
 

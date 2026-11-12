@@ -1,12 +1,19 @@
-{% extends "base.html" %}
+{% extends "base_v4.html" %}
 
-{% block title %}Error - GLUTEN AI{% endblock %}
+{% block title %}Error — GLUTEN{% endblock %}
+{% block header_title %}Error{% endblock %}
 
 {% block content %}
-<div class="error-page">
-    <h1>😕</h1>
-    <h2>{{ error or 'Something went wrong' }}</h2>
-    <p>We encountered an error processing your request.</p>
-    <a href="/" class="btn btn-primary">Go Home</a>
+<div class="card" style="max-width:560px; margin:40px auto; text-align:center;">
+    <div style="font-size:40px; margin-bottom:12px;">⚠️</div>
+    <div class="card-title" style="font-size:18px;">{{ error or 'Something went wrong' }}</div>
+    <p class="card-note" style="margin-top:10px;">
+        The request could not be completed. The details above are the message the
+        server returned.
+    </p>
+    <div style="margin-top:20px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+        <a href="/" class="btn btn-primary btn-sm">Go home</a>
+        <a href="/chat" class="btn btn-secondary btn-sm">Open chat</a>
+    </div>
 </div>
 {% endblock %}

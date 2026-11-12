@@ -1,325 +1,168 @@
-{% extends "base.html" %}
+{% extends "base_v4.html" %}
 
-{% block title %}Settings - Genesis Protocol{% endblock %}
+{% block title %}Settings — GLUTEN{% endblock %}
+{% block header_title %}Settings{% endblock %}
 
-{% block extra_styles %}
+{% block extra_head %}
 <style>
-    .settings-section {
-        margin-bottom: 30px;
-    }
-    
-    .settings-title {
-        font-size: 14px;
-        color: var(--neon-cyan);
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        margin-bottom: 15px;
-        padding-bottom: 10px;
-        border-bottom: 1px solid var(--border-color);
-    }
-    
-    .setting-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 15px 0;
-        border-bottom: 1px solid var(--border-color);
-    }
-    
-    .setting-info {
-        flex: 1;
-    }
-    
-    .setting-name {
-        font-size: 13px;
-        color: var(--text-primary);
-    }
-    
-    .setting-desc {
-        font-size: 11px;
-        color: var(--text-muted);
-        margin-top: 3px;
-    }
-    
-    .toggle {
-        position: relative;
-        width: 50px;
-        height: 26px;
-        background: var(--dark-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 13px;
-        cursor: pointer;
-        transition: all 0.3s;
-    }
-    
-    .toggle.active {
-        background: var(--neon-green);
-        border-color: var(--neon-green);
-    }
-    
-    .toggle::after {
-        content: '';
-        position: absolute;
-        top: 3px;
-        left: 3px;
-        width: 18px;
-        height: 18px;
-        background: #fff;
-        border-radius: 50%;
-        transition: all 0.3s;
-    }
-    
-    .toggle.active::after {
-        left: 27px;
-    }
-    
-    .select-field {
-        background: var(--dark-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 10px 15px;
-        color: #fff;
-        font-family: inherit;
-        font-size: 13px;
-        min-width: 150px;
-    }
-    
-    .theme-preview {
-        display: flex;
-        gap: 15px;
-        margin-top: 15px;
-    }
-    
-    .theme-option {
-        flex: 1;
-        padding: 20px;
-        background: var(--dark-bg);
-        border: 2px solid var(--border-color);
-        border-radius: 10px;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.3s;
-    }
-    
-    .theme-option:hover, .theme-option.active {
-        border-color: var(--neon-green);
-    }
-    
-    .theme-option.active {
-        background: rgba(0, 255, 136, 0.1);
-    }
-    
-    .theme-icon {
-        font-size: 30px;
-        margin-bottom: 10px;
-    }
-    
-    .theme-name {
-        font-size: 12px;
-        color: var(--text-primary);
-    }
-    
-    .danger-zone {
-        border-color: var(--neon-red);
-        background: rgba(255, 68, 68, 0.05);
-    }
-    
-    .danger-zone .settings-title {
-        color: var(--neon-red);
-    }
+.settings-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+.setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--border);
+}
+.setting-row:last-child { border-bottom: none; }
+.setting-name { font-size: 14px; color: var(--text); }
+.setting-desc { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+.setting-value { font-family: var(--mono); font-size: 12.5px; color: var(--text-secondary); text-align: right; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="app-layout">
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="sidebar-logo">Ω</div>
-        <nav class="sidebar-nav">
-            <a href="/chat" class="nav-link" title="Chat">
-                💬
-                <span class="tooltip">Chat</span>
-            </a>
-            <a href="/dashboard" class="nav-link" title="Dashboard">
-                📊
-                <span class="tooltip">Dashboard</span>
-            </a>
-            <a href="/settings" class="nav-link active" title="Settings">
-                ⚙️
-                <span class="tooltip">Settings</span>
-            </a>
-            {% if session.get('role') == 'admin' %}
-            <a href="/admin" class="nav-link" title="Admin">
-                🔐
-                <span class="tooltip">Admin</span>
-            </a>
-            {% endif %}
-        </nav>
-        <div class="sidebar-footer">
-            <a href="/logout" class="nav-link" title="Logout">
-                🚪
-                <span class="tooltip">Logout</span>
-            </a>
+<div class="stack">
+    <div class="settings-grid">
+        <div class="card">
+            <div class="card-title">Account</div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-name">Username</div>
+                    <div class="setting-desc">Your sign-in name</div>
+                </div>
+                <div class="setting-value">{{ session.get('username', '—') }}</div>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-name">Role</div>
+                    <div class="setting-desc">Determines which pages and tools you may reach</div>
+                </div>
+                <div class="setting-value">
+                    <span class="badge {% if session.get('role') == 'admin' %}accent{% endif %}">
+                        {{ session.get('role', 'user') }}
+                    </span>
+                </div>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-name">Session</div>
+                    <div class="setting-desc">Sign out of this browser</div>
+                </div>
+                <a href="/logout" class="btn btn-secondary btn-sm">Sign out</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Runtime</div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-name">Version</div>
+                    <div class="setting-desc">Build reported by the server</div>
+                </div>
+                <div class="setting-value" id="setVersion">—</div>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-name">Uptime</div>
+                    <div class="setting-desc">Time since this process started</div>
+                </div>
+                <div class="setting-value" id="setUptime">—</div>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-name">Entity</div>
+                    <div class="setting-desc">Identity source</div>
+                </div>
+                <div class="setting-value" id="setEntity">—</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">AI Providers</div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-name">Default provider</div>
+                    <div class="setting-desc">Chain default; the scoring engine may pick another</div>
+                </div>
+                <div class="setting-value" id="setDefaultProvider">—</div>
+            </div>
+            <div id="providerList" style="padding-top:12px;">
+                <div class="card-note">Reading live configuration…</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Execution limits</div>
+            <div class="kv" id="limitsBox">
+                <div class="card-note">Reading…</div>
+            </div>
+            <p class="card-note" style="margin-top:12px;">
+                Sandbox limits applied to every code-execution tool call.
+            </p>
         </div>
     </div>
-    
-    <!-- Main Content -->
-    <div class="main-content">
-        <div class="page-header">
-            <div>
-                <div class="page-title">⚙️ Settings</div>
-                <div class="page-subtitle">Configure your Genesis Protocol experience</div>
-            </div>
-        </div>
-        
-        <div class="grid grid-2">
-            <div>
-                <div class="card settings-section">
-                    <div class="settings-title">// ACCOUNT</div>
-                    
-                    <div class="setting-row">
-                        <div class="setting-info">
-                            <div class="setting-name">Username</div>
-                            <div class="setting-desc">{{ session.get('username', 'User') }}</div>
-                        </div>
-                    </div>
-                    
-                    <div class="setting-row">
-                        <div class="setting-info">
-                            <div class="setting-name">Email</div>
-                            <div class="setting-desc">user@example.com</div>
-                        </div>
-                        <button class="btn btn-secondary">Change</button>
-                    </div>
-                    
-                    <div class="setting-row">
-                        <div class="setting-info">
-                            <div class="setting-name">Password</div>
-                            <div class="setting-desc">Last changed: Never</div>
-                        </div>
-                        <button class="btn btn-secondary">Update</button>
-                    </div>
-                </div>
-                
-                <div class="card settings-section">
-                    <div class="settings-title">// PREFERENCES</div>
-                    
-                    <div class="setting-row">
-                        <div class="setting-info">
-                            <div class="setting-name">Dark Mode</div>
-                            <div class="setting-desc">Always use dark theme</div>
-                        </div>
-                        <div class="toggle active" onclick="this.classList.toggle('active')"></div>
-                    </div>
-                    
-                    <div class="setting-row">
-                        <div class="setting-info">
-                            <div class="setting-name">Notifications</div>
-                            <div class="setting-desc">Receive system notifications</div>
-                        </div>
-                        <div class="toggle" onclick="this.classList.toggle('active')"></div>
-                    </div>
-                    
-                    <div class="setting-row">
-                        <div class="setting-info">
-                            <div class="setting-name">Auto-save Chats</div>
-                            <div class="setting-desc">Save conversation history</div>
-                        </div>
-                        <div class="toggle active" onclick="this.classList.toggle('active')"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <div>
-                <div class="card settings-section">
-                    <div class="settings-title">// AI SETTINGS</div>
-                    
-                    <div class="setting-row">
-                        <div class="setting-info">
-                            <div class="setting-name">AI Providers</div>
-                            <div class="setting-desc">Reported from the running server</div>
-                        </div>
-                    </div>
-                    {% for name, is_up in (providers or {}).items() %}
-                    <div class="setting-row">
-                        <div class="setting-info">
-                            <div class="setting-name">{{ name }}</div>
-                            <div class="setting-desc">
-                                {% if is_up %}configured{% else %}no API key set{% endif %}
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                    
-                    <div class="setting-row">
-                        <div class="setting-info">
-                            <div class="setting-name">Response Length</div>
-                            <div class="setting-desc">Max response size</div>
-                        </div>
-                        <select class="select-field">
-                            <option>Short</option>
-                            <option selected>Medium</option>
-                            <option>Long</option>
-                        </select>
-                    </div>
-                    
-                    <div class="setting-row">
-                        <div class="setting-info">
-                            <div class="setting-name">Temperature</div>
-                            <div class="setting-desc">Response creativity level</div>
-                        </div>
-                        <select class="select-field">
-                            <option>Precise</option>
-                            <option selected>Balanced</option>
-                            <option>Creative</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div class="card settings-section">
-                    <div class="settings-title">// APPEARANCE</div>
-                    
-                    <div class="theme-preview">
-                        <div class="theme-option active">
-                            <div class="theme-icon">🌙</div>
-                            <div class="theme-name">Dark</div>
-                        </div>
-                        <div class="theme-option">
-                            <div class="theme-icon">☀️</div>
-                            <div class="theme-name">Light</div>
-                        </div>
-                        <div class="theme-option">
-                            <div class="theme-icon">🎨</div>
-                            <div class="theme-name">Cyber</div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="card settings-section danger-zone">
-                    <div class="settings-title">// DANGER ZONE</div>
-                    
-                    <div class="setting-row">
-                        <div class="setting-info">
-                            <div class="setting-name">Export Data</div>
-                            <div class="setting-desc">Download all your data</div>
-                        </div>
-                        <button class="btn btn-secondary">Export</button>
-                    </div>
-                    
-                    <div class="setting-row">
-                        <div class="setting-info">
-                            <div class="setting-name">Delete Account</div>
-                            <div class="setting-desc">Permanently delete your account</div>
-                        </div>
-                        <button class="btn btn-danger">Delete</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="footer">
-            Genesis Protocol Ω | Settings | v2.0
-        </div>
+
+    <div class="card">
+        <div class="card-title">About this page</div>
+        <p class="card-note">
+            This page reports what the server currently exposes. It does not offer
+            settings that are not wired up — an option that changes nothing is worse
+            than no option at all. To change provider credentials, set the relevant
+            environment variable on the host and restart the service.
+        </p>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function getJSON(url) {
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+}
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+}
+(async function () {
+    try {
+        const v = await getJSON('/api/version');
+        document.getElementById('setVersion').textContent = v.version || '—';
+    } catch (e) {}
+    try {
+        const s = await getJSON('/api/status');
+        const up = Math.floor((s.metrics && s.metrics.uptime_seconds) || 0);
+        const h = Math.floor(up / 3600), m = Math.floor((up % 3600) / 60);
+        document.getElementById('setUptime').textContent = (h ? h + 'h ' : '') + m + 'm';
+    } catch (e) {}
+    try {
+        const id = await getJSON('/api/identity');
+        document.getElementById('setEntity').textContent =
+            (id.entity || '—') + ' · ' + (id.identity_source || '');
+        document.getElementById('setDefaultProvider').textContent =
+            id.default_provider ? id.default_provider + (id.default_model ? ' / ' + id.default_model : '') : 'none';
+        document.getElementById('providerList').innerHTML = (id.providers || []).map(p =>
+            '<div class="setting-row"><div><div class="setting-name">' + esc(p.name) + '</div>' +
+            '<div class="setting-desc">' + esc(p.reason || (p.available ? 'available' : 'unavailable')) + '</div></div>' +
+            '<div class="setting-value"><span class="badge ' + (p.available ? 'success' : '') + '">' +
+            (p.available ? 'available' : 'not configured') + '</span></div></div>'
+        ).join('') || '<div class="card-note">No providers reported.</div>';
+    } catch (e) {
+        document.getElementById('providerList').innerHTML = '<div class="card-note">Could not read provider configuration.</div>';
+    }
+    try {
+        const c = await getJSON('/api/capabilities');
+        const l = c.limits || {};
+        document.getElementById('limitsBox').innerHTML =
+            '<div class="kv-row"><span class="kv-key">Timeout</span><span class="kv-value">' + esc(l.code_execution_timeout_s) + ' s</span></div>' +
+            '<div class="kv-row"><span class="kv-key">Memory</span><span class="kv-value">' + esc(l.code_execution_memory_mb) + ' MB</span></div>' +
+            '<div class="kv-row"><span class="kv-key">CPU</span><span class="kv-value">' + esc(l.code_execution_cpu_s) + ' s</span></div>';
+    } catch (e) {
+        document.getElementById('limitsBox').innerHTML = '<div class="card-note">Could not read limits.</div>';
+    }
+})();
+</script>
 {% endblock %}

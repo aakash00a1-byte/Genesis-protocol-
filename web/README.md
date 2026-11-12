@@ -153,22 +153,25 @@ Data persists in the container volume.
 
 ```
 web/
-├── app.py              # Main Flask application
+├── app.py              # The only web server (Flask app:app)
 ├── requirements.txt    # Python dependencies
 ├── Dockerfile          # Docker configuration
 ├── .env.example        # Environment template
 ├── genesis.db          # SQLite database (created on first run)
 ├── templates/          # HTML templates
-│   ├── base.html
-│   ├── index.html
-│   ├── login.html
-│   ├── register.html
-│   ├── chat.html
+│   ├── base_v4.html    # Layout, sidebar, shared styles
+│   ├── auth_base.html  # Layout for login/register
+│   ├── index_v4.html   # Landing page (logged out)
+│   ├── chat.html       # The single chat UI
+│   ├── agent_workspace.html
+│   ├── dashboard.html
+│   ├── feature_panel.html  # Shared shell for the sidebar pages
+│   ├── agents.html     # Skills, read from /api/skills
 │   ├── admin.html
 │   └── error.html
 └── static/
     └── css/
-        └── style.css   # Styles
+        └── app.css     # Styles (design tokens + components)
 ```
 
 ## Troubleshooting

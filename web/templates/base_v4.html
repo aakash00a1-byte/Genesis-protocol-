@@ -3,241 +3,240 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Gluten OS{% endblock %}</title>
+    <meta name="color-scheme" content="dark">
+    <title>{% block title %}GLUTEN{% endblock %}</title>
+    <meta name="description" content="{% block description %}GLUTEN — a governed AI agent with multi-provider routing, persistent memory and an authority gate on every action.{% endblock %}">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="{% block og_title %}GLUTEN{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}A governed AI agent. Every claim on this site is read from live runtime state.{% endblock %}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%236366f1'/><text x='16' y='23' font-size='20' text-anchor='middle' fill='white' font-family='system-ui'>&#9889;</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/cyberpunk.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
     {% block extra_head %}{% endblock %}
 </head>
 <body>
-    <!-- Cyberpunk Background Effects -->
-    <div class="cyber-bg">
-        <div class="cyber-grid"></div>
-        <div class="particles" id="particles"></div>
-        <div class="scanlines"></div>
-    </div>
-    
-    <!-- Mobile Overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
-    
+
     <div class="app-container">
-        <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <!-- GLUTEN Logo -->
-                <a href="/" class="genesis-logo">
-                    <div class="genesis-icon">⚡</div>
-                    <div class="genesis-text">
-                        <span class="genesis-name">GLUTEN</span>
-                        <span class="genesis-version">AI ENTITY v4</span>
-                    </div>
+                <a href="/" class="brand" aria-label="GLUTEN home">
+                    <span class="brand-mark">⚡</span>
+                    <span class="brand-text">
+                        <span class="brand-name">GLUTEN</span>
+                        <span class="brand-version">AI agent</span>
+                    </span>
                 </a>
-                
-                <!-- New Chat Button -->
                 <button class="new-chat-btn" onclick="window.location.href='/chat'">
-                    <span>+</span>
-                    <span>New Chat</span>
+                    <span aria-hidden="true">+</span>
+                    <span>New chat</span>
                 </button>
             </div>
-            
-            <!-- Navigation -->
-            <nav class="sidebar-nav">
+
+            <nav class="sidebar-nav" aria-label="Primary">
                 <div class="nav-section">
-                    <div class="nav-section-title">Main</div>
+                    <div class="nav-section-title">Workspace</div>
                     <a href="/chat" class="nav-item {% if request.endpoint == 'chat' %}active{% endif %}">
-                        <span class="nav-item-icon">💬</span>
+                        <span class="nav-item-icon" aria-hidden="true">💬</span>
                         <span class="nav-item-text">Chat</span>
                     </a>
                     <a href="/agent" class="nav-item {% if request.endpoint == 'agent_workspace' %}active{% endif %}">
-                        <span class="nav-item-icon">⚡</span>
-                        <span class="nav-item-text">AI Agent</span>
+                        <span class="nav-item-icon" aria-hidden="true">⚡</span>
+                        <span class="nav-item-text">Agent</span>
                     </a>
-                    <a href="/agents" class="nav-item">
-                        <span class="nav-item-icon">🤖</span>
-                        <span class="nav-item-text">Agents</span>
+                    <a href="/agents" class="nav-item {% if request.endpoint == 'page_/agents' %}active{% endif %}">
+                        <span class="nav-item-icon" aria-hidden="true">🤖</span>
+                        <span class="nav-item-text">Skills</span>
                     </a>
-                    <a href="/models" class="nav-item">
-                        <span class="nav-item-icon">🧠</span>
+                    <a href="/models" class="nav-item {% if request.endpoint == 'page_/models' %}active{% endif %}">
+                        <span class="nav-item-icon" aria-hidden="true">🧠</span>
                         <span class="nav-item-text">Models</span>
                     </a>
-                    <a href="/knowledge" class="nav-item">
-                        <span class="nav-item-icon">📚</span>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Knowledge</div>
+                    <a href="/knowledge" class="nav-item {% if request.endpoint == 'page_/knowledge' %}active{% endif %}">
+                        <span class="nav-item-icon" aria-hidden="true">📚</span>
                         <span class="nav-item-text">Knowledge</span>
                     </a>
-                </div>
-                
-                <div class="nav-section">
-                    <div class="nav-section-title">Tools</div>
-                    <a href="/memory" class="nav-item">
-                        <span class="nav-item-icon">💾</span>
+                    <a href="/memory" class="nav-item {% if request.endpoint == 'page_/memory' %}active{% endif %}">
+                        <span class="nav-item-icon" aria-hidden="true">💾</span>
                         <span class="nav-item-text">Memory</span>
                     </a>
-                    <a href="/tools" class="nav-item">
-                        <span class="nav-item-icon">🔧</span>
-                        <span class="nav-item-text">Tools</span>
-                    </a>
-                    <a href="/voice" class="nav-item">
-                        <span class="nav-item-icon">🎤</span>
-                        <span class="nav-item-text">Voice</span>
-                    </a>
-                    <a href="/files" class="nav-item">
-                        <span class="nav-item-icon">📁</span>
-                        <span class="nav-item-text">Files</span>
-                    </a>
-                </div>
-                
-                <div class="nav-section">
-                    <div class="nav-section-title">System</div>
-                    <a href="/prompts" class="nav-item">
-                        <span class="nav-item-icon">📝</span>
-                        <span class="nav-item-text">Prompts</span>
-                    </a>
-                    <a href="/history" class="nav-item">
-                        <span class="nav-item-icon">📜</span>
+                    <a href="/history" class="nav-item {% if request.endpoint == 'page_/history' %}active{% endif %}">
+                        <span class="nav-item-icon" aria-hidden="true">📜</span>
                         <span class="nav-item-text">History</span>
                     </a>
-                    {% if session.get('user_id') and session.get('role') == 'admin' %}
-                    <a href="/admin" class="nav-item">
-                        <span class="nav-item-icon">⚙️</span>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Tools</div>
+                    <a href="/tools" class="nav-item {% if request.endpoint == 'page_/tools' %}active{% endif %}">
+                        <span class="nav-item-icon" aria-hidden="true">🔧</span>
+                        <span class="nav-item-text">Tools</span>
+                    </a>
+                    <a href="/files" class="nav-item {% if request.endpoint == 'page_/files' %}active{% endif %}">
+                        <span class="nav-item-icon" aria-hidden="true">📁</span>
+                        <span class="nav-item-text">Files</span>
+                    </a>
+                    <a href="/voice" class="nav-item {% if request.endpoint == 'page_/voice' %}active{% endif %}">
+                        <span class="nav-item-icon" aria-hidden="true">🎤</span>
+                        <span class="nav-item-text">Voice</span>
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">System</div>
+                    <a href="/prompts" class="nav-item {% if request.endpoint == 'page_/prompts' %}active{% endif %}">
+                        <span class="nav-item-icon" aria-hidden="true">📝</span>
+                        <span class="nav-item-text">Prompts</span>
+                    </a>
+                    <a href="/settings" class="nav-item {% if request.endpoint == 'settings' %}active{% endif %}">
+                        <span class="nav-item-icon" aria-hidden="true">⚙️</span>
+                        <span class="nav-item-text">Settings</span>
+                    </a>
+                    {% if session.get('role') == 'admin' %}
+                    <a href="/admin" class="nav-item {% if request.endpoint == 'admin' %}active{% endif %}">
+                        <span class="nav-item-icon" aria-hidden="true">🛡️</span>
                         <span class="nav-item-text">Admin</span>
                     </a>
                     {% endif %}
                 </div>
             </nav>
-            
-            <!-- System Status -->
-            <div class="system-status">
-                <div class="status-item">
-                    <span class="status-label">System</span>
-                    <div class="status-indicator">
-                        <span class="status-dot online"></span>
-                        <span>Online</span>
+
+            <div class="sidebar-footer">
+                <div class="status-block" id="runtimeStatus" aria-live="polite">
+                    <div class="status-row">
+                        <span>Status</span>
+                        <span class="status-value" id="statusRuntime"><span class="dot unknown"></span> checking</span>
+                    </div>
+                    <div class="status-row">
+                        <span>Providers</span>
+                        <span class="status-value" id="statusProviders">—</span>
+                    </div>
+                    <div class="status-row">
+                        <span>Version</span>
+                        <span class="status-value" id="statusVersion">—</span>
                     </div>
                 </div>
-                <div class="status-item">
-                    <span class="status-label">AI Engine</span>
-                    <div class="status-indicator">
-                        <span class="status-dot online"></span>
-                        <span>Active</span>
-                    </div>
-                </div>
-                <div class="status-item">
-                    <span class="status-label">Version</span>
-                    <span>v4.0.0</span>
-                </div>
-            </div>
-            
-            <!-- Sidebar Toggle -->
-            <div class="sidebar-toggle" id="sidebarToggle">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M15 18l-6-6 6-6"/>
-                </svg>
             </div>
         </aside>
-        
-        <!-- Main Content -->
+
         <main class="main-content">
-            <!-- Header -->
             <header class="header">
                 <div class="header-left">
-                    <button class="header-btn mobile-menu-btn" id="mobileMenuBtn" style="display: none;">
-                        ☰
-                    </button>
-                    <h1 class="header-title">{% block header_title %}GLUTEN AI{% endblock %}</h1>
+                    <button class="header-btn mobile-menu-btn" id="mobileMenuBtn" aria-label="Open navigation">☰</button>
+                    <button class="header-btn" id="sidebarToggle" aria-label="Collapse navigation">‹</button>
+                    <h1 class="header-title">{% block header_title %}GLUTEN{% endblock %}</h1>
                 </div>
                 <div class="header-right">
                     {% if session.get('user_id') %}
-                    <a href="/settings" class="header-btn" title="Settings">⚙️</a>
-                    <a href="/logout" class="header-btn" title="Logout">🚪</a>
+                    <span class="badge" title="Signed in">{{ session.get('username') }}</span>
+                    <a href="/settings" class="header-btn" title="Settings" aria-label="Settings">⚙️</a>
+                    <a href="/logout" class="header-btn" title="Sign out" aria-label="Sign out">🚪</a>
                     {% else %}
-                    <a href="/login" class="btn btn-secondary">Login</a>
-                    <a href="/register" class="btn btn-primary">Register</a>
+                    <a href="/login" class="btn btn-ghost btn-sm">Sign in</a>
+                    <a href="/register" class="btn btn-primary btn-sm">Create account</a>
                     {% endif %}
                 </div>
             </header>
-            
-            <!-- Page Content -->
-            <div class="page-content">
+
+            <div class="page-content {% block content_class %}{% endblock %}">
                 {% block content %}{% endblock %}
             </div>
         </main>
     </div>
-    
+
     <script>
-        // Sidebar Toggle
-        const sidebar = document.getElementById('sidebar');
-        const sidebarToggle = document.getElementById('sidebarToggle');
-        const sidebarOverlay = document.getElementById('sidebarOverlay');
-        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-        
-        sidebarToggle?.addEventListener('click', () => {
-            sidebar.classList.toggle('collapsed');
-        });
-        
-        mobileMenuBtn?.addEventListener('click', () => {
-            sidebar.classList.toggle('mobile-open');
-            sidebarOverlay.classList.toggle('visible');
-        });
-        
-        sidebarOverlay?.addEventListener('click', () => {
-            sidebar.classList.remove('mobile-open');
-            sidebarOverlay.classList.remove('visible');
-        });
-        
-        // Mobile menu button visibility
-        function checkMobile() {
-            if (window.innerWidth <= 768) {
-                mobileMenuBtn.style.display = 'flex';
-            } else {
-                mobileMenuBtn.style.display = 'none';
-                sidebar.classList.remove('mobile-open');
-                sidebarOverlay.classList.remove('visible');
+        // --- Sidebar behaviour ---
+        (function () {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            const toggle = document.getElementById('sidebarToggle');
+            const mobileBtn = document.getElementById('mobileMenuBtn');
+            if (!sidebar) return;
+
+            const isMobile = () => window.innerWidth <= 900;
+
+            if (localStorage.getItem('gluten.sidebar') === 'collapsed' && !isMobile()) {
+                sidebar.classList.add('collapsed');
             }
+
+            toggle && toggle.addEventListener('click', () => {
+                if (isMobile()) return;
+                sidebar.classList.toggle('collapsed');
+                localStorage.setItem(
+                    'gluten.sidebar',
+                    sidebar.classList.contains('collapsed') ? 'collapsed' : 'expanded'
+                );
+            });
+
+            const openMobile = (open) => {
+                sidebar.classList.toggle('mobile-open', open);
+                overlay.classList.toggle('visible', open);
+            };
+            mobileBtn && mobileBtn.addEventListener('click', () => openMobile(true));
+            overlay && overlay.addEventListener('click', () => openMobile(false));
+            window.addEventListener('resize', () => { if (!isMobile()) openMobile(false); });
+        })();
+
+        // --- Toast helper (never reports a success that did not happen) ---
+        function showToast(message, type) {
+            const el = document.createElement('div');
+            el.className = 'toast' + (type ? ' ' + type : '');
+            el.setAttribute('role', 'status');
+            el.textContent = message;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 5000);
         }
-        
-        window.addEventListener('resize', checkMobile);
-        checkMobile();
-        
-        // Create Particles
-        function createParticles() {
-            const container = document.getElementById('particles');
-            if (!container) return;
-            
-            for (let i = 0; i < 30; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'particle';
-                particle.style.left = Math.random() * 100 + '%';
-                particle.style.animationDelay = Math.random() * 15 + 's';
-                particle.style.animationDuration = (15 + Math.random() * 10) + 's';
-                container.appendChild(particle);
+
+        // --- Live runtime status, read from the API ---
+        (function () {
+            const runtime = document.getElementById('statusRuntime');
+            const providers = document.getElementById('statusProviders');
+            const version = document.getElementById('statusVersion');
+
+            async function refresh() {
+                try {
+                    const res = await fetch('/api/health', { headers: { 'Accept': 'application/json' } });
+                    if (runtime) {
+                        runtime.innerHTML = res.ok
+                            ? '<span class="dot online"></span> online'
+                            : '<span class="dot offline"></span> degraded';
+                    }
+                } catch (e) {
+                    if (runtime) runtime.innerHTML = '<span class="dot offline"></span> unreachable';
+                }
+                try {
+                    const res = await fetch('/api/identity', { headers: { 'Accept': 'application/json' } });
+                    const d = await res.json();
+                    const avail = (d.providers || []).filter(p => p.available);
+                    if (providers) {
+                        providers.textContent = avail.length
+                            ? avail.length + ' available'
+                            : 'none configured';
+                        providers.title = avail.length
+                            ? avail.map(p => p.name + (p.model ? ' (' + p.model + ')' : '')).join('\n')
+                            : 'No provider credential is configured.';
+                    }
+                } catch (e) {
+                    if (providers) providers.textContent = 'unknown';
+                }
+                try {
+                    const res = await fetch('/api/version', { headers: { 'Accept': 'application/json' } });
+                    const d = await res.json();
+                    if (version) version.textContent = d.version || '—';
+                } catch (e) { /* leave as — */ }
             }
-        }
-        
-        createParticles();
-        
-        // Flash alert function
-        function showFlash(message, type = 'info') {
-            const alert = document.createElement('div');
-            alert.className = `flash-alert flash-${type}`;
-            alert.innerHTML = message;
-            alert.style.cssText = `
-                position: fixed;
-                top: 80px;
-                right: 20px;
-                padding: 16px 24px;
-                background: var(--bg-card);
-                border: 1px solid var(--border-color);
-                border-radius: 12px;
-                backdrop-filter: blur(10px);
-                z-index: 1000;
-                animation: slideIn 0.3s ease;
-            `;
-            document.body.appendChild(alert);
-            setTimeout(() => alert.remove(), 5000);
-        }
+
+            refresh();
+            setInterval(refresh, 60000);
+        })();
     </script>
-    
+
     {% block scripts %}{% endblock %}
 </body>
 </html>

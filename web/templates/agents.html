@@ -1,26 +1,96 @@
 {% extends "base_v4.html" %}
-{% block title %}Agents - Gluten OS{% endblock %}
-{% block header_title %}🤖 GLUTEN AGENTS{% endblock %}
+
+{% block title %}Skills — GLUTEN{% endblock %}
+{% block header_title %}Skills{% endblock %}
+
+{% block extra_head %}
+<style>
+.skill-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.skill {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    background: var(--surface);
+}
+.skill-top { display: flex; align-items: center; gap: 10px; }
+.skill-name { font-size: 13.5px; color: var(--text); font-family: var(--mono); }
+.skill-desc { font-size: 12.5px; color: var(--text-muted); margin-top: 6px; line-height: 1.55; }
+.tool-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip {
+    font-size: 11px; font-family: var(--mono);
+    padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--text-secondary);
+    background: var(--surface-2);
+}
+.chip.missing { border-color: rgba(248,113,113,0.35); color: var(--danger); }
+.cat-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+</style>
+{% endblock %}
+
 {% block content %}
-{% set fp_icon = "🤖" %}
-{% set fp_title = "Agent Inventory" %}
-{% set fp_subtitle = "The built-in agents GLUTEN routes work to. All run offline; each is deterministic." %}
-{% set fp_static %}
-<div class="fp-card">
-    <h3>Built-in Agents (8)</h3>
-    <div class="fp-list">
-        <div class="fp-item"><div class="t">planning</div><div class="d">Decomposes a request into ordered steps.</div></div>
-        <div class="fp-item"><div class="t">research</div><div class="d">Read-only recon and source gathering.</div></div>
-        <div class="fp-item"><div class="t">coding</div><div class="d">Writes and edits code.</div></div>
-        <div class="fp-item"><div class="t">qa</div><div class="d">Independent verification of a result.</div></div>
-        <div class="fp-item"><div class="t">security</div><div class="d">Checks permissions, secrets, and risk.</div></div>
-        <div class="fp-item"><div class="t">deployment</div><div class="d">Build and release steps.</div></div>
-        <div class="fp-item"><div class="t">memory</div><div class="d">Always the final step; writes what was learned.</div></div>
-        <div class="fp-item"><div class="t">generic</div><div class="d">Fallback when no keyword matches.</div></div>
+<div class="stack">
+    <div class="card">
+        <div class="card-title">Skills</div>
+        <p class="card-note">
+            Every skill GLUTEN declares, with the tools it names and which of those
+            tools actually resolve in this deployment. A declared tool that does not
+            resolve is shown as missing rather than assumed working. This list is
+            read from <code>/api/skills</code>.
+        </p>
+        <div class="cat-filter" id="catFilter" style="margin-top:14px;"></div>
     </div>
-    <p class="fp-note">Selection is keyword based. Every tool call an agent makes still passes the authority gate, so no agent can widen its own permissions.</p>
+
+    <div class="card">
+        <div class="skill-grid" id="skillGrid">
+            <div class="card-note">Reading skills…</div>
+        </div>
+    </div>
 </div>
-{% endset %}
-{% set fp_actions = [ {'label':'Autonomy State','url':'/api/state','method':'GET'} ] %}
-{% include "feature_panel.html" %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+}
+let ALL = [];
+
+function render() {
+    const grid = document.getElementById('skillGrid');
+    if (!ALL.length) {
+        grid.innerHTML = '<div class="card-note">No skills reported.</div>';
+        return;
+    }
+    grid.innerHTML = ALL.map(function (s) {
+        const runnable = new Set(s.runnable_tools || []);
+        const chips = (s.declared_tools || []).map(function (t) {
+            return '<span class="chip' + (runnable.has(t) ? '' : ' missing') + '">' + esc(t) + '</span>';
+        }).join('') || '<span class="chip">no declared tools</span>';
+        const missing = (s.unavailable_tools || []).length;
+        return '<div class="skill"><div class="skill-top">' +
+               '<span class="skill-name">' + esc(s.name) + '</span>' +
+               '<span class="badge' + (missing ? ' warning' : ' success') + '" style="margin-left:auto;">' +
+               esc(s.category) + '</span></div>' +
+               '<div class="skill-desc">' + esc(s.description) + '</div>' +
+               '<div class="tool-chips">' + chips + '</div></div>';
+    }).join('');
+}
+
+(async function () {
+    try {
+        const d = await (await fetch('/api/skills', { headers: { 'Accept': 'application/json' } })).json();
+        ALL = d.skills || [];
+        const cats = Array.from(new Set(ALL.map(s => s.category))).sort();
+        document.getElementById('catFilter').innerHTML =
+            '<span class="badge accent">' + ALL.length + ' skills</span>' +
+            cats.map(c => '<span class="badge">' + esc(c) + '</span>').join('');
+        render();
+    } catch (e) {
+        document.getElementById('skillGrid').innerHTML =
+            '<div class="card-note">Could not read skills.</div>';
+    }
+})();
+</script>
 {% endblock %}

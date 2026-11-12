@@ -232,6 +232,19 @@ def json_body() -> Dict[str, Any]:
 MAX_FIELD_LENGTH = 254
 
 
+def _is_browser_form_post() -> bool:
+    """True when the request came from an HTML <form> submit.
+
+    A browser form sends ``application/x-www-form-urlencoded`` (or multipart).
+    JSON clients send ``application/json``. Anything else is treated as an API
+    caller so it still receives a machine-readable error body.
+    """
+    return request.mimetype in (
+        'application/x-www-form-urlencoded',
+        'multipart/form-data',
+    )
+
+
 def string_field(data: dict, key: str,
                  max_length: int = MAX_FIELD_LENGTH):
     """Return a non-empty string field, or None.
@@ -670,6 +683,8 @@ def login():
         password = string_field(data, 'password', max_length=1024)
         
         if not username or not password:
+            if _is_browser_form_post():
+                return render_template('login.html', error='Username and password required'), 400
             return jsonify({'error': 'Username and password required'}), 400
         
         conn = get_db()
@@ -724,10 +739,14 @@ def register():
         password = string_field(data, 'password', max_length=MAX_PASSWORD_LENGTH)
 
         if not username or not email or not password:
+            if _is_browser_form_post():
+                return render_template('register.html', error='All fields required'), 400
             return jsonify({'error': 'All fields required'}), 400
 
         error = validate_registration(username, email, password)
         if error:
+            if _is_browser_form_post():
+                return render_template('register.html', error=error), 400
             return jsonify({'error': error}), 400
         
         try:
@@ -747,6 +766,8 @@ def register():
             return redirect(url_for('login'))
             
         except sqlite3.IntegrityError:
+            if _is_browser_form_post():
+                return render_template('register.html', error='Username or email already exists'), 400
             return jsonify({'error': 'Username or email already exists'}), 400
     
     return render_template('register.html')
@@ -764,9 +785,9 @@ def logout():
 # Main routes
 @app.route('/')
 def index():
-    """Homepage."""
+    """Homepage: a landing page for visitors, the chat for signed-in users."""
     if 'user_id' in session:
-        return redirect(url_for('ultra'))
+        return redirect(url_for('chat'))
     return render_template('index_v4.html')
 
 
@@ -782,19 +803,19 @@ def chat():
 @app.route('/gemini')
 @login_required
 def gemini():
-    """Advanced Gemini-style chat interface."""
-    return render_template('genesis_gemini.html', 
-                          username=session.get('username'),
-                          role=session.get('role'))
+    """Legacy Gemini-style chat URL, kept working via redirect.
+
+    The chat UIs drifted apart and disagreed about the same API. There is one
+    chat page now; old bookmarks still land somewhere useful.
+    """
+    return redirect(url_for('chat'))
 
 
 @app.route('/ultra')
 @login_required
 def ultra():
-    """Ultra Advanced chat interface with all features."""
-    return render_template('genesis_ultra.html', 
-                          username=session.get('username'),
-                          role=session.get('role'))
+    """Legacy 'ultra' chat URL, kept working via redirect. See ``gemini``."""
+    return redirect(url_for('chat'))
 
 
 @app.route('/agent')

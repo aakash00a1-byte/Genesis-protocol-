@@ -1,6 +1,6 @@
 {% extends "base_v4.html" %}
-{% block title %}Knowledge - Gluten OS{% endblock %}
-{% block header_title %}📚 GLUTEN KNOWLEDGE{% endblock %}
+{% block title %}Knowledge — GLUTEN{% endblock %}
+{% block header_title %}Knowledge{% endblock %}
 {% block content %}
 {% set fp_icon = "📚" %}
 {% set fp_title = "Knowledge Graph" %}
@@ -10,8 +10,10 @@
 <div class="fp-card">
     <h3>Search</h3>
     <div class="fp-actions">
-        <input class="fp-input" id="kg-q" placeholder="Search knowledge...">
-        <button class="fp-btn" onclick="fpCall('/api/knowledge/search?q=' + encodeURIComponent(document.getElementById('kg-q').value), 'GET')">Search</button>
+        <input class="input" id="kg-q" placeholder="Search knowledge…"
+               onkeydown="if(event.key==='Enter'){fpCall('/api/knowledge/search?q=' + encodeURIComponent(this.value), 'GET');}">
+        <button class="btn btn-secondary btn-sm"
+                onclick="fpCall('/api/knowledge/search?q=' + encodeURIComponent(document.getElementById('kg-q').value), 'GET')">Search</button>
     </div>
 </div>
 {% endset %}

@@ -29,7 +29,7 @@ curl -X POST "https://api.groq.com/openai/v1/chat/completions" \
 ### 1. Local Testing
 ```bash
 # Start web server
-python web/server_simple.py
+python web/app.py
 
 # In another terminal, test endpoints
 curl http://localhost:5000/api/health
