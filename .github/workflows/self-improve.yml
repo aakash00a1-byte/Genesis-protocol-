@@ -85,15 +85,6 @@ jobs:
           python3 -m pip install --quiet -r requirements.txt
           python3 -m pip install --quiet pytest
 
-      - name: Prepare the sandbox layout the verification suite asserts
-        # The V6 kernel's sandbox root is /workspace and several tests read
-        # /workspace/project/. A bind mount (not a symlink — the sandbox resolves
-        # symlinks with realpath on purpose) puts the checkout there, so the gate
-        # can run the same both-suite command as CI rather than only tests/.
-        run: |
-          sudo mkdir -p /workspace/project
-          sudo mount --bind "$GITHUB_WORKSPACE" /workspace/project
-
       - name: Run the continuous self-improvement loop
         env:
           PYTHONUNBUFFERED: "1"
@@ -114,7 +105,10 @@ jobs:
           # a scratch worktree before any PR is opened, and the merge gate
           # refuses a PR whose head is not green + evidence-bound.
           SELF_IMPROVE_VERIFY: "1"
-          SELF_IMPROVE_VERIFY_TESTS: "python3 -m pytest -q"
+          # Same command CI uses, one source of truth. It places the checkout
+          # under test (the scratch worktree, with the patch applied) at
+          # /workspace/project and runs BOTH suites — not just tests/.
+          SELF_IMPROVE_VERIFY_TESTS: "bash scripts/verify_all.sh"
           SELF_IMPROVE_VERIFY_REQUIRE_TESTS: "1"
           SELF_IMPROVE_REQUIRE_CHECKS: "1"
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

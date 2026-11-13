@@ -42,23 +42,11 @@ jobs:
         pip install -r requirements.txt
         pip install pytest
 
-    - name: Prepare the sandbox layout the V6 suite asserts
-      # The V6 kernel is container-first: its sandbox root is /workspace, the
-      # default tool cwd is /workspace, and several tests read /workspace/... .
-      # A bind mount (not a symlink: the sandbox resolves symlinks with realpath
-      # on purpose) puts this checkout exactly there. /workspace must be
-      # writable so the suite can plant a symlink probe in it.
-      run: |
-        sudo mkdir -p /workspace/project
-        sudo mount --bind "$GITHUB_WORKSPACE" /workspace/project
-        sudo chmod 777 /workspace
-
     - name: Run test suite
-      # Run from the sandbox path: the gate resolves relative tool paths
-      # (realpath) against the process cwd, so cwd must be under /workspace.
-      # No path argument: pyproject testpaths covers both tests/ and
-      # genesis_v5/tests/. Pinning only tests/ left 390 real tests unrun, so
-      # genuinely-tested code could be reported (and believed) as untested.
-      working-directory: /workspace/project
-      run: python -m pytest -q
+      # One source of truth for how the suite is run (scripts/verify_all.sh),
+      # shared with the self-improve gate. It provides the container layout the
+      # V6 kernel asserts and then runs both suites. Pinning only tests/ left 390
+      # real tests unrun, so genuinely-tested code could be reported (and
+      # believed) as untested.
+      run: bash scripts/verify_all.sh
 

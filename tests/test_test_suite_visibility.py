@@ -37,10 +37,31 @@ def test_v6_conftest_puts_genesis_on_path() -> None:
     assert "sys.path.insert" in conftest.read_text(encoding="utf-8")
 
 
-def test_workflows_do_not_pin_a_single_test_path() -> None:
-    """A pinned ``pytest tests/`` is exactly the bug; forbid it in CI + gate."""
+def test_workflows_use_the_shared_both_suite_runner() -> None:
+    """A pinned ``pytest tests/`` is exactly the bug; forbid it in CI + gate.
+
+    Both workflows must delegate to scripts/verify_all.sh, which sets up the
+    container layout the V6 suite needs and then runs the whole suite.
+    """
     for name in ("ci.yml", "self-improve.yml"):
         text = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
         assert "pytest tests/ -q" not in text, (
             f"{name} pins only tests/; the V6 suite would stop running"
         )
+        assert "verify_all.sh" in text, (
+            f"{name} no longer uses the shared runner; the two suites can drift"
+        )
+
+
+def test_shared_runner_runs_the_full_suite() -> None:
+    """The runner's primary path must be a bare ``pytest -q`` (both suites).
+
+    It may fall back to ``tests/`` only when the /workspace layout is
+    unavailable, so the fallback is the exception, not the whole behaviour.
+    """
+    script = (ROOT / "scripts" / "verify_all.sh").read_text(encoding="utf-8")
+    assert script.count("pytest -q") >= 1
+    # The primary branch must not be tests/-only.
+    primary = script.split("unavailable; running tests/ only")[0]
+    assert "pytest -q" in primary
+    assert "pytest tests/ -q" not in primary

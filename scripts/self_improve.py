@@ -88,7 +88,7 @@ POLL_TIMEOUT_SECONDS = 900
 # patch while VERIFY_REQUIRE_TESTS is on (fail-closed).
 VERIFY_ENABLED = os.environ.get("SELF_IMPROVE_VERIFY", "1").strip() not in ("0", "false", "no")
 VERIFY_TEST_COMMAND = os.environ.get(
-    "SELF_IMPROVE_VERIFY_TESTS", "python3 -m pytest tests/ -q"
+    "SELF_IMPROVE_VERIFY_TESTS", "bash scripts/verify_all.sh"
 ).strip()
 VERIFY_REQUIRE_TESTS = os.environ.get("SELF_IMPROVE_VERIFY_REQUIRE_TESTS", "1").strip() not in ("0", "false", "no")
 # The merge gate refuses to merge an agent PR unless its head check-runs are
