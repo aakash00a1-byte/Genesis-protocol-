@@ -105,7 +105,7 @@ jobs:
           # a scratch worktree before any PR is opened, and the merge gate
           # refuses a PR whose head is not green + evidence-bound.
           SELF_IMPROVE_VERIFY: "1"
-          SELF_IMPROVE_VERIFY_TESTS: "python3 -m pytest tests/ -q"
+          SELF_IMPROVE_VERIFY_TESTS: "python3 -m pytest -q"
           SELF_IMPROVE_VERIFY_REQUIRE_TESTS: "1"
           SELF_IMPROVE_REQUIRE_CHECKS: "1"
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

@@ -90,5 +90,8 @@ strict = true
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "genesis_v5/tests"]
+# Two suites share basenames (test_tools.py, test_memory.py, test_security.py);
+# importlib mode keys modules by path, so they cannot collide.
+addopts = "--import-mode=importlib"
 asyncio_mode = "auto"

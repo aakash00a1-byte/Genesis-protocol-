@@ -277,10 +277,16 @@ stays on old code, which is how the "hello" fix appeared not to work.
 
 ## V6 hardening notes (relay + authority gate)
 
-- V6 kernel lives in `genesis_v5/genesis/`. Run its suite from that dir with
-  `python -m pytest tests/ -q` (the AGENTS `-tb=no` flag is invalid for the
-  installed pytest). Root `tests/` are legacy and fail only because `dotenv`
-  and `flask` are absent here.
+- Two suites exist: root `tests/` (product, imports `genesis_protocol`) and
+  `genesis_v5/tests/` (V6 kernel, imports top-level `genesis`, ~390 tests).
+  Run both from the repo root with `python -m pytest -q` — `pyproject.toml`
+  `testpaths` covers both and `genesis_v5/tests/conftest.py` puts `genesis_v5`
+  on `sys.path`. CI and the self-improve verification gate use that same bare
+  command. Do NOT pin a single path (`pytest tests/`): doing so silently left
+  the whole V6 suite unrun, and code that IS tested could then be reported —
+  and believed — as "untested". `addopts = "--import-mode=importlib"` keeps the
+  shared basenames (`test_tools.py`, `test_memory.py`, `test_security.py`) from
+  colliding.
 - The authority gate (`genesis/tools/gateway.py`) now has `forbid_tools()`.
   With autonomy enabled, `bootstrap.build()` installs the autonomy guard's
   forbidden-tool list as a hard gate rule, so no actor/role (admin included)

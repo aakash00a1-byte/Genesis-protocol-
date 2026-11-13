@@ -43,5 +43,8 @@ jobs:
         pip install pytest
 
     - name: Run test suite
-      run: python -m pytest tests/ -q
+      # No path argument: pyproject testpaths covers both tests/ and
+      # genesis_v5/tests/. Pinning only tests/ left 390 real tests unrun, so
+      # genuinely-tested code could be reported (and believed) as untested.
+      run: python -m pytest -q
 
