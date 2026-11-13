@@ -43,7 +43,25 @@ class IdentityRouter:
         # Hindi keywords
         "tu kaun", "tu hai kaun", "kaun hai tu", "who are you in hindi",
         "mera naam", "mera creator", "mera owner", "kisne banaya",
-        "buja", "creater", "creator", "kon banaya", "kahan se aaya"
+        "buja", "creater", "creator", "kon banaya", "kahan se aaya",
+        # Hinglish variants ("tum" and "aap" forms, and the misspellings a
+        # speaker actually types). Without these the question fell through to
+        # the provider, which then invented an identity ("I am Google BARD").
+        "tum kaun", "tum kon", "tum kaun ho", "tum kon ho", "aap kaun",
+        "aap kon", "aap kaun ho", "kya ho tum", "tum kya ho", "tumhe kisne banaya",
+        "tumhara naam", "tumhara name", "tumhara nam", "aapka naam",
+        "apna naam", "tera naam", "tumhari identity",
+    ]
+
+    # Provider/model keywords. Answered from the live configuration, never
+    # guessed: the provider that replies to a request is reported per request.
+    PROVIDER_MODEL_KEYWORDS = [
+        "which model", "what model", "your model", "tum kis model",
+        "kaunsa model", "konsa model", "kis model", "model kya",
+        "your provider", "which provider", "what provider", "kis provider",
+        "kaunsa provider", "konsa provider", "provider kya", "kis ai",
+        "kaunse ai", "konsi ai", "kis llm", "which llm", "what llm",
+        "kaunse brain", "which brain", "kis engine", "which engine",
     ]
     
     # Layer-related keywords
@@ -80,12 +98,17 @@ class IdentityRouter:
         for keyword in self.IDENTITY_KEYWORDS:
             if keyword in query_lower:
                 return True
-        
+
         # Check for layer keywords
         for keyword in self.LAYER_KEYWORDS:
             if keyword in query_lower:
                 return True
-        
+
+        # Check for provider/model keywords
+        for keyword in self.PROVIDER_MODEL_KEYWORDS:
+            if keyword in query_lower:
+                return True
+
         # Check for capability keywords
         for keyword in self.CAPABILITY_KEYWORDS:
             if keyword in query_lower:
@@ -149,6 +172,9 @@ class IdentityRouter:
         
         elif any(k in query_lower for k in ["capability", "skill", "power", "feature", "can you do", "what can you"]):
             return self._what_capabilities()
+
+        elif any(k in query_lower for k in self.PROVIDER_MODEL_KEYWORDS):
+            return self._what_provider_model()
         
         elif any(k in query_lower for k in ["test", "testing", "test cases", "test files", "kya kya test"]):
             return self._what_tests(identity)
@@ -185,6 +211,45 @@ class IdentityRouter:
 
 I am an AI entity on the Genesis Protocol OS. 🖤"""
     
+    def _what_provider_model(self) -> str:
+        """Report the real providers/models, read from the live configuration.
+
+        This is the answer that used to be invented by the provider itself
+        ("I run on Google Vertex AI"). It never guesses and never prints a
+        credential - only the configured provider/model names and availability.
+        """
+        try:
+            from genesis_protocol.agentic.identity import describe_runtime
+            runtime = describe_runtime()
+        except Exception:
+            return (
+                "I can't read my runtime configuration right now, so I won't "
+                "guess which model is behind me. Try the `/api/identity` endpoint."
+            )
+
+        available = runtime.get("providers_available") or []
+        default_provider = runtime.get("default_provider")
+        default_model = runtime.get("default_model")
+
+        if not available:
+            return (
+                "No AI provider is configured in this process, so no model is "
+                "answering - I am running on my own fallback text. Set a provider "
+                "key (e.g. GROQ_API_KEY) to give me a real model."
+            )
+
+        lines = [
+            "**Runtime [EXPLICIT - read from live configuration, not guessed]:**",
+            f"- Entity: {runtime.get('entity', 'GLUTEN')}",
+            f"- Providers available: {', '.join(available)}",
+            f"- Chain default: {default_provider} / {default_model}",
+            "",
+            "The scoring engine may pick a different *configured* provider for a "
+            "given query; the provider and model that actually answered are "
+            "reported with each response. I am not a single fixed model.",
+        ]
+        return "\n".join(lines)
+
     def _what_nickname(self, identity) -> str:
         """Build nickname response with EXPLICIT confidence."""
         return f"My nickname is **{identity.nickname}** [EXPLICIT - hardcoded]. 🖤\n\nYou can call me {identity.nickname}!"
