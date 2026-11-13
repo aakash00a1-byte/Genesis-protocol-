@@ -916,6 +916,15 @@ a claim was verified, single-sourced or a press release.
 `genesis_protocol/integrations/source_credibility.py` labels each result:
 `verified` (recognised newsroom), `developing` (single/unknown source) or
 `promotional-unverified` (wire press release, sponsored, self-reported).
+`TRUSTED_SOURCES` (117 domains) is the single source of truth mapping a domain
+to the publisher names it uses in Google News titles; `TRUSTED_NEWS_DOMAINS`
+and `PUBLISHER_TO_DOMAIN` are derived from it. Publisher names are normalised
+(a trailing site suffix is stripped) and resolved by longest whole-word alias
+prefix, so "Bloomberg.com" and "Business Insider India" resolve to one source,
+while a bare ambiguous name such as "ABC News" (US and Australia) is labelled
+developing rather than attributed to the wrong outlet. Results are rendered as
+Verified / Developing / Promotional-Unverified sections, and the prompt asks
+for the same three sections in the answer.
 Google News links point at news.google.com, so the real attribution is the
 "- Publisher" suffix in the title; `PUBLISHER_TO_DOMAIN` maps known names, and
 an unrecognised publisher is named but not trusted. `web_search` labels every
