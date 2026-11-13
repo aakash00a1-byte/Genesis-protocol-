@@ -12,7 +12,7 @@ These tests pin the fixed contract.
 """
 
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -21,54 +21,60 @@ def _run(coro):
     return asyncio.new_event_loop().run_until_complete(coro)
 
 
+def _agent_with_execute_tool(mock):
+    """Patch the singleton's tool executor, restoring it afterwards.
+
+    ``get_genesis_agent`` / ``get_tool_system`` return shared singletons, so a
+    plain attribute assignment leaks into every later test. ``patch.object``
+    undoes the patch on exit.
+    """
+    from genesis_protocol.ai.agent import get_genesis_agent
+
+    agent = get_genesis_agent()
+    return patch.object(agent.tool_system, "execute_tool", new=mock), agent
+
+
 class TestExecuteToolsReportsOutcome:
     def test_successful_tool_result_is_used(self):
         """A ToolResult carries data; it must be surfaced, not dropped."""
-        from genesis_protocol.ai.agent import get_genesis_agent
         from genesis_protocol.ai.tool_system import ToolResult
 
-        agent = get_genesis_agent()
-        agent.tool_system.execute_tool = AsyncMock(
-            return_value=ToolResult(True, data={"answer": "real data"})
+        patcher, agent = _agent_with_execute_tool(
+            AsyncMock(return_value=ToolResult(True, data={"answer": "real data"}))
         )
-
-        text, failures = _run(agent._execute_tools(["web_search"], "any query"))
+        with patcher:
+            text, failures = _run(agent._execute_tools(["web_search"], "any query"))
 
         assert "real data" in text
         assert failures == []
 
     def test_failed_tool_is_reported_as_failure(self):
-        from genesis_protocol.ai.agent import get_genesis_agent
         from genesis_protocol.ai.tool_system import ToolResult
 
-        agent = get_genesis_agent()
-        agent.tool_system.execute_tool = AsyncMock(
-            return_value=ToolResult(False, error="search failed")
+        patcher, agent = _agent_with_execute_tool(
+            AsyncMock(return_value=ToolResult(False, error="search failed"))
         )
-
-        text, failures = _run(agent._execute_tools(["web_search"], "any query"))
+        with patcher:
+            text, failures = _run(agent._execute_tools(["web_search"], "any query"))
 
         assert failures, "a failed tool must be reported"
         assert "search failed" in failures[0]
 
     def test_success_without_data_is_a_failure(self):
-        from genesis_protocol.ai.agent import get_genesis_agent
         from genesis_protocol.ai.tool_system import ToolResult
 
-        agent = get_genesis_agent()
-        agent.tool_system.execute_tool = AsyncMock(return_value=ToolResult(True, data=None))
-
-        _, failures = _run(agent._execute_tools(["web_search"], "any query"))
+        patcher, agent = _agent_with_execute_tool(
+            AsyncMock(return_value=ToolResult(True, data=None))
+        )
+        with patcher:
+            _, failures = _run(agent._execute_tools(["web_search"], "any query"))
 
         assert failures
 
     def test_tool_exception_is_reported(self):
-        from genesis_protocol.ai.agent import get_genesis_agent
-
-        agent = get_genesis_agent()
-        agent.tool_system.execute_tool = AsyncMock(side_effect=RuntimeError("boom"))
-
-        _, failures = _run(agent._execute_tools(["web_search"], "any query"))
+        patcher, agent = _agent_with_execute_tool(AsyncMock(side_effect=RuntimeError("boom")))
+        with patcher:
+            _, failures = _run(agent._execute_tools(["web_search"], "any query"))
 
         assert failures and "boom" in failures[0]
 

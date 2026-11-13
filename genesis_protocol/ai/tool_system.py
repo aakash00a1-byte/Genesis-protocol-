@@ -175,27 +175,50 @@ class ToolSystem:
     # Tool Implementations
     
     async def _tool_web_search(self, params: Dict) -> ToolResult:
-        """Web search using Tavily."""
+        """Web search: Tavily when configured, else a key-free fallback.
+
+        The previous version imported ``TavilyIntegration``, a name that does
+        not exist, so every call raised ImportError and no search ever ran.
+        """
         query = params.get("query", "")
-        depth = params.get("depth", "basic")
-        
         if not query:
             return ToolResult(False, error="No query provided")
-        
+
+        errors = []
+
+        # Preferred: Tavily, when an API key is configured.
         try:
-            from genesis_protocol.integrations.tavily_integration import TavilyIntegration
-            tavily = TavilyIntegration()
-            result = await tavily.search(query, depth=depth)
-            
-            if result.get("success"):
-                return ToolResult(True, data={
-                    "results": result.get("results", []),
-                    "answer": result.get("answer", "")
-                })
+            from genesis_protocol.integrations.tavily_integration import TavilyClient
+            tavily = TavilyClient()
+            if tavily.is_configured():
+                result = await tavily.search(query)
+                if result.get("results"):
+                    return ToolResult(True, data={
+                        "results": result.get("results", []),
+                        "answer": result.get("answer", ""),
+                        "source": "tavily",
+                    })
+                errors.append(f"tavily: {result.get('error') or 'no results'}")
             else:
-                return ToolResult(False, error=result.get("error", "Search failed"))
+                errors.append("tavily: not configured")
         except Exception as e:
-            return ToolResult(False, error=f"Web search error: {e}")
+            errors.append(f"tavily: {e}")
+
+        # Fallback: key-free providers, so live data still works without a key.
+        try:
+            from genesis_protocol.integrations.key_free_search import get_key_free_search
+            fallback = await get_key_free_search().search(query)
+            if fallback.get("results"):
+                return ToolResult(True, data={
+                    "results": fallback["results"],
+                    "answer": "",
+                    "source": fallback.get("source", "key_free"),
+                })
+            errors.append(f"key_free: {fallback.get('error')}")
+        except Exception as e:
+            errors.append(f"key_free: {e}")
+
+        return ToolResult(False, error="Web search failed: " + "; ".join(errors))
     
     async def _tool_memory_store(self, params: Dict) -> ToolResult:
         """Store in memory."""
