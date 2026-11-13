@@ -906,3 +906,31 @@ exact number, GLUTEN says it cannot confirm rather than guessing.
 
 Egress note: `html.duckduckgo.com`, `news.google.com` and `en.wikipedia.org`
 were reachable from the Space. Provider order matters - keep each independent.
+
+## Source credibility labels and exact live facts (2026-11-13)
+
+Finding a headline is not confirming it. The agent used to cite generic
+homepages (downdetector.com) instead of article links and could not say whether
+a claim was verified, single-sourced or a press release.
+
+`genesis_protocol/integrations/source_credibility.py` labels each result:
+`verified` (recognised newsroom), `developing` (single/unknown source) or
+`promotional-unverified` (wire press release, sponsored, self-reported).
+Google News links point at news.google.com, so the real attribution is the
+"- Publisher" suffix in the title; `PUBLISHER_TO_DOMAIN` maps known names, and
+an unrecognised publisher is named but not trusted. `web_search` labels every
+result and keeps its URL; the agent renders label + source + link, and the
+system prompt requires citing the real link and stating source quality.
+
+`genesis_protocol/integrations/live_facts.py` adds exact, key-free tools:
+`get_weather` (wttr.in) and `get_exchange_rate` (Frankfurter/ECB). Search
+snippets rarely carry the number, so these questions now route to the provider
+instead of being refused or guessed. Open-Meteo is unreachable from the Space
+(handshake timeout); wttr.in and api.frankfurter.app work.
+
+Verified live: news answers carry labels and real article links and mark
+unconfirmed items as unverified; "weather in Delhi" returns 24C from wttr.in;
+"USD to INR" returns 94.25 dated 2026-11-13.
+
+Note: the sandbox lost its user site-packages at one point; reinstall with
+`python3 -m pip install --user -r requirements.txt pytest pytest-asyncio`.
