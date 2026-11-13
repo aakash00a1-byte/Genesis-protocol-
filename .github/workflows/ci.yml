@@ -42,6 +42,15 @@ jobs:
         pip install -r requirements.txt
         pip install pytest
 
+    - name: Prepare the sandbox root the V6 suite expects
+      # The kernel's sandbox root is /workspace; the suite needs the directory to
+      # exist (creating it needs root). genesis_v5/tests/conftest.py points
+      # /workspace/project at whatever checkout is running, so it also works in
+      # the self-improve gate's scratch worktree.
+      run: |
+        sudo mkdir -p /workspace
+        sudo chmod 777 /workspace
+
     - name: Run test suite
       # No path argument: pyproject testpaths covers both tests/ and
       # genesis_v5/tests/. Pinning only tests/ left 390 real tests unrun, so
