@@ -1,51 +1,20 @@
-"""Make the genesis_v5 suite runnable wherever it is checked out.
+"""Make the top-level ``genesis`` package importable when the suite runs.
 
-Two things the suite needs that no runner provides by default:
+These tests do ``from genesis.core import ...``. That package lives under
+``genesis_v5/``; neither the repo root nor the installed environment exposes it,
+so collection would die with ``ModuleNotFoundError: No module named 'genesis'``.
+That is one of the reasons the suite never ran.
 
-1. the top-level ``genesis`` package (``from genesis.core import ...``), which
-   lives under ``genesis_v5/`` — without it, collection dies with
-   ``ModuleNotFoundError: No module named 'genesis'``;
-2. the production sandbox layout: the tools are allowed under ``/workspace``
-   and several tests read ``/workspace/project/...``. The container supplies
-   this, CI and the self-improve verification gate do not.
-
-Missing either made the suite uncollectable or red, which is why it was never
-run — and why genuinely-tested code could be reported as "untested". Point
-``/workspace/project`` at this checkout's root so the tests always exercise the
-code under test (the worktree in the gate, not some stale copy).
+The other requirement — the sandbox root ``/workspace`` with the checkout at
+``/workspace/project`` — is provided by the runner (CI bind-mounts the checkout
+there). It cannot be faked with a symlink: the sandbox resolves symlinks with
+``realpath`` on purpose, so a linked ``/workspace/project`` is correctly judged
+"outside the sandbox".
 """
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[2]  # <repo or worktree>/genesis_v5/..
-sys.path.insert(0, str(_ROOT / "genesis_v5"))
-
-_SANDBOX = Path("/workspace")
-
-
-def _ensure_sandbox_layout() -> None:
-    """Best-effort: expose this checkout as ``/workspace/project``.
-
-    ``/workspace`` itself is created by the runner (it needs root); if it is
-    absent we cannot help, and the tests that need it fail loudly rather than
-    being silently skipped.
-    """
-    if not _SANDBOX.is_dir():
-        return
-    link = _SANDBOX / "project"
-    if link.is_symlink() and Path(link).resolve() == _ROOT:
-        return
-    if link.exists() and not link.is_symlink():
-        return
-    try:
-        if link.is_symlink():
-            link.unlink()
-        link.symlink_to(_ROOT)
-    except OSError:
-        pass
-
-
-_ensure_sandbox_layout()
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "genesis_v5"))
 

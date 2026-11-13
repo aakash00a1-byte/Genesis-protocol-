@@ -85,14 +85,14 @@ jobs:
           python3 -m pip install --quiet -r requirements.txt
           python3 -m pip install --quiet pytest
 
-      - name: Prepare the sandbox root the verification suite expects
-        # The kernel's sandbox root is /workspace; the V6 suite needs it to exist
-        # (creating it needs root). genesis_v5/tests/conftest.py points
-        # /workspace/project at the checkout being verified, so the gate can run
-        # both suites instead of a bare `pytest tests/`.
+      - name: Prepare the sandbox layout the verification suite asserts
+        # The V6 kernel's sandbox root is /workspace and several tests read
+        # /workspace/project/. A bind mount (not a symlink — the sandbox resolves
+        # symlinks with realpath on purpose) puts the checkout there, so the gate
+        # can run the same both-suite command as CI rather than only tests/.
         run: |
-          sudo mkdir -p /workspace
-          sudo chmod 777 /workspace
+          sudo mkdir -p /workspace/project
+          sudo mount --bind "$GITHUB_WORKSPACE" /workspace/project
 
       - name: Run the continuous self-improvement loop
         env:
