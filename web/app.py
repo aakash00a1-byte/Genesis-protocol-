@@ -423,12 +423,16 @@ def admin_required(f):
     """Decorator to require admin role."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # An /api/ caller gets JSON, never an HTML redirect: a 302 to /login or
+        # /chat is unreadable to an API client and looks like success to a
+        # redirect-following one. Mirrors login_required.
+        wants_json = request.is_json or request.path.startswith('/api/')
         if 'user_id' not in session:
-            if request.is_json:
-                return jsonify({'error': 'Unauthorized'}), 401
+            if wants_json:
+                return jsonify({'error': 'Unauthorized', 'login_required': True}), 401
             return redirect(url_for('login'))
         if session.get('role') != 'admin':
-            if request.is_json:
+            if wants_json:
                 return jsonify({'error': 'Admin access required'}), 403
             return redirect(url_for('chat'))
         return f(*args, **kwargs)
