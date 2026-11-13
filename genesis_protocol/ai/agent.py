@@ -353,9 +353,17 @@ class GenesisAgent:
             tools_needed = self._detect_tool_needs(query)
             
             if tools_needed:
-                # Use tools first
-                tool_results = await self._execute_tools(tools_needed, query)
+                tool_results, failures = await self._execute_tools(tools_needed, query)
                 context = f"{context}\n\nTool results:\n{tool_results}"
+                if failures:
+                    context += (
+                        "\n\nTool failure warning: the following tools were needed "
+                        "but did NOT return usable data: " + "; ".join(failures) + ". "
+                        "Do NOT invent news, weather, prices, dates, URLs or any "
+                        "other live fact to fill the gap. State plainly that the "
+                        "live lookup failed and that you cannot confirm current "
+                        "information without it."
+                    )
             
             # Use normal processing with enhanced context
             result = await self._process_normal(query, context)
@@ -431,23 +439,38 @@ class GenesisAgent:
         
         return tools
     
-    async def _execute_tools(self, tools: List[str], query: str) -> str:
-        """Execute required tools and return results."""
+    async def _execute_tools(self, tools: List[str], query: str) -> tuple:
+        """Execute required tools.
+
+        Returns ``(results_text, failures)``. ``failures`` lists tools that were
+        needed but returned nothing usable, so the caller can tell the model not
+        to invent an answer. Previously a failed or mis-read tool produced
+        "No tool results" and the model filled the gap with fabricated news,
+        weather and prices.
+        """
         results = []
-        
+        failures = []
+
         for tool_name in tools:
             try:
                 params = {"query": query} if tool_name in ["web_search", "memory_recall"] else {}
                 result = await self.tool_system.execute_tool(tool_name, params)
-                
-                if result.success and result.response:
+
+                # ToolResult carries ``data`` (and ``error``); it has no
+                # ``response`` attribute. Reading ``result.response`` raised
+                # AttributeError, which the except below swallowed, so a
+                # successful search was silently discarded.
+                if result.success and result.data:
                     results.append(f"[{tool_name}]: {result.data}")
                     self._record_tool_use(tool_name)
+                else:
+                    failures.append(f"{tool_name}: {result.error or 'no data returned'}")
             except Exception as e:
                 self.logger.warning(f"Tool {tool_name} failed: {e}")
-        
-        return "\n".join(results) if results else "No tool results"
-    
+                failures.append(f"{tool_name}: {e}")
+
+        return ("\n".join(results) if results else "No tool results"), failures
+
     def _record_tool_use(self, tool_name: str):
         """Record tool usage for tracking."""
         # Store in agent state
@@ -463,6 +486,7 @@ class GenesisAgent:
         """Get system prompt for responses with live info."""
         
         # Get live info
+        info = None
         try:
             from genesis_protocol.integrations import get_live_info_service
             service = get_live_info_service()
@@ -478,12 +502,22 @@ class GenesisAgent:
             news_headline = "Unknown"
         
         return f"""**IMPORTANT - REAL-TIME DATA RULES:**
-- TODAY IS: {info.date if info.date else "Unknown"}
+- TODAY IS: {info.date if info and info.date else "Unknown"}
 - CURRENT TIME: {live_time}
 - Do NOT guess the date - use the date provided above
 - If user asks about weather, news, or current events - USE WEB SEARCH
 - Your training data is OLD - always verify with live tools for current info
 - NEVER say "according to my knowledge" or "as of my last update"
+
+**HONESTY RULE - NON-NEGOTIABLE:**
+- NEVER invent live facts: news headlines, weather, prices, exchange rates,
+  dates, URLs, scores or any current event. Not even as an example.
+- If the context above contains a "Tool failure warning", the live lookup did
+  NOT succeed. Say so plainly and stop. Do NOT narrate a fake action such as
+  "*searching...*" or "*Google search karke dekhta hoon*" and then present a
+  made-up result. A fabricated answer is worse than admitting the tool failed.
+- Only state a live fact if it appears in the tool results above. Otherwise say
+  the lookup failed and that you cannot confirm current information.
 
 **RESPONSE STYLE - CRITICAL:**
 - Give DIRECT, CONCISE answers only

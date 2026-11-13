@@ -71,7 +71,14 @@ class AutonomousModeManager:
         "research", "find all", "search for",
         "analyze", "investigate", "compare",
         "write code", "create bot", "make app",
-        "build website", "develop project"
+        "build website", "develop project",
+        # Live-data queries need web search, so route them through autonomous
+        # mode. Without these a "latest news" or "weather" question stayed in
+        # normal mode, no search ran, and the model invented the facts.
+        "news", "khabar", "headline", "latest", "breaking",
+        "weather", "mausam", "forecast", "temperature",
+        "current events", "right now", "as of today", "today's",
+        "stock price", "share price", "exchange rate", "live score"
     ]
     
     def __init__(self):
