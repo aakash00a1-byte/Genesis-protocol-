@@ -9,7 +9,9 @@ services:
     buildCommand: cd web && pip install --no-cache-dir -r requirements.txt && pip install gunicorn
     startCommand: cd web && gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
     healthCheckPath: /api/health
-    autoDeploy: true
+    # Off: Hugging Face Spaces is the live host. Render is kept only as a
+    # standby blueprint; auto-deploying on every push is noise.
+    autoDeploy: false
     region: singapore
     envVars:
       - key: SECRET_KEY
