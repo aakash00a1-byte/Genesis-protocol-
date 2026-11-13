@@ -69,6 +69,27 @@ class ToolSystem:
             handler=self._tool_web_search
         ))
         
+        # Weather (exact, key-free)
+        self.register_tool(Tool(
+            name="get_weather",
+            description="Get exact current weather for a place. Use when the user asks about weather, temperature or forecast.",
+            parameters={
+                "location": {"type": "string", "description": "City or place name", "required": True}
+            },
+            handler=self._tool_get_weather
+        ))
+
+        # Currency exchange rate (exact, key-free)
+        self.register_tool(Tool(
+            name="get_exchange_rate",
+            description="Get the exact exchange rate between two currencies. Use when the user asks for a currency conversion rate.",
+            parameters={
+                "base": {"type": "string", "description": "Base currency code, e.g. USD", "required": True},
+                "quote": {"type": "string", "description": "Quote currency code, e.g. INR", "required": True}
+            },
+            handler=self._tool_get_exchange_rate
+        ))
+
         # Memory Store
         self.register_tool(Tool(
             name="memory_store",
@@ -193,8 +214,10 @@ class ToolSystem:
             if tavily.is_configured():
                 result = await tavily.search(query)
                 if result.get("results"):
+                    from genesis_protocol.integrations.source_credibility import assess
+                    labelled = assess(result.get("results", []))
                     return ToolResult(True, data={
-                        "results": result.get("results", []),
+                        "results": labelled,
                         "answer": result.get("answer", ""),
                         "source": "tavily",
                     })
@@ -209,8 +232,10 @@ class ToolSystem:
             from genesis_protocol.integrations.key_free_search import get_key_free_search
             fallback = await get_key_free_search().search(query)
             if fallback.get("results"):
+                from genesis_protocol.integrations.source_credibility import assess
+                labelled = assess(fallback["results"])
                 return ToolResult(True, data={
-                    "results": fallback["results"],
+                    "results": labelled,
                     "answer": "",
                     "source": fallback.get("source", "key_free"),
                 })
@@ -220,6 +245,24 @@ class ToolSystem:
 
         return ToolResult(False, error="Web search failed: " + "; ".join(errors))
     
+    async def _tool_get_weather(self, params: Dict) -> ToolResult:
+        """Exact current weather via a key-free provider."""
+        from genesis_protocol.integrations.live_facts import get_weather
+
+        data = await get_weather(params.get("location", ""))
+        if data.get("error"):
+            return ToolResult(False, error=data["error"])
+        return ToolResult(True, data=data)
+
+    async def _tool_get_exchange_rate(self, params: Dict) -> ToolResult:
+        """Exact reference exchange rate via a key-free provider."""
+        from genesis_protocol.integrations.live_facts import get_exchange_rate
+
+        data = await get_exchange_rate(params.get("base", ""), params.get("quote", ""))
+        if data.get("error"):
+            return ToolResult(False, error=data["error"])
+        return ToolResult(True, data=data)
+
     async def _tool_memory_store(self, params: Dict) -> ToolResult:
         """Store in memory."""
         key = params.get("key", "")

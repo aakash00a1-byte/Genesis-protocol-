@@ -93,12 +93,19 @@ class TestLiveDataQueriesRouteToTools:
 
     @pytest.mark.parametrize("query", [
         "what is the latest news about AI today",
-        "what is the weather in Delhi",
     ])
     def test_live_data_query_detects_web_search(self, query):
         from genesis_protocol.ai.agent import get_genesis_agent
 
         assert "web_search" in get_genesis_agent()._detect_tool_needs(query)
+
+    def test_weather_query_uses_exact_provider_not_search(self):
+        """Weather has an exact key-free provider, so it must not go to search."""
+        from genesis_protocol.ai.agent import get_genesis_agent
+
+        tools = get_genesis_agent()._detect_tool_needs("what is the weather in Delhi")
+        assert "get_weather" in tools
+        assert "web_search" not in tools
 
 
 class TestHonestyRuleInPrompt:

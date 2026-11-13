@@ -66,9 +66,14 @@ class KeyFreeSearch:
         """Try each provider in order; return the first with results."""
         errors: List[str] = []
 
-        providers = [("duckduckgo", self._search_duckduckgo)]
-        if any(hint in query.lower() for hint in _NEWS_HINTS):
-            providers.append(("google_news", self._search_google_news))
+        is_news = any(hint in query.lower() for hint in _NEWS_HINTS)
+        if is_news:
+            # Google News returns real headlines attributed to a publisher;
+            # DuckDuckGo mostly returns aggregator landing pages for news.
+            providers = [("google_news", self._search_google_news),
+                         ("duckduckgo", self._search_duckduckgo)]
+        else:
+            providers = [("duckduckgo", self._search_duckduckgo)]
         providers.append(("wikipedia", self._search_wikipedia))
 
         for name, provider in providers:
@@ -127,11 +132,20 @@ class KeyFreeSearch:
             response.text,
             re.S,
         )
-        return [
-            {"title": _strip_tags(t), "url": l.strip(),
-             "content": f"Published {_strip_tags(p)}"}
-            for t, l, p in items[:max_results]
-        ]
+        results = []
+        for t, l, p in items[:max_results]:
+            title = _strip_tags(t)
+            publisher = None
+            if " - " in title:
+                head, _, tail = title.rpartition(" - ")
+                if head and len(tail) <= 40:
+                    title, publisher = head, tail
+            entry = {"title": title, "url": l.strip(),
+                     "content": f"Published {_strip_tags(p)}"}
+            if publisher:
+                entry["publisher"] = publisher
+            results.append(entry)
+        return results
 
     async def _search_wikipedia(self, query: str, max_results: int) -> List[Dict]:
         response = await self._client.get(

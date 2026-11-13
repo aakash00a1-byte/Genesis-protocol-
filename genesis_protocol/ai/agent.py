@@ -13,6 +13,7 @@ Operates in NORMAL or AUTONOMOUS mode.
 """
 
 import asyncio
+import json
 import logging
 import re
 from typing import Dict, List, Optional, Any
@@ -424,7 +425,26 @@ class GenesisAgent:
             "kya hai", "kaun sa", "kitna", "kaisa",
         ]
         
-        if any(kw in query_lower for kw in realtime_keywords):
+        # Weather and currency have exact, key-free providers, so they do not
+        # need a search. Snippets rarely carry the number anyway.
+        weather_keywords = ["weather", "mausam", "baarish", "garmi", "sardi",
+                            "temperature", "temprature", "forecast", "thand",
+                            "sunny", "rainy", "cloudy"]
+        fx_keywords = ["exchange rate", "usd", "inr", "eur", "gbp", "rupee",
+                       "dollar", "euro", "pound", "currency", "conversion rate"]
+
+        is_weather = any(kw in query_lower for kw in weather_keywords)
+        is_fx = any(kw in query_lower for kw in fx_keywords) and (
+            "rate" in query_lower or "convert" in query_lower
+            or "currency" in query_lower or "usd" in query_lower
+        )
+
+        if is_weather:
+            tools.append("get_weather")
+        if is_fx:
+            tools.append("get_exchange_rate")
+
+        if any(kw in query_lower for kw in realtime_keywords) and not is_weather and not is_fx:
             tools.append("web_search")
         
         # Code execution detection
@@ -453,7 +473,7 @@ class GenesisAgent:
 
         for tool_name in tools:
             try:
-                params = {"query": query} if tool_name in ["web_search", "memory_recall"] else {}
+                params = self._build_tool_params(tool_name, query)
                 result = await self.tool_system.execute_tool(tool_name, params)
 
                 # ToolResult carries ``data`` (and ``error``); it has no
@@ -461,7 +481,7 @@ class GenesisAgent:
                 # AttributeError, which the except below swallowed, so a
                 # successful search was silently discarded.
                 if result.success and result.data:
-                    results.append(f"[{tool_name}]: {result.data}")
+                    results.append(f"[{tool_name}]:\n{self._format_tool_data(tool_name, result.data)}")
                     self._record_tool_use(tool_name)
                 else:
                     failures.append(f"{tool_name}: {result.error or 'no data returned'}")
@@ -470,6 +490,58 @@ class GenesisAgent:
                 failures.append(f"{tool_name}: {e}")
 
         return ("\n".join(results) if results else "No tool results"), failures
+
+    # Common words that are never a place or currency name.
+    _STOPWORDS = {
+        "what", "whats", "is", "the", "in", "of", "at", "for", "today",
+        "now", "current", "currently", "ka", "ki", "ke", "mein", "me", "hai",
+        "weather", "temperature", "forecast", "aaj", "abhi", "rate",
+        "exchange", "currency", "convert", "conversion", "please", "tell",
+        "and", "to", "from", "how", "much", "does", "do",
+        "mausam", "kaisa", "kaisi", "kaise", "kya", "bata", "batao", "kitna",
+        "kitni", "hain", "h", "hai", "degree", "degrees", "celsius",
+        "fahrenheit", "sunny", "rainy", "cloudy", "forecast",
+    }
+
+    def _build_tool_params(self, tool_name: str, query: str) -> Dict:
+        """Extract the parameters each tool needs from a free-text query."""
+        if tool_name in ("web_search", "memory_recall"):
+            return {"query": query}
+
+        if tool_name == "get_weather":
+            words = [w for w in re.findall(r"[A-Za-z]+", query)
+                     if w.lower() not in self._STOPWORDS]
+            return {"location": " ".join(words).strip() or query.strip()}
+
+        if tool_name == "get_exchange_rate":
+            codes = re.findall(r"\b[A-Z]{3}\b", query.upper())
+            # Fall back to well-known currency words when no ISO code is present.
+            names = {"dollar": "USD", "rupee": "INR", "euro": "EUR",
+                     "pound": "GBP", "yen": "JPY"}
+            for word, code in names.items():
+                if word in query.lower() and code not in codes:
+                    codes.append(code)
+            base = codes[0] if codes else "USD"
+            quote = next((c for c in codes[1:] if c != base), "INR")
+            return {"base": base, "quote": quote}
+
+        return {}
+
+    def _format_tool_data(self, tool_name: str, data) -> str:
+        """Render tool data as text the model can cite without guessing."""
+        if tool_name == "web_search" and isinstance(data, dict):
+            from genesis_protocol.integrations.source_credibility import (
+                format_for_model, overall,
+            )
+            results = data.get("results", [])
+            header = f"overall confidence: {overall(results)}"
+            body = format_for_model(results)
+            answer = data.get("answer")
+            if answer:
+                body += f"\n- [summary] {answer}"
+            return f"{header}\n{body}"
+
+        return json.dumps(data, ensure_ascii=False, default=str)
 
     def _record_tool_use(self, tool_name: str):
         """Record tool usage for tracking."""
@@ -518,6 +590,20 @@ class GenesisAgent:
   made-up result. A fabricated answer is worse than admitting the tool failed.
 - Only state a live fact if it appears in the tool results above. Otherwise say
   the lookup failed and that you cannot confirm current information.
+
+**CITATION & SOURCE-QUALITY RULES - CRITICAL:**
+- When you report a news item, include its real source link from the tool
+  results. Never substitute a generic homepage for the article URL, and never
+  invent a URL.
+- Copy the credibility label that the tool gives each item and explain it in
+  plain words:
+  - verified -> "verified: reported by <source>"
+  - developing -> "developing: only <source> is reporting this so far"
+  - promotional-unverified -> "promotional/unverified: this is a press release
+    or self-reported claim, not independent reporting"
+- Never present a promotional or single-source item as confirmed fact. Say
+  plainly how strong the evidence is. If the overall confidence is not
+  verified, say so before the headlines.
 
 **RESPONSE STYLE - CRITICAL:**
 - Give DIRECT, CONCISE answers only
