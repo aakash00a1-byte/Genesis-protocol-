@@ -11,23 +11,154 @@ much a claim is actually worth instead of presenting everything as fact:
 
 The labels are deliberately conservative: unknown is treated as unverified, not
 as trusted.
+
+``TRUSTED_SOURCES`` is the single source of truth: a domain maps to the
+publisher names it uses in Google News titles. ``TRUSTED_NEWS_DOMAINS`` and
+``PUBLISHER_TO_DOMAIN`` are derived from it, so the two can never drift apart.
 """
 
 from typing import Any, Dict, List
 from urllib.parse import urlparse
 
-# Recognised news organisations. Not exhaustive, but these are the ones that
-# appear in general search results and carry editorial responsibility.
-TRUSTED_NEWS_DOMAINS = {
-    "reuters.com", "apnews.com", "bbc.com", "bbc.co.uk", "theguardian.com",
-    "nytimes.com", "washingtonpost.com", "economist.com", "ft.com",
-    "bloomberg.com", "cnbc.com", "wsj.com", "forbes.com", "cnn.com",
-    "thehindu.com", "indianexpress.com", "timesofindia.indiatimes.com",
-    "hindustantimes.com", "livemint.com", "business-standard.com",
-    "economictimes.indiatimes.com", "ndtv.com", "thewire.in", "scroll.in",
-    "aljazeera.com", "npr.org", "abc.net.au", "dw.com", "nature.com",
-    "science.org", "techcrunch.com", "arstechnica.com", "wired.com",
-    "theverge.com", "zdnet.com", "venturebeat.com", "theinformation.com",
+# Domain -> the publisher names it appears under in Google News titles.
+# Grouped by region only for readability; the mapping is what matters.
+TRUSTED_SOURCES: Dict[str, tuple] = {
+    # --- International wires and broadcasters ---
+    "reuters.com": ("reuters",),
+    "apnews.com": ("the associated press", "ap", "associated press"),
+    "afp.com": ("afp", "agence france-presse"),
+    "bbc.com": ("bbc news", "bbc", "bbc world"),
+    "aljazeera.com": ("al jazeera", "al jazeera english"),
+    "dw.com": ("deutsche welle", "dw"),
+    "france24.com": ("france 24",),
+    "euronews.com": ("euronews",),
+    "cnn.com": ("cnn",),
+    "npr.org": ("npr",),
+    "theguardian.com": ("the guardian", "guardian"),
+
+    # --- United States ---
+    "nytimes.com": ("the new york times",),
+    "washingtonpost.com": ("the washington post", "washington post"),
+    "wsj.com": ("the wall street journal", "wsj"),
+    "usatoday.com": ("usa today",),
+    "latimes.com": ("los angeles times",),
+    "nbcnews.com": ("nbc news",),
+    "abcnews.go.com": ("abc news",),
+    "cbsnews.com": ("cbs news",),
+    "politico.com": ("politico",),
+    "axios.com": ("axios",),
+    "theatlantic.com": ("the atlantic",),
+    "time.com": ("time",),
+    "newsweek.com": ("newsweek",),
+    "vox.com": ("vox",),
+    "slate.com": ("slate",),
+    "businessinsider.com": ("business insider",),
+    "cnbc.com": ("cnbc",),
+    "forbes.com": ("forbes",),
+    "fortune.com": ("fortune",),
+    "barrons.com": ("barron's",),
+    "marketwatch.com": ("marketwatch",),
+    "bloomberg.com": ("bloomberg",),
+    "theinformation.com": ("the information",),
+
+    # --- United Kingdom ---
+    "telegraph.co.uk": ("the telegraph", "telegraph"),
+    "thetimes.co.uk": ("the times",),
+    "independent.co.uk": ("the independent",),
+    "ft.com": ("financial times",),
+    "economist.com": ("the economist",),
+    "news.sky.com": ("sky news",),
+    "thesun.co.uk": ("the sun",),
+    "dailymail.co.uk": ("daily mail",),
+
+    # --- India ---
+    "thehindu.com": ("the hindu",),
+    "indianexpress.com": ("the indian express", "indian express"),
+    "timesofindia.indiatimes.com": ("the times of india", "times of india"),
+    "hindustantimes.com": ("hindustan times",),
+    "livemint.com": ("livemint", "mint"),
+    "business-standard.com": ("business standard",),
+    "economictimes.indiatimes.com": ("the economic times", "economic times"),
+    "ndtv.com": ("ndtv",),
+    "thewire.in": ("the wire",),
+    "scroll.in": ("scroll.in",),
+    "indiatoday.in": ("india today",),
+    "firstpost.com": ("firstpost",),
+    "theprint.in": ("the print",),
+    "deccanherald.com": ("deccan herald",),
+    "telegraphindia.com": ("the telegraph india",),
+    "moneycontrol.com": ("moneycontrol",),
+    "financialexpress.com": ("the financial express",),
+    "zeenews.india.com": ("zee news",),
+    "news18.com": ("news18",),
+    "abplive.com": ("abp live",),
+    "tribuneindia.com": ("the tribune",),
+
+    # --- Technology ---
+    "techcrunch.com": ("techcrunch",),
+    "arstechnica.com": ("ars technica",),
+    "wired.com": ("wired",),
+    "theverge.com": ("the verge",),
+    "zdnet.com": ("zdnet",),
+    "venturebeat.com": ("venturebeat",),
+    "theregister.com": ("the register",),
+    "engadget.com": ("engadget",),
+    "gizmodo.com": ("gizmodo",),
+    "cnet.com": ("cnet",),
+    "macrumors.com": ("macrumors",),
+    "9to5mac.com": ("9to5mac",),
+    "androidpolice.com": ("android police",),
+    "techradar.com": ("techradar",),
+    "thenextweb.com": ("the next web",),
+    "spectrum.ieee.org": ("ieee spectrum",),
+    "restofworld.org": ("rest of world",),
+    "news.mit.edu": ("mit news",),
+    "technologyreview.com": ("mit technology review",),
+
+    # --- Science and health ---
+    "nature.com": ("nature",),
+    "science.org": ("science",),
+    "sciencedaily.com": ("sciencedaily",),
+    "newscientist.com": ("new scientist",),
+    "scientificamerican.com": ("scientific american",),
+    "space.com": ("space.com",),
+    "nasa.gov": ("nasa",),
+    "phys.org": ("phys.org",),
+    "thelancet.com": ("the lancet",),
+    "nejm.org": ("the new england journal of medicine",),
+    "statnews.com": ("stat",),
+    "quantamagazine.org": ("quanta magazine",),
+    "medicalxpress.com": ("medical xpress",),
+
+    # --- Business and analysis ---
+    "hbr.org": ("harvard business review",),
+
+    # --- Asia-Pacific ---
+    "scmp.com": ("south china morning post",),
+    "straitstimes.com": ("the straits times",),
+    "channelnewsasia.com": ("cna", "channel newsasia"),
+    "abc.net.au": ("abc news", "abc news australia"),
+    "smh.com.au": ("the sydney morning herald",),
+    "theage.com.au": ("the age",),
+    "japantimes.co.jp": ("the japan times",),
+    "koreaherald.com": ("the korea herald",),
+    "asia.nikkei.com": ("nikkei asia",),
+    "caixinglobal.com": ("caixin",),
+
+    # --- Europe, Middle East, Africa ---
+    "lemonde.fr": ("le monde",),
+    "spiegel.de": ("der spiegel",),
+    "haaretz.com": ("haaretz",),
+    "jpost.com": ("the jerusalem post",),
+    "timesofisrael.com": ("the times of israel",),
+    "middleeasteye.net": ("middle east eye",),
+    "alarabiya.net": ("al arabiya",),
+    "africanews.com": ("africanews",),
+
+    # --- Canada ---
+    "cbc.ca": ("cbc news",),
+    "theglobeandmail.com": ("the globe and mail",),
+    "globalnews.ca": ("global news",),
 }
 
 # Wire services whose content is normally paid/self-submitted, i.e. promotional
@@ -36,46 +167,46 @@ PRESS_RELEASE_DOMAINS = {
     "globenewswire.com", "prnewswire.com", "businesswire.com", "accesswire.com",
     "einpresswire.com", "prlog.org", "openpr.com", "newsfilecorp.com",
     "pressreleasepoint.com", "issuewire.com", "send2press.com",
+    "prweb.com", "newswire.com", "digitaljournal.com", "streetinsider.com",
 }
 
 # Words that mark content as paid or self-promotional.
 PROMOTIONAL_MARKERS = (
     "sponsored", "press release", "prnewswire", "paid post", "advertorial",
     "promoted content", "partner content", "brand post", "self-reported",
+    "sponsored content", "in partnership with", "brought to you by",
+    "advertisement feature",
 )
 
 LABEL_VERIFIED = "verified"
 LABEL_DEVELOPING = "developing"
 LABEL_PROMOTIONAL = "promotional-unverified"
 
+# Derived views, kept in sync automatically.
+TRUSTED_NEWS_DOMAINS = set(TRUSTED_SOURCES)
 
-# Publisher names as they appear in Google News titles, mapped to their domain.
-# Google News links point at news.google.com, so the title's "- Publisher" suffix
-# is the real attribution.
-PUBLISHER_TO_DOMAIN = {
-    "reuters": "reuters.com", "the associated press": "apnews.com",
-    "ap": "apnews.com", "bbc news": "bbc.com", "bbc": "bbc.com",
-    "the guardian": "theguardian.com", "the new york times": "nytimes.com",
-    "the washington post": "washingtonpost.com", "the economist": "economist.com",
-    "financial times": "ft.com", "bloomberg": "bloomberg.com",
-    "cnbc": "cnbc.com", "the wall street journal": "wsj.com", "wsj": "wsj.com",
-    "forbes": "forbes.com", "cnn": "cnn.com", "the hindu": "thehindu.com",
-    "the indian express": "indianexpress.com",
-    "the times of india": "timesofindia.indiatimes.com",
-    "hindustan times": "hindustantimes.com", "livemint": "livemint.com",
-    "mint": "livemint.com", "business standard": "business-standard.com",
-    "the economic times": "economictimes.indiatimes.com", "ndtv": "ndtv.com",
-    "al jazeera": "aljazeera.com", "al jazeera english": "aljazeera.com",
-    "npr": "npr.org", "abc news": "abc.net.au", "deutsche welle": "dw.com",
-    "nature": "nature.com", "science": "science.org",
-    "techcrunch": "techcrunch.com", "ars technica": "arstechnica.com",
-    "wired": "wired.com", "the verge": "theverge.com", "zdnet": "zdnet.com",
-    "venturebeat": "venturebeat.com", "india today": "indiatoday.in",
-    "the telegraph": "telegraph.co.uk", "the sun": "thesun.co.uk",
-    "sciencedaily": "sciencedaily.com", "axios": "axios.com",
-    "politico": "politico.com", "the register": "theregister.com",
-    "engadget": "engadget.com", "gizmodo": "gizmodo.com",
-}
+
+def _build_publisher_index():
+    """Map publisher aliases to domains, flagging names that are ambiguous.
+
+    "ABC News" is both the US and the Australian broadcaster, so a bare name
+    cannot be resolved. Those aliases are dropped from the map and reported as
+    ambiguous instead of being confidently labelled as either.
+    """
+    index: Dict[str, str] = {}
+    ambiguous = set()
+    for domain, aliases in TRUSTED_SOURCES.items():
+        for alias in aliases:
+            if alias in index and index[alias] != domain:
+                ambiguous.add(alias)
+            else:
+                index[alias] = domain
+    for alias in ambiguous:
+        index.pop(alias, None)
+    return index, ambiguous
+
+
+PUBLISHER_TO_DOMAIN, AMBIGUOUS_PUBLISHERS = _build_publisher_index()
 
 
 def _domain(url: str) -> str:
@@ -83,12 +214,16 @@ def _domain(url: str) -> str:
     return netloc[4:] if netloc.startswith("www.") else netloc
 
 
+def _matches(domain: str, candidates) -> bool:
+    return any(domain == d or domain.endswith("." + d) for d in candidates)
+
+
 def _is_trusted(domain: str) -> bool:
-    return any(domain == d or domain.endswith("." + d) for d in TRUSTED_NEWS_DOMAINS)
+    return _matches(domain, TRUSTED_NEWS_DOMAINS)
 
 
 def _is_press_release(domain: str) -> bool:
-    return any(domain == d or domain.endswith("." + d) for d in PRESS_RELEASE_DOMAINS)
+    return _matches(domain, PRESS_RELEASE_DOMAINS)
 
 
 def classify(title: str, url: str, content: str = "",
@@ -103,15 +238,19 @@ def classify(title: str, url: str, content: str = "",
     text = f"{title} {content}".lower()
 
     publisher = (publisher or "").strip().lower()
+    if publisher in AMBIGUOUS_PUBLISHERS:
+        return {"domain": publisher.replace(" ", ""), "label": LABEL_DEVELOPING,
+                "reason": f"publisher name '{publisher}' is ambiguous "
+                          f"(more than one outlet uses it)"}
     if publisher:
         mapped = PUBLISHER_TO_DOMAIN.get(publisher)
         if mapped:
             domain = mapped
         else:
             # Real attribution we do not recognise: name it, do not trust it.
-            domain = publisher.replace(" ", "")
-            return {"domain": domain, "label": LABEL_DEVELOPING,
+            return {"domain": publisher.replace(" ", ""), "label": LABEL_DEVELOPING,
                     "reason": f"publisher '{publisher}' is not on the trusted list"}
+
     if domain == "news.google.com":
         # Aggregator landing page with no attribution: not a real source.
         return {"domain": domain, "label": LABEL_DEVELOPING,
@@ -165,15 +304,44 @@ def overall(labelled: List[Dict]) -> str:
     return LABEL_DEVELOPING
 
 
+def group_by_label(labelled: List[Dict]) -> Dict[str, List[Dict]]:
+    """Split labelled results into sections, strongest evidence first."""
+    return {
+        LABEL_VERIFIED: [r for r in labelled if r.get("label") == LABEL_VERIFIED],
+        LABEL_DEVELOPING: [r for r in labelled if r.get("label") == LABEL_DEVELOPING],
+        LABEL_PROMOTIONAL: [r for r in labelled if r.get("label") == LABEL_PROMOTIONAL],
+    }
+
+
+_SECTION_TITLES = {
+    LABEL_VERIFIED: "VERIFIED (recognised news organisations)",
+    LABEL_DEVELOPING: "DEVELOPING (single or unknown source)",
+    LABEL_PROMOTIONAL: "PROMOTIONAL / UNVERIFIED (not independent reporting)",
+}
+
+
+def _render_item(r: Dict) -> str:
+    publisher = r.get("publisher")
+    source = publisher or r.get("domain") or "unknown"
+    return (
+        f"- {r.get('title', '').strip()}\n"
+        f"    source: {source} ({r.get('reason')})\n"
+        f"    url: {r.get('url') or 'none'}"
+    )
+
+
 def format_for_model(labelled: List[Dict]) -> str:
-    """Render labelled results as text the model can cite directly."""
-    lines = []
-    for r in labelled:
-        publisher = r.get("publisher")
-        source = publisher or r.get("domain") or "unknown"
-        lines.append(
-            f"- [{r.get('label')}] {r.get('title', '').strip()}\n"
-            f"    source: {source} ({r.get('reason')})\n"
-            f"    url: {r.get('url') or 'none'}"
-        )
-    return "\n".join(lines)
+    """Render labelled results as sectioned text the model can cite directly.
+
+    Grouping keeps promotional and single-source items visibly apart from
+    verified reporting, so the model cannot quietly present them as equal.
+    """
+    sections = group_by_label(labelled)
+    blocks = []
+    for label in (LABEL_VERIFIED, LABEL_DEVELOPING, LABEL_PROMOTIONAL):
+        items = sections[label]
+        if not items:
+            continue
+        blocks.append(f"=== {_SECTION_TITLES[label]} ===")
+        blocks.extend(_render_item(r) for r in items)
+    return "\n".join(blocks)

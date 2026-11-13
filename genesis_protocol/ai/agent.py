@@ -604,6 +604,10 @@ class GenesisAgent:
 - Never present a promotional or single-source item as confirmed fact. Say
   plainly how strong the evidence is. If the overall confidence is not
   verified, say so before the headlines.
+- Present news grouped into the same three sections the tool returns, in this
+  order: "Verified", "Developing", and "Promotional / Unverified". Keep every
+  item inside its own section; do not mix a press release in with verified
+  reporting. If a section is empty, omit it.
 
 **RESPONSE STYLE - CRITICAL:**
 - Give DIRECT, CONCISE answers only

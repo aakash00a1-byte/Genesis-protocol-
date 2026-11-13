@@ -69,7 +69,7 @@ class TestSourceCredibility:
         from genesis_protocol.integrations.source_credibility import assess, format_for_model
 
         text = format_for_model(assess([{"title": "T", "url": "https://www.reuters.com/x", "content": "c"}]))
-        assert "[verified]" in text
+        assert "=== VERIFIED" in text
         assert "reuters.com" in text
         assert "https://www.reuters.com/x" in text
 
@@ -109,6 +109,78 @@ class TestPublisherAttribution:
         ])
         assert labelled[0]["label"] == "verified"
         assert overall(labelled) == "verified"
+
+
+class TestExpandedCoverage:
+    def test_trusted_list_is_large_and_derived(self):
+        from genesis_protocol.integrations import source_credibility as sc
+
+        assert len(sc.TRUSTED_SOURCES) >= 100
+        assert set(sc.TRUSTED_SOURCES) == sc.TRUSTED_NEWS_DOMAINS
+        # every unambiguous alias maps back to its domain
+        for domain, aliases in sc.TRUSTED_SOURCES.items():
+            for alias in aliases:
+                if alias in sc.AMBIGUOUS_PUBLISHERS:
+                    continue
+                assert sc.PUBLISHER_TO_DOMAIN[alias] == domain
+
+    def test_ambiguous_publisher_is_not_guessed(self):
+        from genesis_protocol.integrations.source_credibility import classify
+
+        # "ABC News" is both the US and the Australian broadcaster.
+        out = classify("H", "https://news.google.com/rss/x", publisher="ABC News")
+        assert out["label"] == "developing"
+        assert "ambiguous" in out["reason"]
+
+    @pytest.mark.parametrize("publisher,domain", [
+        ("The Hindu", "thehindu.com"),
+        ("MIT News", "news.mit.edu"),
+        ("Wired", "wired.com"),
+        ("Al Jazeera", "aljazeera.com"),
+        ("South China Morning Post", "scmp.com"),
+    ])
+    def test_publisher_aliases_resolve_to_domain(self, publisher, domain):
+        from genesis_protocol.integrations.source_credibility import classify
+
+        out = classify("Headline", "https://news.google.com/rss/x", publisher=publisher)
+        assert out["label"] == "verified"
+        assert out["domain"] == domain
+
+
+class TestSectionedOutput:
+    def _labelled(self):
+        from genesis_protocol.integrations.source_credibility import assess
+
+        return assess([
+            {"title": "Verified one", "url": "https://www.reuters.com/a"},
+            {"title": "Developing one", "url": "https://random.xyz/b"},
+            {"title": "Promo one", "url": "https://www.globenewswire.com/c"},
+        ])
+
+    def test_group_by_label_splits_into_three(self):
+        from genesis_protocol.integrations.source_credibility import group_by_label
+
+        groups = group_by_label(self._labelled())
+        assert len(groups["verified"]) == 1
+        assert len(groups["developing"]) == 1
+        assert len(groups["promotional-unverified"]) == 1
+
+    def test_format_orders_verified_first_then_promotional(self):
+        from genesis_protocol.integrations.source_credibility import format_for_model
+
+        text = format_for_model(self._labelled())
+        assert text.index("=== VERIFIED") < text.index("=== DEVELOPING")
+        assert text.index("=== DEVELOPING") < text.index("=== PROMOTIONAL")
+        assert "Verified one" in text
+        assert "Promo one" in text
+
+    def test_format_omits_empty_sections(self):
+        from genesis_protocol.integrations.source_credibility import assess, format_for_model
+
+        text = format_for_model(assess([{"title": "T", "url": "https://www.bbc.com/x"}]))
+        assert "=== VERIFIED" in text
+        assert "=== DEVELOPING" not in text
+        assert "=== PROMOTIONAL" not in text
 
 
 class TestLiveFacts:
@@ -227,3 +299,4 @@ class TestCitationRulesInPrompt:
         assert "CITATION & SOURCE-QUALITY RULES" in prompt
         assert "promotional" in prompt
         assert "never\n  invent a URL" in prompt
+        assert "Promotional / Unverified" in prompt
