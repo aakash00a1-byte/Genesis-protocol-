@@ -117,12 +117,13 @@ class TestExpandedCoverage:
 
         assert len(sc.TRUSTED_SOURCES) >= 100
         assert set(sc.TRUSTED_SOURCES) == sc.TRUSTED_NEWS_DOMAINS
-        # every unambiguous alias maps back to its domain
+        # every unambiguous alias maps back to its domain (normalized)
         for domain, aliases in sc.TRUSTED_SOURCES.items():
             for alias in aliases:
-                if alias in sc.AMBIGUOUS_PUBLISHERS:
+                key = sc._normalize_publisher(alias)
+                if key in sc.AMBIGUOUS_PUBLISHERS:
                     continue
-                assert sc.PUBLISHER_TO_DOMAIN[alias] == domain
+                assert sc.PUBLISHER_TO_DOMAIN[key] == domain
 
     def test_ambiguous_publisher_is_not_guessed(self):
         from genesis_protocol.integrations.source_credibility import classify
@@ -145,6 +146,29 @@ class TestExpandedCoverage:
         out = classify("Headline", "https://news.google.com/rss/x", publisher=publisher)
         assert out["label"] == "verified"
         assert out["domain"] == domain
+
+
+class TestPublisherNormalization:
+    @pytest.mark.parametrize("publisher,domain", [
+        ("Bloomberg.com", "bloomberg.com"),
+        ("Business Insider India", "businessinsider.com"),
+        ("Business Insider", "businessinsider.com"),
+        ("UN News", "news.un.org"),
+        ("The Hindu", "thehindu.com"),
+    ])
+    def test_variants_resolve_to_same_source(self, publisher, domain):
+        from genesis_protocol.integrations.source_credibility import classify
+
+        out = classify("H", "https://news.google.com/rss/x", publisher=publisher)
+        assert out["label"] == "verified"
+        assert out["domain"] == domain
+
+    def test_prefix_match_does_not_trust_unrelated_name(self):
+        from genesis_protocol.integrations.source_credibility import classify
+
+        # must not match "the times" -> thetimes.co.uk by accident
+        out = classify("H", "https://news.google.com/rss/x", publisher="Times New Roman Blog")
+        assert out["label"] == "developing"
 
 
 class TestSectionedOutput:

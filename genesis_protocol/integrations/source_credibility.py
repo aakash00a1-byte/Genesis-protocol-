@@ -53,6 +53,11 @@ TRUSTED_SOURCES: Dict[str, tuple] = {
     "vox.com": ("vox",),
     "slate.com": ("slate",),
     "businessinsider.com": ("business insider",),
+    "investors.com": ("investor's business daily", "investors business daily"),
+    "analyticsindiamag.com": ("analytics india magazine",),
+    "iapp.org": ("iapp", "international association of privacy professionals"),
+    "news.un.org": ("un news",),
+    "unesco.org": ("unesco",),
     "cnbc.com": ("cnbc",),
     "forbes.com": ("forbes",),
     "fortune.com": ("fortune",),
@@ -186,6 +191,24 @@ LABEL_PROMOTIONAL = "promotional-unverified"
 TRUSTED_NEWS_DOMAINS = set(TRUSTED_SOURCES)
 
 
+_TLD_SUFFIXES = (".com", ".in", ".co.uk", ".co", ".org", ".net", ".news",
+                 ".uk", ".au", ".io")
+
+
+def _normalize_publisher(name: str) -> str:
+    """Lowercase a publisher name and strip a trailing site suffix.
+
+    Google News titles vary: "Bloomberg" and "Bloomberg.com", "Business Insider"
+    and "Business Insider India". Normalising lets those resolve to one source.
+    """
+    name = (name or "").strip().lower()
+    for suffix in _TLD_SUFFIXES:
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    return " ".join(name.split())
+
+
 def _build_publisher_index():
     """Map publisher aliases to domains, flagging names that are ambiguous.
 
@@ -197,6 +220,7 @@ def _build_publisher_index():
     ambiguous = set()
     for domain, aliases in TRUSTED_SOURCES.items():
         for alias in aliases:
+            alias = _normalize_publisher(alias)
             if alias in index and index[alias] != domain:
                 ambiguous.add(alias)
             else:
@@ -204,6 +228,28 @@ def _build_publisher_index():
     for alias in ambiguous:
         index.pop(alias, None)
     return index, ambiguous
+
+
+def _resolve_publisher(publisher: str):
+    """Resolve a publisher name to a domain, or ``(None, reason)``.
+
+    Tries an exact match, then the longest trusted alias that is a whole-word
+    prefix, so "business insider india" resolves to businessinsider.com while a
+    bare ambiguous name is refused.
+    """
+    name = _normalize_publisher(publisher)
+    if name in AMBIGUOUS_PUBLISHERS:
+        return None, f"publisher name '{name}' is ambiguous (more than one outlet uses it)"
+    if name in PUBLISHER_TO_DOMAIN:
+        return PUBLISHER_TO_DOMAIN[name], None
+    best_alias = ""
+    for alias in PUBLISHER_TO_DOMAIN:
+        if alias and (name == alias or name.startswith(alias + " ")):
+            if len(alias) > len(best_alias):
+                best_alias = alias
+    if best_alias:
+        return PUBLISHER_TO_DOMAIN[best_alias], None
+    return None, f"publisher '{name}' is not on the trusted list"
 
 
 PUBLISHER_TO_DOMAIN, AMBIGUOUS_PUBLISHERS = _build_publisher_index()
@@ -237,19 +283,15 @@ def classify(title: str, url: str, content: str = "",
     domain = _domain(url)
     text = f"{title} {content}".lower()
 
-    publisher = (publisher or "").strip().lower()
-    if publisher in AMBIGUOUS_PUBLISHERS:
-        return {"domain": publisher.replace(" ", ""), "label": LABEL_DEVELOPING,
-                "reason": f"publisher name '{publisher}' is ambiguous "
-                          f"(more than one outlet uses it)"}
+    publisher = (publisher or "").strip()
     if publisher:
-        mapped = PUBLISHER_TO_DOMAIN.get(publisher)
+        mapped, problem = _resolve_publisher(publisher)
         if mapped:
             domain = mapped
         else:
-            # Real attribution we do not recognise: name it, do not trust it.
-            return {"domain": publisher.replace(" ", ""), "label": LABEL_DEVELOPING,
-                    "reason": f"publisher '{publisher}' is not on the trusted list"}
+            # Real attribution we cannot resolve: name it, do not trust it.
+            return {"domain": _normalize_publisher(publisher).replace(" ", ""),
+                    "label": LABEL_DEVELOPING, "reason": problem}
 
     if domain == "news.google.com":
         # Aggregator landing page with no attribution: not a real source.
