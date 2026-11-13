@@ -859,3 +859,28 @@ Drove the deployed Space over its public API with a throwaway account
 
 Probe harness pattern: `urllib` + `http.cookiejar`, and do NOT follow redirects
 (a followed 302 to an HTML page reads as a false 200).
+
+## Live-data honesty (2026-11-13)
+
+Driving the live Space showed GLUTEN fabricating live facts: invented AI news,
+Delhi weather, a USD→INR rate and a GitHub URL, while narrating a fake
+"*searching...*". Three causes, all fixed in `genesis_protocol/ai/agent.py` and
+`autonomous_mode.py`:
+
+1. `_execute_tools` read `result.response`, but `ToolResult` only has
+   `data`/`error`. The `AttributeError` was swallowed by the surrounding
+   `except`, so even a successful search was silently discarded and the model
+   answered from nothing. It now reads `data` and returns `(results, failures)`.
+2. `news`, `weather`, `latest`, `exchange rate`, ... were not in
+   `AUTONOMOUS_TRIGGERS`, so those questions stayed in normal mode and the
+   search path never ran. Added.
+3. Nothing told the model a needed tool had failed. A failure now appends a
+   "Tool failure warning" to the context, and the system prompt carries a
+   HONESTY RULE forbidding fabricated live facts and fake action narration.
+
+Verified live after deploy: "latest news", "weather in Delhi" and "USD to INR
+rate" now answer "Live lookup failed ... I cannot confirm ..." instead of
+inventing numbers. `tests/test_honest_live_data.py` pins the contract.
+
+Note: a stale `current_datetime` header is not authoritative; the live date
+comes from the Space clock (2026-11-13 at the time of writing).
