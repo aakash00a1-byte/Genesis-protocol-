@@ -832,3 +832,30 @@ shrink the pack, and that requires a force-push.
 `mobile-build.yml` `build-android` has failed on every run since June 2026:
 Node was pinned at 18 but `eas-cli` needs 22+. Bumped to 22; the job now reaches
 the EAS step and fails only because the `EXPO_TOKEN` repo secret is unset.
+
+## Live capability test findings (2026-11-13)
+
+Drove the deployed Space over its public API with a throwaway account
+(register is public; a test user id lands in the live DB each run).
+
+- **Identity must answer Hinglish, not just English.** The identity router's
+  keyword list held only English forms (`who are you`, `your name`). A Hinglish
+  question ("Tum kaun ho?") fell through to the model provider, which invented an
+  identity ("I am Google BARD"). Fixed: Hinglish/aap/tum variants added, plus
+  provider/model keywords answered from `describe_runtime()` (the same live
+  source `/api/identity` uses), never guessed. `tests/test_identity_router.py`
+  forbids the invented vendor names.
+- **Admin-only API must answer JSON, never an HTML redirect.** `admin_required`
+  checked only `request.is_json`, so a logged-in non-admin calling
+  `GET /api/admin/stats` got a 302 to `/chat` instead of a JSON 403 (a
+  redirect-following client saw 200). Now mirrors `login_required`: any `/api/`
+  path gets JSON. `tests/test_admin_api_gate.py` covers it.
+- Verified working live: health/identity/capabilities (public), register/login,
+  chat in normal + autonomous mode, durable memory (add/list/recall/delete,
+  opt-in enforced, credential-shaped content refused), agent loop (respond step,
+  task resume, unknown-step rejection, code execution refused for non-owners),
+  30 skills with per-call policy gate (restricted tools denied to non-owners),
+  audit tail owner-only, chat history.
+
+Probe harness pattern: `urllib` + `http.cookiejar`, and do NOT follow redirects
+(a followed 302 to an HTML page reads as a false 200).
