@@ -884,3 +884,25 @@ inventing numbers. `tests/test_honest_live_data.py` pins the contract.
 
 Note: a stale `current_datetime` header is not authoritative; the live date
 comes from the Space clock (2026-11-13 at the time of writing).
+
+## Web search actually works now (2026-11-13)
+
+`web_search` imported `TavilyIntegration` — a name that does not exist; the
+module only defines `TavilyClient`. Every call raised ImportError, so **no
+search ever ran**, key or no key. That was the real reason live news/weather/
+price answers were invented: the tool was dead, not merely unconfigured.
+
+The tool now uses `TavilyClient` when a key is configured, and otherwise falls
+back to `genesis_protocol/integrations/key_free_search.py`: DuckDuckGo HTML,
+then Google News RSS for news-shaped queries, then the Wikipedia API. Providers
+are independent, so a host blocked from one deployment does not stop the rest.
+If all fail, the tool returns an error and chat reports the failure honestly
+(no fabrication).
+
+Verified live: "latest news about AI today" now returns real headlines that
+match Google News at the same moment (Claude outage, AlphaPepe DEX, ...).
+Weather/exchange-rate questions run the search too; when the snippet carries no
+exact number, GLUTEN says it cannot confirm rather than guessing.
+
+Egress note: `html.duckduckgo.com`, `news.google.com` and `en.wikipedia.org`
+were reachable from the Space. Provider order matters - keep each independent.
