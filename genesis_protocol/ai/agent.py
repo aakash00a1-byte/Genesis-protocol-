@@ -457,10 +457,19 @@ class GenesisAgent:
         if any(kw in query_lower for kw in realtime_keywords) and not is_weather and not is_fx:
             tools.append("web_search")
         
-        # Code execution only when the query carries runnable code. Broad
-        # "run/execute/code" wording is common in ordinary questions and used to
-        # trigger a tool call that could only fail.
-        if self._extract_code(query):
+        # Plain arithmetic goes to the safe calculator, not to code execution.
+        # "calculate 17*23" used to route to the restricted code_execution tool,
+        # so a non-owner got a denial and the model answered from memory - the
+        # live probe returned 437 for 17*23. The calculator is whitelist-based
+        # (see tools.safe_math) and needs no code execution at all.
+        expression = self._math_expression(query)
+        if expression:
+            tools.append("calculator")
+
+        # Code execution only for a fenced code block, which the calculator
+        # cannot evaluate. Broad "run/execute/code" wording is common in
+        # ordinary questions and used to trigger a call that could only fail.
+        if self._extract_code_block(query):
             tools.append("code_execution")
         
         # Memory: an explicit "remember X" is a store; a question about the
@@ -601,6 +610,31 @@ class GenesisAgent:
     }
 
     @staticmethod
+    def _math_expression(query: str) -> str:
+        """The plain arithmetic in a query, or "".
+
+        Only a bare expression of digits and operators counts, so it is safe to
+        hand to the calculator's AST whitelist.
+        """
+        expr = re.search(
+            r"(?:calculate|compute|evaluate|what\s+is)\s*"
+            r"([0-9][0-9\.\s\+\-*/%()\^]*[0-9\)])",
+            query, re.I,
+        )
+        if not expr:
+            return ""
+        candidate = expr.group(1).strip().rstrip("+-*/^%")
+        if candidate and re.fullmatch(r"[0-9\.\s\+\-*/%()\^]+", candidate):
+            return candidate
+        return ""
+
+    @staticmethod
+    def _extract_code_block(query: str) -> str:
+        """The body of a fenced code block, or "" (an empty fence is not code)."""
+        fenced = re.search(r"```(?:python|py)?\s*\n?(.*?)```", query, re.S)
+        return fenced.group(1).strip() if fenced else ""
+
+    @staticmethod
     def _extract_code(query: str) -> str:
         """Pull runnable Python out of a query, or return "".
 
@@ -651,6 +685,9 @@ class GenesisAgent:
                     text = text[len(lead):].lstrip(" :,-")
                     break
             return {"key": text[:60] or "fact", "value": text, "user_id": user_id}
+
+        if tool_name == "calculator":
+            return {"expression": self._math_expression(query)}
 
         if tool_name == "notes":
             lower = query.lower()
@@ -730,6 +767,11 @@ class GenesisAgent:
             if err:
                 parts.append(f"stderr:\n{err}")
             return "\n".join(parts) or "(no output)"
+
+        if tool_name == "calculator" and isinstance(data, dict):
+            if "result" in data:
+                return f"{data.get('expression', '')} = {data['result']}"
+            return str(data)
 
         if tool_name == "notes" and isinstance(data, dict):
             if "notes" in data:

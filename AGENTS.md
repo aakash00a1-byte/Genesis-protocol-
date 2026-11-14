@@ -1024,3 +1024,14 @@ model does not invent a result for a tool that did not run. The owner's own
 chat request counts as approval; a non-owner can never approve a restricted
 call. `GET /api/identity` reports `owner_configured` (a boolean, never the ids)
 so the fail-closed state is observable in production.
+
+### Arithmetic goes to the calculator, not code execution
+
+Plain arithmetic (`calculate 17*23`, `what is 2+2`) was routed to the
+restricted `code_execution` tool. A non-owner therefore got a policy denial,
+the model answered from memory, and the live probe returned **437** for 17*23.
+Arithmetic now routes to the safe `calculator` tool (whitelist AST evaluator in
+`tools.safe_math`), which every user may run; only a fenced code block goes to
+`code_execution`. `GenesisAgent._math_expression` extracts the expression and
+`_extract_code_block` extracts the fence. Keep these separate: never send plain
+arithmetic to code execution again.

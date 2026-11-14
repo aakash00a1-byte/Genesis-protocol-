@@ -44,10 +44,18 @@ class TestCodeExtraction:
         assert _agent()._extract_code("how do I run a marathon") == ""
         assert _agent()._extract_code("what is the capital of France") == ""
 
-    def test_code_execution_only_triggers_with_code(self):
+    def test_arithmetic_uses_safe_calculator_not_code_execution(self):
+        # "calculate 17*23" used to route to the restricted code_execution tool,
+        # so a non-owner got a denial and the model answered 437 from memory.
         agent = _agent()
-        assert "code_execution" in agent._detect_tool_needs("calculate 17*23")
+        needs = agent._detect_tool_needs("calculate 17*23")
+        assert "calculator" in needs
+        assert "code_execution" not in needs
         assert "code_execution" not in agent._detect_tool_needs("how do I run a marathon")
+
+    def test_fenced_block_still_uses_code_execution(self):
+        agent = _agent()
+        assert "code_execution" in agent._detect_tool_needs("run\n```python\nprint(1)\n```")
 
 
 class TestCodeExecutionRuns:
@@ -83,6 +91,31 @@ class TestCodeExecutionRuns:
         )
         assert failures == []
         assert "55" in text
+
+
+class TestArithmeticIsCorrectForEveryone:
+    """A non-owner must still get the right arithmetic answer, via the safe
+    calculator, without reaching code execution.
+    """
+
+    def test_non_owner_arithmetic_is_correct(self):
+        import asyncio
+
+        agent = _agent()
+        text, failures = asyncio.run(
+            agent._execute_tools(["calculator"], "calculate 17*23", user_id=2)
+        )
+        assert failures == []
+        assert "391" in text
+
+    def test_non_owner_code_execution_is_denied(self):
+        import asyncio
+
+        agent = _agent()
+        text, failures = asyncio.run(
+            agent._execute_tools(["code_execution"], "run\n```python\nprint(1)\n```", user_id=2)
+        )
+        assert any("code_execution" in f for f in failures)
 
 
 class TestMemoryIsPerUser:

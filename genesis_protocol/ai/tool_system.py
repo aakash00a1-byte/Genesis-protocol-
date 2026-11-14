@@ -135,6 +135,16 @@ class ToolSystem:
             handler=self._tool_file_reader
         ))
         
+        # Calculator (safe arithmetic, no code execution)
+        self.register_tool(Tool(
+            name="calculator",
+            description="Evaluate a math expression. Use for arithmetic instead of running code.",
+            parameters={
+                "expression": {"type": "string", "description": "Math expression, e.g. 17*23", "required": True}
+            },
+            handler=self._tool_calculator
+        ))
+
         # Notes (per-user)
         self.register_tool(Tool(
             name="notes",
@@ -403,6 +413,15 @@ class ToolSystem:
             return ToolResult(False, error=f"File not found: {path}")
         except Exception as e:
             return ToolResult(False, error=f"Read error: {e}")
+
+    async def _tool_calculator(self, params: Dict) -> ToolResult:
+        """Safe arithmetic via the canonical registry's whitelist evaluator."""
+        from genesis_protocol.tools.tool_registry import get_tool_registry
+
+        result = get_tool_registry().execute("calculator", dict(params))
+        if result.get("success"):
+            return ToolResult(True, data=result)
+        return ToolResult(False, error=result.get("error", "calculator failed"))
 
     async def _tool_notes(self, params: Dict) -> ToolResult:
         """Notes, delegated to the canonical tool registry.
