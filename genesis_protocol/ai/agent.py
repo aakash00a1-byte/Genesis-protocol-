@@ -454,7 +454,12 @@ class GenesisAgent:
         if is_fx:
             tools.append("get_exchange_rate")
 
-        if any(kw in query_lower for kw in realtime_keywords) and not is_weather and not is_fx:
+        # Arithmetic needs no lookup; compute it before the search check so it
+        # can suppress a lookup ("what is 2+2" matched "what is").
+        expression = self._math_expression(query)
+
+        if (any(kw in query_lower for kw in realtime_keywords)
+                and not is_weather and not is_fx and not expression):
             tools.append("web_search")
         
         # Plain arithmetic goes to the safe calculator, not to code execution.
@@ -462,7 +467,6 @@ class GenesisAgent:
         # so a non-owner got a denial and the model answered from memory - the
         # live probe returned 437 for 17*23. The calculator is whitelist-based
         # (see tools.safe_math) and needs no code execution at all.
-        expression = self._math_expression(query)
         if expression:
             tools.append("calculator")
 

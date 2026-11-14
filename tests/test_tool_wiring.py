@@ -422,3 +422,19 @@ class TestArithmeticReachesTheToolPath:
 
         assert extract_math_expression("calculate 17*23") == "17*23"
         assert extract_math_expression("what is the capital of France") == ""
+
+
+class TestArithmeticDoesNotTriggerSearch:
+    """Arithmetic needs no lookup, but "what is 2+2" matched the "what is"
+    search keyword and returned a Brainly link beside the correct answer.
+    """
+
+    def test_arithmetic_suppresses_web_search(self):
+        agent = _agent()
+        needs = agent._detect_tool_needs("what is 2+2")
+        assert "calculator" in needs
+        assert "web_search" not in needs
+
+    def test_non_arithmetic_question_still_searches(self):
+        agent = _agent()
+        assert "web_search" in agent._detect_tool_needs("what is the capital of France")
