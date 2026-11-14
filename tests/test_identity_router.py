@@ -81,3 +81,17 @@ def test_identity_answer_names_the_real_entity() -> None:
     result = route_identity("Tum kaun ho?")
     assert result and result.get("is_identity")
     assert "GLUTEN" in result["response"]
+
+
+def test_creator_questions_name_the_creator() -> None:
+    """'kisne banaya' / 'tumhe kisne banaya' were not in the creator branch, so
+    they fell through to the generic identity answer. They must name the creator.
+    """
+    from genesis_protocol.ai.identity_router import route_identity
+    from genesis_protocol.gluten.identity import CREATOR
+
+    for query in ("tumhe kisne banaya", "kisne banaya", "who created you",
+                  "kon banaya", "kisne bnaya"):
+        result = route_identity(query)
+        assert result and result.get("is_identity"), query
+        assert CREATOR in result["response"], query

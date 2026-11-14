@@ -43,7 +43,8 @@ class IdentityRouter:
         # Hindi keywords
         "tu kaun", "tu hai kaun", "kaun hai tu", "who are you in hindi",
         "mera naam", "mera creator", "mera owner", "kisne banaya",
-        "buja", "creater", "creator", "kon banaya", "kahan se aaya",
+        "buja", "creater", "creator", "kon banaya", "kisne banaya",
+        "kisne bnaya", "kon bnaya", "kahan se aaya",
         # Hinglish variants ("tum" and "aap" forms, and the misspellings a
         # speaker actually types). Without these the question fell through to
         # the provider, which then invented an identity ("I am Google BARD").
@@ -155,7 +156,7 @@ class IdentityRouter:
         
         # Detect what specifically is asked
         # Hindi: who made you / creator
-        if any(k in query_lower for k in ["buja", "creater", "creator", "creator kon", "kon banaya", "kahan se aaya", "mere aaya", "kiske banaya", "kaun banaya", "your maker", "your creator", "made by", "built by", "created by"]):
+        if any(k in query_lower for k in ["buja", "creater", "creator", "creator kon", "kon banaya", "kisne banaya", "kisne bnaya", "kahan se aaya", "mere aaya", "kiske banaya", "kaun banaya", "kisne", "your maker", "your creator", "who made you", "who created you", "who built you", "made by", "built by", "created by"]):
             return self._who_created(identity)
         
         elif any(k in query_lower for k in ["who are you", "what are you", "tell me about", "about you", "describe", "introduce", "tu kaun", "kaun hai tu", "konsa hai tu", "who is gluten", "am i talking to"]):
