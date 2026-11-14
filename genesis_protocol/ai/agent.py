@@ -87,6 +87,10 @@ class GenesisAgent:
         self.provider_chain = get_provider_chain()
         self.logger = logging.getLogger("ai.agent")
         
+        # Labelled search results from the current request, kept so the answer
+        # can be followed by a deterministic sources list the model cannot alter.
+        self._last_search_results = []
+
         # Update Claude availability
         self._update_claude_status()
         
@@ -146,6 +150,7 @@ class GenesisAgent:
         """
         start_time = datetime.utcnow()
         tools_used = []
+        self._last_search_results = []
         
         try:
             # IDENTITY BYPASS: Check if identity question FIRST
@@ -243,6 +248,9 @@ class GenesisAgent:
                     self.scoring.analyze_intent(query).primary_intent
                 )
             
+            # Append the deterministic sources list for live-info answers.
+            response_content = response_content + self._sources_footer()
+
             return AgentResponse(
                 success=True,
                 response=response_content,
@@ -470,6 +478,7 @@ class GenesisAgent:
         """
         results = []
         failures = []
+        self._last_search_results = []
 
         for tool_name in tools:
             try:
@@ -482,6 +491,8 @@ class GenesisAgent:
                 # successful search was silently discarded.
                 if result.success and result.data:
                     results.append(f"[{tool_name}]:\n{self._format_tool_data(tool_name, result.data)}")
+                    if tool_name == "web_search" and isinstance(result.data, dict):
+                        self._last_search_results = result.data.get("results", [])
                     self._record_tool_use(tool_name)
                 else:
                     failures.append(f"{tool_name}: {result.error or 'no data returned'}")
@@ -550,6 +561,45 @@ class GenesisAgent:
             return f"{header}\n{body}"
 
         return json.dumps(data, ensure_ascii=False, default=str)
+
+    def _sources_footer(self) -> str:
+        """Build a sources list from the labelled results, independent of the model.
+
+        The model is asked to cite sources, but a model can move an item under a
+        stronger heading or drop the tag. This footer is generated from the tool
+        data itself, so the label, source, age and link shown to the user are
+        the ones the tool produced, not the ones the model chose to repeat.
+        """
+        if not self._last_search_results:
+            return ""
+        try:
+            from genesis_protocol.integrations.source_credibility import group_by_label
+
+            groups = group_by_label(self._last_search_results)
+        except Exception:
+            return ""
+
+        order = [
+            ("verified", "Verified"),
+            ("developing", "Developing"),
+            ("promotional-unverified", "Promotional / Unverified"),
+        ]
+        lines = []
+        for key, title in order:
+            items = groups.get(key) or []
+            if not items:
+                continue
+            lines.append(f"**{title}**")
+            for r in items[:5]:
+                source = r.get("publisher") or r.get("domain") or "unknown"
+                age = r.get("age") or "unknown"
+                lines.append(
+                    f"- {r.get('title', '').strip()} - {source} "
+                    f"({age}) {r.get('url') or 'no link'}"
+                )
+        if not lines:
+            return ""
+        return "\n\n---\n**Sources (labels and links come from the search tool)**\n" + "\n".join(lines)
 
     def _record_tool_use(self, tool_name: str):
         """Record tool usage for tracking."""

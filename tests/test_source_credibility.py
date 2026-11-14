@@ -283,6 +283,43 @@ class TestSectionedOutput:
         assert "=== PROMOTIONAL" not in text
 
 
+class TestSourcesFooter:
+    def _agent_with(self, results):
+        from genesis_protocol.ai.agent import get_genesis_agent
+
+        agent = get_genesis_agent()
+        agent._last_search_results = results
+        return agent
+
+    def test_footer_lists_sources_with_labels_and_links(self):
+        agent = self._agent_with([
+            {"title": "V", "url": "https://www.reuters.com/a", "label": "verified",
+             "domain": "reuters.com", "age": "1 h ago"},
+            {"title": "P", "url": "https://www.globenewswire.com/c",
+             "label": "promotional-unverified", "domain": "globenewswire.com",
+             "age": "2 d ago"},
+        ])
+        footer = agent._sources_footer()
+        assert "**Verified**" in footer
+        assert "**Promotional / Unverified**" in footer
+        assert "https://www.reuters.com/a" in footer
+        assert "https://www.globenewswire.com/c" in footer
+
+    def test_footer_empty_without_results(self):
+        assert self._agent_with([])._sources_footer() == ""
+
+    def test_footer_does_not_need_the_model(self):
+        # The footer is built from tool data, so a mislabelling model cannot
+        # change which section an item appears in.
+        agent = self._agent_with([
+            {"title": "PR item", "url": "https://www.prnewswire.com/x",
+             "label": "promotional-unverified", "domain": "prnewswire.com"},
+        ])
+        footer = agent._sources_footer()
+        assert "**Verified**" not in footer
+        assert "**Promotional / Unverified**" in footer
+
+
 class TestLiveFacts:
     def test_weather_returns_exact_value(self):
         from genesis_protocol.integrations import live_facts
