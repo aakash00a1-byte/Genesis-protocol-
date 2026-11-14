@@ -91,6 +91,9 @@ class GenesisAgent:
         # can be followed by a deterministic sources list the model cannot alter.
         self._last_search_results = []
 
+        # Tools used by the request currently being processed (reset per request).
+        self._tools_used: List[str] = []
+
         # Update Claude availability
         self._update_claude_status()
         
@@ -170,9 +173,12 @@ class GenesisAgent:
                     execution_time_ms=int((datetime.utcnow() - start_time).total_seconds() * 1000)
                 )
             
-            # FIX: Reset mode to NORMAL at start of each request
-            # This prevents mode from persisting across requests
+            # Reset per-request state. The mode must not persist across
+            # requests, and the tool list must not accumulate - it used to
+            # append forever, so the second arithmetic query reported
+            # ['calculator', 'calculator'].
             self.mode_manager.reset_to_normal()
+            self._tools_used = []
             
             # Auto-switch or force mode
             if force_mode == "autonomous":
@@ -842,10 +848,7 @@ class GenesisAgent:
         return "\n\n---\n**Sources (labels and links come from the search tool)**\n" + "\n".join(lines)
 
     def _record_tool_use(self, tool_name: str):
-        """Record tool usage for tracking."""
-        # Store in agent state
-        if not hasattr(self, '_tools_used'):
-            self._tools_used = []
+        """Record a tool used by the request currently being processed."""
         self._tools_used.append(tool_name)
     
     def _get_tools_used(self) -> List[str]:
@@ -871,6 +874,17 @@ class GenesisAgent:
             live_location = "Unknown"
             news_headline = "Unknown"
         
+        try:
+            from genesis_protocol.config import get_config
+            bot_username = get_config().telegram.bot_username or ""
+        except Exception:
+            bot_username = ""
+        telegram_line = (
+            f"- TELEGRAM BOT: @{bot_username} (the configured bot)\n"
+            if bot_username else
+            "- TELEGRAM BOT: not configured; do not name one.\n"
+        )
+
         weekday = getattr(info, "weekday", None) if info else None
         today = f"{weekday}, {info.date}" if (info and info.date and weekday) else (
             info.date if info and info.date else "Unknown")
@@ -890,7 +904,7 @@ class GenesisAgent:
 - WORK OUT WEEKDAYS FROM THE LINES ABOVE. Do not guess: a date has exactly one
   weekday, and "this Friday" is the next Friday on or after today.
 - CURRENT TIME: {live_time}
-- Do NOT guess the date - use the date provided above
+{telegram_line}- Do NOT guess the date - use the date provided above
 - If user asks about weather, news, or current events - USE WEB SEARCH
 - Your training data is OLD - always verify with live tools for current info
 - NEVER say "according to my knowledge" or "as of my last update"
@@ -904,6 +918,9 @@ class GenesisAgent:
   made-up result. A fabricated answer is worse than admitting the tool failed.
 - Only state a live fact if it appears in the tool results above. Otherwise say
   the lookup failed and that you cannot confirm current information.
+- NEVER invent a username, handle, bot name, phone number, email address, URL or
+  ID. If you are not certain of the exact value, say you do not know it. When a
+  username is given to you in the rules above, use that one exactly.
 
 **CITATION & SOURCE-QUALITY RULES - CRITICAL:**
 - When you report a news item, include its real source link from the tool
@@ -929,8 +946,15 @@ class GenesisAgent:
   under a stronger heading than its tag, and never drop the tag.
 
 **RESPONSE STYLE - CRITICAL:**
-- Give DIRECT, CONCISE answers only
-- Hinglish (Hindi+English mix) by default
+- Write natural, flowing Hinglish (Hindi + English mix). Talk like a person, not
+  a manual.
+- Keep it short. Most answers are a few sentences, not a wall of bullets.
+- Do NOT turn an answer into a bullet list unless the user asked for a list or
+  there are genuinely three or more separate items. Otherwise use plain prose.
+- No headings, no bold, no markdown tables, no asterisks for a normal reply.
+- No emoji unless the user used one first, and then at most one.
+- Do not add closing filler such as "Kya aur jaanna chahte ho?" or "Anything
+  else?". Do not restate the question or announce what you are about to do.
 - Skip introductions, jump straight to answering
 
 Answer the user's question directly."""

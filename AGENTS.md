@@ -1059,6 +1059,38 @@ the next Friday is 20 November). Date arithmetic is therefore done in code:
 prints them as `Friday = 20 November 2026`, with an explicit "do NOT compute it
 yourself". Never leave weekday arithmetic to the model.
 
+### Bare arithmetic must reach the calculator
+
+`extract_math_expression` only matched a prefixed expression
+(`calculate 17*23`, `what is 2+2`). A bare `17*23` fell through to NORMAL mode,
+where no tool runs and the model answers arithmetic from memory - a live probe
+returned 591 for 17*23 (real 391). It now also accepts a bare expression when the
+whole query is digits/operators and contains at least one operator, plus `x` and
+the unicode `x`/`-` signs. `42` and `17 Nov` are still not arithmetic.
+
+### Per-request state is reset
+
+`GenesisAgent._tools_used` was never cleared, so it grew with every request and
+the UI showed stale tools (`['calculator', 'calculator']` on the second query).
+It is now initialised in `__init__` and reset at the top of `process()`.
+
+### The chat UI renders Markdown, and the reply style is plain prose
+
+`web/templates/chat.html` set assistant replies with `textContent`, so users saw
+literal `**`. It now renders a small, escape-first Markdown subset (emphasis,
+inline code, headings, list markers) and never trusts HTML from the model. The
+system prompt asks for short, flowing Hinglish prose: no headings, no bold, no
+bullet lists unless the user asked for a list or there are three or more items,
+no emoji unless the user used one, and no closing filler.
+
+### Never invent a handle
+
+The model invented a Telegram bot name. The system prompt now carries the
+configured bot (`@` + `TELEGRAM_BOT_USERNAME`) as a fact, and forbids inventing
+any username, handle, phone number, email, URL or ID. The default
+`TelegramConfig.bot_username` is the deployed bot, `@Genesis_autonomousbot`;
+`@Genesis_makebot` is a separate maker bot.
+
 ### ADMIN_PASSWORD is the source of truth for the admin login
 
 The Space sets `ADMIN_PASSWORD`, so the documented default

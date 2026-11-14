@@ -450,6 +450,50 @@ class TestArithmeticDoesNotTriggerSearch:
         agent = _agent()
         assert "web_search" in agent._detect_tool_needs("what is the capital of France")
 
+class TestBareArithmeticReachesCalculator:
+    """A bare expression carries no prefix word, so "17*23" was not recognised
+    as arithmetic: the query fell through to NORMAL mode, no tool ran, and the
+    model answered from memory - a live probe returned 591 for 17*23 (real 391).
+    """
+
+    def test_bare_multiplication_routes_to_calculator(self):
+        agent = _agent()
+        needs = agent._detect_tool_needs("17*23")
+        assert "calculator" in needs
+        assert "web_search" not in needs
+
+    def test_bare_expression_selects_autonomous_mode(self):
+        from genesis_protocol.ai.autonomous_mode import get_mode_manager
+
+        assert get_mode_manager().should_use_autonomous("17*23") is True
+
+    def test_calculator_gets_the_expression(self):
+        agent = _agent()
+        params = agent._build_tool_params("calculator", "17*23")
+        assert params["expression"] == "17*23"
+
+    def test_x_and_unicode_multiplication_signs(self):
+        from genesis_protocol.ai.autonomous_mode import extract_math_expression
+
+        assert extract_math_expression("17 x 23") == "17*23"
+        assert extract_math_expression("17 \u00d7 23") == "17 * 23"
+
+    def test_parenthesised_expression(self):
+        from genesis_protocol.ai.autonomous_mode import extract_math_expression
+
+        assert extract_math_expression("(3+4)*5") == "(3+4)*5"
+
+    def test_plain_numbers_are_not_arithmetic(self):
+        from genesis_protocol.ai.autonomous_mode import extract_math_expression
+
+        assert extract_math_expression("42") == ""
+        assert extract_math_expression("17 Nov") == ""
+
+    def test_arithmetic_answer_is_correct(self):
+        from genesis_protocol.tools.safe_math import safe_math_eval
+
+        assert safe_math_eval("17*23") == 391
+
 
 class TestLocalIntentsDoNotSearch:
     """Notes, tasks and memory are answered from the user's own data, so they

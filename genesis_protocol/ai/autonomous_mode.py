@@ -27,15 +27,44 @@ _ARITHMETIC_RE = re.compile(
     re.I,
 )
 
+# A bare expression ("17*23", "144/12") carries no prefix word, so the pattern
+# above missed it and the query fell through to NORMAL mode, where no tool runs
+# and the model answers arithmetic from memory - the live probe returned 591 for
+# 17*23. The whole query must be the expression, and it must contain at least
+# one operator, so "17 Nov" or "42" are not mistaken for arithmetic.
+_EXPRESSION_CHARS_RE = re.compile(r"[0-9\.\s\+\-*/%()\^]+")
+_BARE_OPERATOR_RE = re.compile(r"[\+\-*/%\^]")
+
+
+def _normalize_operators(text: str) -> str:
+    """Map the multiplication/division signs users type onto ASCII operators."""
+    text = (text.replace("\u00d7", "*").replace("\u00f7", "/")
+                .replace("\u2212", "-"))
+    # "17 x 23" and "17x23" mean multiplication; only between two digits, so a
+    # stray letter elsewhere in the query is untouched.
+    return re.sub(r"(?<=\d)\s*[xX]\s*(?=\d)", "*", text)
+
 
 def extract_math_expression(query: str) -> str:
-    """The plain arithmetic in a query, or "" (see ``_ARITHMETIC_RE``)."""
+    """The plain arithmetic in a query, or "".
+
+    Matches either a prefixed expression ("calculate 17*23") or a bare one
+    ("17*23"), which is the whole query.
+    """
+    query = _normalize_operators(query)
     match = _ARITHMETIC_RE.search(query)
-    if not match:
-        return ""
-    candidate = match.group(1).strip().rstrip("+-*/^%")
-    if candidate and re.fullmatch(r"[0-9\.\s\+\-*/%()\^]+", candidate):
-        return candidate
+    if match:
+        candidate = match.group(1).strip().rstrip("+-*/^%")
+        if candidate and re.fullmatch(r"[0-9\.\s\+\-*/%()\^]+", candidate):
+            return candidate
+
+    stripped = query.strip()
+    if (_EXPRESSION_CHARS_RE.fullmatch(stripped)
+            and _BARE_OPERATOR_RE.search(stripped)
+            and (stripped[0].isdigit() or stripped[0] == "(")):
+        candidate = stripped.rstrip("+-*/^%").strip()
+        if candidate and _BARE_OPERATOR_RE.search(candidate):
+            return candidate
     return ""
 
 

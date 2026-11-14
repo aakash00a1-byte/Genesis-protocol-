@@ -272,6 +272,41 @@ function esc(s) {
     return d.innerHTML;
 }
 
+// Replies are Markdown, but the old code set them with textContent, so users
+// saw literal ** and * characters. Render a small, safe subset instead: escape
+// first, then apply inline emphasis, headings and list markers. No HTML is ever
+// trusted from the model.
+function renderMarkdown(text) {
+    const lines = String(text == null ? '' : text).split('\n');
+    let html = '';
+    let inList = false;
+    const closeList = () => { if (inList) { html += '</ul>'; inList = false; } };
+    const inline = (s) => esc(s)
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    for (const raw of lines) {
+        const line = raw.replace(/\s+$/, '');
+        if (!line.trim()) { closeList(); continue; }
+        const bullet = line.match(/^\s*[-*•]\s+(.*)$/);
+        const numbered = line.match(/^\s*\d+[.)]\s+(.*)$/);
+        const heading = line.match(/^\s*#{1,6}\s+(.*)$/);
+        if (bullet || numbered) {
+            if (!inList) { html += '<ul>'; inList = true; }
+            html += '<li>' + inline((bullet || numbered)[1]) + '</li>';
+        } else if (heading) {
+            closeList();
+            html += '<p><strong>' + inline(heading[1]) + '</strong></p>';
+        } else {
+            closeList();
+            html += '<p>' + inline(line) + '</p>';
+        }
+    }
+    closeList();
+    return html;
+}
+
 function scrollDown() { log.scrollTop = log.scrollHeight; }
 
 function addMessage(role, text, meta) {
@@ -281,7 +316,11 @@ function addMessage(role, text, meta) {
     el.innerHTML = '<div class="msg-avatar">' + avatar + '</div>' +
                    '<div class="msg-body"></div>';
     const body = el.querySelector('.msg-body');
-    body.textContent = text;
+    if (role === 'assistant') {
+        body.innerHTML = renderMarkdown(text);
+    } else {
+        body.textContent = text;
+    }
 
     if (meta) {
         const parts = [];
