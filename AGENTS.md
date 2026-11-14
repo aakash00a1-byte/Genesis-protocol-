@@ -1059,6 +1059,17 @@ the next Friday is 20 November). Date arithmetic is therefore done in code:
 prints them as `Friday = 20 November 2026`, with an explicit "do NOT compute it
 yourself". Never leave weekday arithmetic to the model.
 
+### Crypto prices come from an exact provider, not a search
+
+CoinGecko `/simple/price` returns flat currency keys per coin: `inr` is the
+price and `inr_24h_change` the change, not a nested `{"inr": {...}}` object.
+The old `crypto_service` read it as nested, so every lookup raised
+AttributeError and returned None - a crypto question always ended in "price
+unavailable". CoinGecko's free tier also rate-limits (HTTP 429), so
+`live_facts.get_crypto_price` falls back to Coinbase spot (USD) plus the
+Frankfurter ECB rate for INR. The chat routes coin queries to
+`get_crypto_price` (a safe tool) and keeps them out of web_search.
+
 ### Bare arithmetic must reach the calculator
 
 `extract_math_expression` only matched a prefixed expression

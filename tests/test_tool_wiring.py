@@ -559,3 +559,101 @@ class TestWeekdayIsProvided:
         assert upcoming["Friday"] == "20 November 2026"
         assert upcoming["Saturday"] == "21 November 2026"
         assert len(upcoming) == 7
+
+
+class TestCryptoPriceTool:
+    """A crypto question must reach the exact-price tool, not a search guess.
+
+    Live probe: "Bitcoin market update" fell to web_search, which returned
+    nothing usable, and "bitcoin price" matched no keyword at all so no tool
+    ran. The user then got "I have no live market data".
+    """
+
+    def test_crypto_queries_select_the_crypto_tool(self):
+        agent = _agent()
+        for query in ("Bitcoin market update", "bitcoin price", "btc price",
+                      "aaj ka bitcoin rate", "ethereum ka rate", "solana price",
+                      "crypto price", "dogecoin kitna hai"):
+            assert "get_crypto_price" in agent._detect_tool_needs(query), query
+
+    def test_crypto_does_not_also_fire_a_web_search(self):
+        agent = _agent()
+        assert agent._detect_tool_needs("Bitcoin market update") == ["get_crypto_price"]
+
+    def test_coin_name_is_extracted(self):
+        agent = _agent()
+        assert agent._extract_coin("bitcoin price") == "bitcoin"
+        assert agent._extract_coin("btc price") == "btc"
+        assert agent._extract_coin("ethereum ka rate") == "ethereum"
+        assert agent._extract_coin("crypto price") == "bitcoin"
+
+    def test_tool_is_registered_and_safe(self):
+        from genesis_protocol.ai.tool_system import get_tool_system
+
+        system = get_tool_system()
+        assert "get_crypto_price" in system.tools
+        # Safe, so a non-owner can still ask for a price.
+        assert _agent()._authorize_chat_tool(
+            _agent()._tool_policy(), "get_crypto_price", user_id=1
+        ).allowed
+
+
+class TestCryptoProviderParsesFlatKeys:
+    """CoinGecko returns flat currency keys; the old code read them as nested.
+
+    ``{"bitcoin": {"inr": 6329763, "inr_24h_change": -2.0}}`` - reading
+    ``coin_data["inr"]`` as a dict raised AttributeError, so every lookup
+    returned None and the chat always said "price unavailable".
+    """
+
+    def test_flat_keys_are_parsed(self):
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+
+        from genesis_protocol.integrations import live_facts
+
+        payload = {"bitcoin": {"inr": 6329763, "usd": 67149.0,
+                               "inr_24h_change": -2.0,
+                               "inr_market_cap": 1.0, "inr_24h_vol": 2.0}}
+
+        class _Resp:
+            status_code = 200
+            def json(self): return payload
+
+        class _Client:
+            async def __aenter__(self): return self
+            async def __aexit__(self, *a): return False
+            async def get(self, *a, **k): return _Resp()
+
+        with patch.object(live_facts.httpx, "AsyncClient", return_value=_Client()):
+            data = asyncio.run(live_facts.get_crypto_price("bitcoin"))
+
+        assert data["price_inr"] == 6329763
+        assert data["price_usd"] == 67149.0
+        assert data["change_24h_pct"] == -2.0
+
+    def test_falls_back_when_coingecko_rate_limits(self):
+        import asyncio
+        from unittest.mock import patch
+
+        from genesis_protocol.integrations import live_facts
+
+        class _Resp:
+            def __init__(self, code, payload): self.status_code, self._p = code, payload
+            def json(self): return self._p
+
+        class _Client:
+            async def __aenter__(self): return self
+            async def __aexit__(self, *a): return False
+            async def get(self, url, **k):
+                if "coingecko" in url:
+                    return _Resp(429, {})
+                if "coinbase" in url:
+                    return _Resp(200, {"data": {"amount": "67175.845"}})
+                return _Resp(200, {"rates": {"INR": 94.25}})
+
+        with patch.object(live_facts.httpx, "AsyncClient", return_value=_Client()):
+            data = asyncio.run(live_facts.get_crypto_price("bitcoin"))
+
+        assert data["price_usd"] == 67175.845
+        assert data["price_inr"] == round(67175.845 * 94.25)

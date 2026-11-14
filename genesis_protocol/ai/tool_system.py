@@ -90,6 +90,20 @@ class ToolSystem:
             handler=self._tool_get_exchange_rate
         ))
 
+        # Crypto price (exact, key-free)
+        self.register_tool(Tool(
+            name="get_crypto_price",
+            description=(
+                "Get the exact current price of a cryptocurrency (Bitcoin, "
+                "Ethereum, etc.) in INR and USD. Use when the user asks for a "
+                "coin price or a crypto market update."
+            ),
+            parameters={
+                "coin": {"type": "string", "description": "Coin name or symbol, e.g. bitcoin or btc", "required": True}
+            },
+            handler=self._tool_get_crypto_price
+        ))
+
         # Memory Store
         self.register_tool(Tool(
             name="memory_store",
@@ -295,6 +309,15 @@ class ToolSystem:
         from genesis_protocol.integrations.live_facts import get_exchange_rate
 
         data = await get_exchange_rate(params.get("base", ""), params.get("quote", ""))
+        if data.get("error"):
+            return ToolResult(False, error=data["error"])
+        return ToolResult(True, data=data)
+
+    async def _tool_get_crypto_price(self, params: Dict) -> ToolResult:
+        """Exact crypto spot price via a key-free provider."""
+        from genesis_protocol.integrations.live_facts import get_crypto_price
+
+        data = await get_crypto_price(params.get("coin", "bitcoin"))
         if data.get("error"):
             return ToolResult(False, error=data["error"])
         return ToolResult(True, data=data)

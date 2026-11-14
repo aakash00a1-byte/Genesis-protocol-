@@ -460,12 +460,27 @@ class GenesisAgent:
         if is_fx:
             tools.append("get_exchange_rate")
 
+        # Crypto has an exact, key-free provider, so a coin price is not left to
+        # a search snippet (which rarely carries the number). "bitcoin price"
+        # matched no keyword at all before, so no tool ran and the model
+        # answered the price from memory.
+        crypto_markers = [
+            "bitcoin", "btc", "ethereum", " eth", "solana", "dogecoin", "doge",
+            "ripple", "xrp", "cardano", "polkadot", "polygon", "matic",
+            "avalanche", "avax", "binance", "bnb", "litecoin", "ltc",
+            "tron", "trx", "shiba", "shib", "crypto", "cryptocurrency",
+        ]
+        is_crypto = any(kw in query_lower for kw in crypto_markers)
+        if is_crypto:
+            tools.append("get_crypto_price")
+
         # Arithmetic needs no lookup; compute it before the search check so it
         # can suppress a lookup ("what is 2+2" matched "what is").
         expression = self._math_expression(query)
 
         if (any(kw in query_lower for kw in realtime_keywords)
-                and not is_weather and not is_fx and not expression):
+                and not is_weather and not is_fx and not is_crypto
+                and not expression):
             tools.append("web_search")
         
         # Plain arithmetic goes to the safe calculator, not to code execution.
@@ -549,6 +564,7 @@ class GenesisAgent:
             "file_reader": "restricted",
             "get_weather": "safe",
             "get_exchange_rate": "safe",
+            "get_crypto_price": "safe",
         }
         try:
             from genesis_protocol.tools.tool_registry import get_tool_registry
@@ -628,6 +644,24 @@ class GenesisAgent:
         "fahrenheit", "sunny", "rainy", "cloudy", "forecast",
     }
 
+    # Coin words, longest first so "shiba inu" wins over "shib" and
+    # "bitcoin" wins over "btc" only when both appear.
+    _COIN_WORDS = (
+        "bitcoin", "ethereum", "solana", "dogecoin", "ripple", "cardano",
+        "polkadot", "polygon", "avalanche", "binancecoin", "litecoin", "tron",
+        "shiba inu", "shiba", "crypto", "btc", "eth", "sol", "doge", "xrp",
+        "ada", "dot", "matic", "avax", "bnb", "ltc", "trx", "shib",
+    )
+
+    @classmethod
+    def _extract_coin(cls, query: str) -> str:
+        """The coin a crypto query names, defaulting to bitcoin."""
+        lower = query.lower()
+        for word in cls._COIN_WORDS:
+            if word in lower:
+                return "bitcoin" if word == "crypto" else word
+        return "bitcoin"
+
     @staticmethod
     def _math_expression(query: str) -> str:
         """The plain arithmetic in a query, or "" (shared with mode switching)."""
@@ -677,6 +711,9 @@ class GenesisAgent:
             words = [w for w in re.findall(r"[A-Za-z]+", query)
                      if w.lower() not in self._STOPWORDS]
             return {"location": " ".join(words).strip() or query.strip()}
+
+        if tool_name == "get_crypto_price":
+            return {"coin": self._extract_coin(query)}
 
         if tool_name == "code_execution":
             return {"code": self._extract_code(query)}
@@ -774,6 +811,17 @@ class GenesisAgent:
             if err:
                 parts.append(f"stderr:\n{err}")
             return "\n".join(parts) or "(no output)"
+
+        if tool_name == "get_crypto_price" and isinstance(data, dict):
+            inr = data.get("price_inr")
+            usd = data.get("price_usd")
+            chg = data.get("change_24h_pct")
+            coin = (data.get("coin") or "coin").replace("-", " ").title()
+            parts = [f"{coin}: ₹{inr:,.0f} / ${usd:,.2f}"] if inr is not None else [f"{coin}: price unavailable"]
+            if chg is not None:
+                parts.append(f"24h change {chg:+.2f}%")
+            parts.append(f"source: {data.get('source', 'coingecko')}")
+            return " | ".join(parts)
 
         if tool_name == "calculator" and isinstance(data, dict):
             if "result" in data:
@@ -920,6 +968,8 @@ class GenesisAgent:
 - CURRENT TIME: {live_time}
 {telegram_line}- Do NOT guess the date - use the date provided above
 - If user asks about weather, news, or current events - USE WEB SEARCH
+- Crypto prices (bitcoin, ethereum, etc.) come from the get_crypto_price tool,
+  which returns an exact spot price. Use that number, do not recall one.
 - Your training data is OLD - always verify with live tools for current info
 - NEVER say "according to my knowledge" or "as of my last update"
 

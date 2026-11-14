@@ -100,3 +100,126 @@ async def get_exchange_rate(base: str, quote: str) -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"fx lookup failed: {e}")
         return {"error": f"fx lookup failed: {e}"}
+
+
+# CoinGecko id for the coins the chat is most likely to ask about.
+_CRYPTO_IDS = {
+    "bitcoin": "bitcoin", "btc": "bitcoin",
+    "ethereum": "ethereum", "eth": "ethereum",
+    "solana": "solana", "sol": "solana",
+    "dogecoin": "dogecoin", "doge": "dogecoin",
+    "ripple": "ripple", "xrp": "ripple",
+    "cardano": "cardano", "ada": "cardano",
+    "polkadot": "polkadot", "dot": "polkadot",
+    "polygon": "matic-network", "matic": "matic-network",
+    "avalanche": "avalanche-2", "avax": "avalanche-2",
+    "bnb": "binancecoin", "binancecoin": "binancecoin",
+    "litecoin": "litecoin", "ltc": "litecoin",
+    "tron": "tron", "trx": "tron",
+    "shiba": "shiba-inu", "shib": "shiba-inu",
+}
+
+
+# Coinbase spot-pair symbols for the coins the chat is most likely to ask about.
+_CRYPTO_TICKERS = {
+    "bitcoin": "BTC", "ethereum": "ETH", "solana": "SOL", "dogecoin": "DOGE",
+    "ripple": "XRP", "cardano": "ADA", "polkadot": "DOT",
+    "matic-network": "MATIC", "avalanche-2": "AVAX", "binancecoin": "BNB",
+    "litecoin": "LTC", "tron": "TRX", "shiba-inu": "SHIB",
+}
+
+
+async def _coingecko_price(client: "httpx.AsyncClient", coin_id: str) -> Dict[str, Any]:
+    """CoinGecko spot price. Flat keys per currency, not a nested dict."""
+    response = await client.get(
+        "https://api.coingecko.com/api/v3/simple/price",
+        params={
+            "ids": coin_id,
+            "vs_currencies": "inr,usd",
+            "include_24hr_change": "true",
+            "include_market_cap": "true",
+            "include_24hr_vol": "true",
+        },
+    )
+    if response.status_code != 200:
+        return {"error": f"coingecko HTTP {response.status_code}"}
+
+    data = response.json().get(coin_id)
+    if not data or data.get("inr") is None:
+        return {"error": f"coingecko has no price for {coin_id}"}
+
+    return {
+        "coin": coin_id,
+        "price_inr": data.get("inr"),
+        "price_usd": data.get("usd"),
+        "change_24h_pct": data.get("inr_24h_change"),
+        "market_cap_inr": data.get("inr_market_cap"),
+        "volume_24h_inr": data.get("inr_24h_vol"),
+        "source": "coingecko.com (spot price, live)",
+    }
+
+
+async def _coinbase_price(client: "httpx.AsyncClient", coin_id: str) -> Dict[str, Any]:
+    """Coinbase spot price in USD, converted to INR via the ECB reference rate.
+
+    The fallback for CoinGecko's free tier, which rate-limits (HTTP 429).
+    """
+    ticker = _CRYPTO_TICKERS.get(coin_id)
+    if not ticker:
+        return {"error": f"no fallback ticker for {coin_id}"}
+
+    response = await client.get(
+        f"https://api.coinbase.com/v2/prices/{ticker}-USD/spot"
+    )
+    if response.status_code != 200:
+        return {"error": f"coinbase HTTP {response.status_code}"}
+    usd = (response.json().get("data") or {}).get("amount")
+    if usd is None:
+        return {"error": f"coinbase has no price for {ticker}"}
+    usd = float(usd)
+
+    fx = await client.get(
+        "https://api.frankfurter.app/latest", params={"from": "USD", "to": "INR"}
+    )
+    rate = ((fx.json().get("rates") or {}) if fx.status_code == 200 else {}).get("INR")
+
+    return {
+        "coin": coin_id,
+        "price_inr": round(usd * rate) if rate else None,
+        "price_usd": usd,
+        "change_24h_pct": None,
+        "market_cap_inr": None,
+        "volume_24h_inr": None,
+        "source": "coinbase.com spot (USD) + frankfurter.app FX",
+    }
+
+
+async def get_crypto_price(coin: str = "bitcoin") -> Dict[str, Any]:
+    """Exact crypto price in INR and USD, or an error. Never a guess.
+
+    Tries CoinGecko first (INR + USD + 24h change) and falls back to Coinbase
+    plus an FX rate when CoinGecko rate-limits. Both providers are key-free.
+
+    CoinGecko's ``/simple/price`` returns flat keys per currency (``inr`` is
+    the price, ``inr_24h_change`` the change), not a nested ``{"inr": {...}}``
+    object. Reading it as nested crashed the older service, which is why a
+    crypto question always ended in "price unavailable".
+    """
+    key = (coin or "").strip().lower()
+    coin_id = _CRYPTO_IDS.get(key, key)
+    if not coin_id:
+        return {"error": "no coin given"}
+
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, headers=_UA,
+                                     follow_redirects=True) as client:
+            result = await _coingecko_price(client, coin_id)
+            if result.get("error"):
+                fallback = await _coinbase_price(client, coin_id)
+                if not fallback.get("error"):
+                    return fallback
+                result["error"] += f"; {fallback['error']}"
+            return result
+    except Exception as e:
+        logger.warning(f"crypto lookup failed: {e}")
+        return {"error": f"crypto lookup failed: {e}"}

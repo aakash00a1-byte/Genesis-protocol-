@@ -102,7 +102,9 @@ class CryptoService:
                 data = response.json()
                 if coin_id in data:
                     coin_data = data[coin_id]
-                    inr_data = coin_data.get("inr", {})
+                    # CoinGecko returns flat keys per currency: "inr" is the
+                    # price and "inr_24h_change" the change, not a nested dict.
+                    inr_data = coin_data
                     
                     return CryptoPrice(
                         name=coin_id.replace("-", " ").title(),
