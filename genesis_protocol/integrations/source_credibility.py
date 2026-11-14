@@ -17,6 +17,8 @@ publisher names it uses in Google News titles. ``TRUSTED_NEWS_DOMAINS`` and
 ``PUBLISHER_TO_DOMAIN`` are derived from it, so the two can never drift apart.
 """
 
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List
 from urllib.parse import urlparse
 
@@ -273,17 +275,21 @@ def _is_press_release(domain: str) -> bool:
 
 
 def classify(title: str, url: str, content: str = "",
-             publisher: str = "") -> Dict[str, Any]:
+             publisher: str = "", publisher_url: str = "") -> Dict[str, Any]:
     """Label one search result.
 
-    ``publisher`` is the attribution Google News adds ("Headline - Publisher").
-    Its links point at news.google.com, so the publisher is the real source.
-    Returns ``{"domain", "label", "reason"}``.
+    ``publisher`` is the attribution Google News adds ("Headline - Publisher")
+    and ``publisher_url`` is that publisher's own site from the feed's
+    ``<source url>``. Either is a better attribution than the news.google.com
+    link, which is only a redirect. Returns ``{"domain", "label", "reason"}``.
     """
-    domain = _domain(url)
+    domain = _domain(publisher_url) or _domain(url)
     text = f"{title} {content}".lower()
 
     publisher = (publisher or "").strip()
+    if publisher_url:
+        # The publisher's own domain is authoritative; no name lookup needed.
+        publisher = ""
     if publisher:
         mapped, problem = _resolve_publisher(publisher)
         if mapped:
@@ -329,7 +335,9 @@ def assess(results: List[Dict]) -> List[Dict]:
         entry.update(classify(
             result.get("title", ""), result.get("url", ""),
             result.get("content", ""), result.get("publisher", ""),
+            result.get("publisher_url", ""),
         ))
+        entry.update(_recency(result.get("published", "")))
         labelled.append(entry)
     return labelled
 
@@ -346,12 +354,52 @@ def overall(labelled: List[Dict]) -> str:
     return LABEL_DEVELOPING
 
 
+def _recency(published: str) -> Dict[str, Any]:
+    """Age of a news item from its RSS pubDate.
+
+    News dates quickly, so "fresh" (under a day) and "older" (over a week) are
+    worth separating: a week-old headline presented as today's news misleads.
+    """
+    if not published:
+        return {"age": "unknown", "bucket": "unknown"}
+    try:
+        when = parsedate_to_datetime(published)
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return {"age": "unknown", "bucket": "unknown"}
+
+    delta = datetime.now(timezone.utc) - when
+    seconds = delta.total_seconds()
+    if seconds < 0:
+        return {"age": "just now", "bucket": "fresh"}
+    hours = seconds / 3600
+    if hours < 1:
+        age = f"{int(seconds // 60)} min ago"
+    elif hours < 24:
+        age = f"{int(hours)} h ago"
+    else:
+        age = f"{int(hours // 24)} d ago"
+
+    if hours < 24:
+        bucket = "fresh"
+    elif hours < 24 * 7:
+        bucket = "recent"
+    else:
+        bucket = "older"
+    return {"age": age, "bucket": bucket}
+
+
 def group_by_label(labelled: List[Dict]) -> Dict[str, List[Dict]]:
     """Split labelled results into sections, strongest evidence first."""
+    def _order(items):
+        # Freshest first; unknown ages last.
+        return sorted(items, key=lambda r: r.get("age") == "unknown")
+
     return {
-        LABEL_VERIFIED: [r for r in labelled if r.get("label") == LABEL_VERIFIED],
-        LABEL_DEVELOPING: [r for r in labelled if r.get("label") == LABEL_DEVELOPING],
-        LABEL_PROMOTIONAL: [r for r in labelled if r.get("label") == LABEL_PROMOTIONAL],
+        LABEL_VERIFIED: _order([r for r in labelled if r.get("label") == LABEL_VERIFIED]),
+        LABEL_DEVELOPING: _order([r for r in labelled if r.get("label") == LABEL_DEVELOPING]),
+        LABEL_PROMOTIONAL: _order([r for r in labelled if r.get("label") == LABEL_PROMOTIONAL]),
     }
 
 
@@ -365,9 +413,11 @@ _SECTION_TITLES = {
 def _render_item(r: Dict) -> str:
     publisher = r.get("publisher")
     source = publisher or r.get("domain") or "unknown"
+    age = r.get("age") or "unknown"
     return (
         f"- {r.get('title', '').strip()}\n"
         f"    source: {source} ({r.get('reason')})\n"
+        f"    published: {age}\n"
         f"    url: {r.get('url') or 'none'}"
     )
 

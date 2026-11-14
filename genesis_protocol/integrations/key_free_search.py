@@ -126,24 +126,41 @@ class KeyFreeSearch:
         if response.status_code != 200:
             raise RuntimeError(f"HTTP {response.status_code}")
 
-        items = re.findall(
-            r"<item>.*?<title>(.*?)</title>.*?<link>(.*?)</link>"
-            r".*?<pubDate>(.*?)</pubDate>",
-            response.text,
-            re.S,
-        )
+        items = re.findall(r"<item>(.*?)</item>", response.text, re.S)
         results = []
-        for t, l, p in items[:max_results]:
-            title = _strip_tags(t)
-            publisher = None
-            if " - " in title:
+        for item in items[:max_results]:
+            title_m = re.search(r"<title>(.*?)</title>", item, re.S)
+            link_m = re.search(r"<link>(.*?)</link>", item, re.S)
+            date_m = re.search(r"<pubDate>(.*?)</pubDate>", item, re.S)
+            src_m = re.search(
+                r"<source[^>]*url=\"([^\"]*)\"[^>]*>(.*?)</source>", item, re.S
+            )
+            if not (title_m and link_m):
+                continue
+
+            title = _strip_tags(title_m.group(1))
+            publisher = _strip_tags(src_m.group(2)) if src_m else None
+            if publisher and title.endswith(f" - {publisher}"):
+                title = title[: -len(f" - {publisher}")].strip()
+            if not publisher and " - " in title:
                 head, _, tail = title.rpartition(" - ")
                 if head and len(tail) <= 40:
                     title, publisher = head, tail
-            entry = {"title": title, "url": l.strip(),
-                     "content": f"Published {_strip_tags(p)}"}
+
+            entry = {
+                "title": title,
+                "url": link_m.group(1).strip(),
+                "published": _strip_tags(date_m.group(1)) if date_m else "",
+            }
             if publisher:
                 entry["publisher"] = publisher
+            # The <source url> is the publisher's own site, an authoritative
+            # attribution. The Google News link is a JS redirect, so the real
+            # article URL cannot be recovered; we give the publisher domain and
+            # the Google News link rather than inventing a deep link.
+            if src_m and src_m.group(1):
+                entry["publisher_url"] = src_m.group(1).strip()
+            entry["content"] = f"Published {entry['published']}"
             results.append(entry)
         return results
 

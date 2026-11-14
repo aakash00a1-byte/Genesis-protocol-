@@ -171,6 +171,70 @@ class TestPublisherNormalization:
         assert out["label"] == "developing"
 
 
+class TestRecency:
+    def test_recent_date_is_fresh(self):
+        from datetime import datetime, timezone
+        from email.utils import format_datetime
+        from genesis_protocol.integrations.source_credibility import _recency
+
+        now = format_datetime(datetime.now(timezone.utc))
+        assert _recency(now)["bucket"] == "fresh"
+
+    def test_old_date_is_older(self):
+        from genesis_protocol.integrations.source_credibility import _recency
+
+        assert _recency("Mon, 01 Jan 2024 00:00:00 GMT")["bucket"] == "older"
+
+    def test_missing_date_is_unknown(self):
+        from genesis_protocol.integrations.source_credibility import _recency
+
+        assert _recency("")["age"] == "unknown"
+
+    def test_garbage_date_does_not_raise(self):
+        from genesis_protocol.integrations.source_credibility import _recency
+
+        assert _recency("not a date")["bucket"] == "unknown"
+
+    def test_group_orders_fresh_before_unknown(self):
+        from datetime import datetime, timezone
+        from email.utils import format_datetime
+        from genesis_protocol.integrations.source_credibility import assess, group_by_label
+
+        fresh = format_datetime(datetime.now(timezone.utc))
+        labelled = assess([
+            {"title": "No date", "url": "https://www.bbc.com/a"},
+            {"title": "Fresh", "url": "https://www.bbc.com/b", "published": fresh},
+        ])
+        verified = group_by_label(labelled)["verified"]
+        assert verified[0]["title"] == "Fresh"
+        assert verified[-1]["title"] == "No date"
+
+
+class TestPublisherUrlAttribution:
+    def test_publisher_url_is_authoritative(self):
+        from genesis_protocol.integrations.source_credibility import classify
+
+        out = classify("H", "https://news.google.com/rss/x",
+                       publisher_url="https://www.economist.com")
+        assert out["label"] == "verified"
+        assert out["domain"] == "economist.com"
+
+    def test_unknown_publisher_url_is_developing(self):
+        from genesis_protocol.integrations.source_credibility import classify
+
+        out = classify("H", "https://news.google.com/rss/x",
+                       publisher_url="https://nobody.example")
+        assert out["label"] == "developing"
+
+    def test_format_includes_age(self):
+        from genesis_protocol.integrations.source_credibility import assess, format_for_model
+
+        text = format_for_model(assess([
+            {"title": "T", "url": "https://www.bbc.com/a", "published": "garbage"},
+        ]))
+        assert "published:" in text
+
+
 class TestSectionedOutput:
     def _labelled(self):
         from genesis_protocol.integrations.source_credibility import assess

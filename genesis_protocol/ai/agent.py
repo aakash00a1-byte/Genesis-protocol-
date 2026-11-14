@@ -531,10 +531,18 @@ class GenesisAgent:
         """Render tool data as text the model can cite without guessing."""
         if tool_name == "web_search" and isinstance(data, dict):
             from genesis_protocol.integrations.source_credibility import (
-                format_for_model, overall,
+                format_for_model, group_by_label, overall,
             )
             results = data.get("results", [])
-            header = f"overall confidence: {overall(results)}"
+            counts = {k: len(v) for k, v in group_by_label(results).items()}
+            fresh = sum(1 for r in results if r.get("bucket") == "fresh")
+            header = (
+                f"overall confidence: {overall(results)} | "
+                f"verified: {counts['verified']}, "
+                f"developing: {counts['developing']}, "
+                f"promotional: {counts['promotional-unverified']} | "
+                f"published in last 24h: {fresh}"
+            )
             body = format_for_model(results)
             answer = data.get("answer")
             if answer:
@@ -608,6 +616,8 @@ class GenesisAgent:
   order: "Verified", "Developing", and "Promotional / Unverified". Keep every
   item inside its own section; do not mix a press release in with verified
   reporting. If a section is empty, omit it.
+- Mention how old each item is when the tool gives a "published" age. Do not
+  present an item older than a day as if it were today's news.
 
 **RESPONSE STYLE - CRITICAL:**
 - Give DIRECT, CONCISE answers only
