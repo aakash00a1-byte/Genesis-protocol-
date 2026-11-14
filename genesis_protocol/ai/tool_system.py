@@ -264,49 +264,53 @@ class ToolSystem:
         return ToolResult(True, data=data)
 
     async def _tool_memory_store(self, params: Dict) -> ToolResult:
-        """Store in memory."""
+        """Store an approved fact in the user's own memory.
+
+        Storage is per-user. It previously wrote to a global bucket
+        (``user_id=0``), which would have mixed one user's facts into every
+        other user's recall. Without a user id we refuse rather than write
+        somewhere shared.
+        """
         key = params.get("key", "")
         value = params.get("value", "")
-        importance = params.get("importance", 0.5)
-        
-        if not key or not value:
-            return ToolResult(False, error="Missing key or value")
-        
-        try:
-            from genesis_protocol.memory.unified_memory import get_unified_memory
-            memory = get_unified_memory()
-            # Store with timestamp
-            memory.long_term.store(
-                chat_id=0,  # Global storage
-                user_id=0,
-                content=f"{key}: {value}",
-                memory_type="stored_knowledge",
-                importance=importance
+        user_id = params.get("user_id") or 0
+
+        if not value:
+            return ToolResult(False, error="Missing value")
+        if not user_id:
+            return ToolResult(
+                False,
+                error="memory_store needs a user id; refused to write to shared memory",
             )
-            return ToolResult(True, data={"stored": True, "key": key})
+
+        try:
+            from genesis_protocol.agentic.memory import MemoryRejected, get_agent_memory
+
+            memory = get_agent_memory()
+            memory_id = memory.remember(int(user_id), value, kind="fact", approved=True)
+            return ToolResult(True, data={"stored": True, "key": key, "id": memory_id})
+        except MemoryRejected as e:
+            return ToolResult(False, error=f"memory rejected: {e}")
         except Exception as e:
             return ToolResult(False, error=f"Memory store error: {e}")
-    
+
     async def _tool_memory_recall(self, params: Dict) -> ToolResult:
-        """Recall from memory."""
+        """Recall the user's own memories, never another user's."""
         query = params.get("query", "")
         limit = params.get("limit", 5)
-        
-        if not query:
-            return ToolResult(False, error="No query provided")
-        
+        user_id = params.get("user_id") or 0
+
+        if not user_id:
+            return ToolResult(False, error="memory_recall needs a user id")
+
         try:
-            from genesis_protocol.memory.unified_memory import get_unified_memory
-            memory = get_unified_memory()
-            results = memory.long_term.recall(query, limit=limit)
-            
-            return ToolResult(True, data={
-                "memories": results,
-                "count": len(results)
-            })
+            from genesis_protocol.agentic.memory import get_agent_memory
+
+            memories = get_agent_memory().recall(int(user_id), query, limit=limit)
+            return ToolResult(True, data={"results": memories, "count": len(memories)})
         except Exception as e:
             return ToolResult(False, error=f"Memory recall error: {e}")
-    
+
     async def _tool_code_execution(self, params: Dict) -> ToolResult:
         """Execute Python code."""
         code = params.get("code", "")

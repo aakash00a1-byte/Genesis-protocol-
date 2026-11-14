@@ -362,7 +362,9 @@ class GenesisAgent:
             tools_needed = self._detect_tool_needs(query)
             
             if tools_needed:
-                tool_results, failures = await self._execute_tools(tools_needed, query)
+                tool_results, failures = await self._execute_tools(
+                    tools_needed, query, user_id
+                )
                 context = f"{context}\n\nTool results:\n{tool_results}"
                 if failures:
                     context += (
@@ -455,19 +457,28 @@ class GenesisAgent:
         if any(kw in query_lower for kw in realtime_keywords) and not is_weather and not is_fx:
             tools.append("web_search")
         
-        # Code execution detection
-        code_keywords = ["calculate", "run", "execute", "compute", "python", "code", "program"]
-        if any(kw in query_lower for kw in code_keywords):
+        # Code execution only when the query carries runnable code. Broad
+        # "run/execute/code" wording is common in ordinary questions and used to
+        # trigger a tool call that could only fail.
+        if self._extract_code(query):
             tools.append("code_execution")
         
-        # Memory recall detection
-        recall_keywords = ["remember", "recall", "what did", "before", "previously", "past", "pichla"]
-        if any(kw in query_lower for kw in recall_keywords):
+        # Memory: an explicit "remember X" is a store; a question about the
+        # past is a recall. Treating both as recall meant a stored fact was
+        # never written.
+        store_markers = ["remember that", "remember:", "remember this",
+                         "note that", "save this", "yaad rakho", "yaad rakhna"]
+        recall_markers = ["do you remember", "what did i", "recall", "previously",
+                          "yaad hai", "pichla"]
+        if any(m in query_lower for m in store_markers):
+            tools.append("memory_store")
+        elif any(m in query_lower for m in recall_markers):
             tools.append("memory_recall")
         
         return tools
     
-    async def _execute_tools(self, tools: List[str], query: str) -> tuple:
+    async def _execute_tools(self, tools: List[str], query: str,
+                             user_id: int = 0) -> tuple:
         """Execute required tools.
 
         Returns ``(results_text, failures)``. ``failures`` lists tools that were
@@ -482,7 +493,7 @@ class GenesisAgent:
 
         for tool_name in tools:
             try:
-                params = self._build_tool_params(tool_name, query)
+                params = self._build_tool_params(tool_name, query, user_id)
                 result = await self.tool_system.execute_tool(tool_name, params)
 
                 # ToolResult carries ``data`` (and ``error``); it has no
@@ -514,15 +525,57 @@ class GenesisAgent:
         "fahrenheit", "sunny", "rainy", "cloudy", "forecast",
     }
 
-    def _build_tool_params(self, tool_name: str, query: str) -> Dict:
+    @staticmethod
+    def _extract_code(query: str) -> str:
+        """Pull runnable Python out of a query, or return "".
+
+        The tool-first path runs before the model sees the question, so the
+        model never gets a chance to write the code the tool is meant to run.
+        We therefore only invoke code execution when the query itself carries
+        runnable code (a fenced block or a plain arithmetic expression). Any
+        other "run/execute" wording is left to the model to answer, rather than
+        firing a tool call that can only fail with "No code provided".
+        """
+        fenced = re.search(r"```(?:python|py)?\s*\n?(.*?)```", query, re.S)
+        if fenced and fenced.group(1).strip():
+            return fenced.group(1).strip()
+
+        expr = re.search(
+            r"(?:calculate|compute|evaluate|what\s+is)\s*"
+            r"([0-9][0-9\.\s\+\-*/%()\^]*[0-9\)])",
+            query, re.I,
+        )
+        if expr:
+            candidate = expr.group(1).strip().rstrip("+-*/^%")
+            if candidate and re.fullmatch(r"[0-9\.\s\+\-*/%()\^]+", candidate):
+                return f"print({candidate.replace('^', '**')})"
+        return ""
+
+    def _build_tool_params(self, tool_name: str, query: str,
+                           user_id: int = 0) -> Dict:
         """Extract the parameters each tool needs from a free-text query."""
-        if tool_name in ("web_search", "memory_recall"):
+        if tool_name == "web_search":
             return {"query": query}
 
         if tool_name == "get_weather":
             words = [w for w in re.findall(r"[A-Za-z]+", query)
                      if w.lower() not in self._STOPWORDS]
             return {"location": " ".join(words).strip() or query.strip()}
+
+        if tool_name == "code_execution":
+            return {"code": self._extract_code(query)}
+
+        if tool_name == "memory_recall":
+            return {"query": query, "user_id": user_id}
+
+        if tool_name == "memory_store":
+            text = query.strip()
+            for lead in ("remember that", "remember:", "remember", "note that",
+                         "yaad rakho ki", "yaad rakho", "yaad rakhna"):
+                if text.lower().startswith(lead):
+                    text = text[len(lead):].lstrip(" :,-")
+                    break
+            return {"key": text[:60] or "fact", "value": text, "user_id": user_id}
 
         if tool_name == "get_exchange_rate":
             codes = re.findall(r"\b[A-Z]{3}\b", query.upper())
@@ -559,6 +612,25 @@ class GenesisAgent:
             if answer:
                 body += f"\n- [summary] {answer}"
             return f"{header}\n{body}"
+
+        if tool_name == "code_execution" and isinstance(data, dict):
+            out = (data.get("output") or "").strip()
+            err = (data.get("error") or "").strip()
+            parts = []
+            if out:
+                parts.append(f"stdout:\n{out}")
+            if err:
+                parts.append(f"stderr:\n{err}")
+            return "\n".join(parts) or "(no output)"
+
+        if tool_name in ("memory_store", "memory_recall") and isinstance(data, dict):
+            if data.get("stored"):
+                return f"stored key: {data.get('key')}"
+            if "results" in data:
+                items = data.get("results") or []
+                if not items:
+                    return "no matching memories"
+                return "\n".join(f"- {m.get('value') or m.get('content')}" for m in items)
 
         return json.dumps(data, ensure_ascii=False, default=str)
 
