@@ -6,6 +6,7 @@ Controls system operation mode:
 """
 
 import logging
+import re
 from typing import Dict, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
@@ -14,6 +15,29 @@ from datetime import datetime
 from genesis_protocol.utils.logger import get_logger
 
 logger = get_logger("ai.autonomous_mode")
+
+
+# Plain arithmetic ("calculate 17*23", "what is 2+2") must reach the tool path:
+# in NORMAL mode no tool runs and the model answers from memory, which is how a
+# live probe returned 437 for 17*23. Only a bare digits-and-operators expression
+# counts, so "what is the capital of France" is unaffected.
+_ARITHMETIC_RE = re.compile(
+    r"(?:calculate|compute|evaluate|what\s+is)\s*"
+    r"([0-9][0-9\.\s\+\-*/%()\^]*[0-9\)])",
+    re.I,
+)
+
+
+def extract_math_expression(query: str) -> str:
+    """The plain arithmetic in a query, or "" (see ``_ARITHMETIC_RE``)."""
+    match = _ARITHMETIC_RE.search(query)
+    if not match:
+        return ""
+    candidate = match.group(1).strip().rstrip("+-*/^%")
+    if candidate and re.fullmatch(r"[0-9\.\s\+\-*/%()\^]+", candidate):
+        return candidate
+    return ""
+
 
 
 class OperationMode(Enum):
@@ -139,6 +163,10 @@ class AutonomousModeManager:
             True if autonomous mode should be used
         """
         query_lower = query.lower()
+        # Arithmetic needs the calculator, which only runs on the tool path.
+        if extract_math_expression(query):
+            return True
+
         
         # Check trigger keywords
         for trigger in self.AUTONOMOUS_TRIGGERS:

@@ -611,22 +611,10 @@ class GenesisAgent:
 
     @staticmethod
     def _math_expression(query: str) -> str:
-        """The plain arithmetic in a query, or "".
+        """The plain arithmetic in a query, or "" (shared with mode switching)."""
+        from genesis_protocol.ai.autonomous_mode import extract_math_expression
 
-        Only a bare expression of digits and operators counts, so it is safe to
-        hand to the calculator's AST whitelist.
-        """
-        expr = re.search(
-            r"(?:calculate|compute|evaluate|what\s+is)\s*"
-            r"([0-9][0-9\.\s\+\-*/%()\^]*[0-9\)])",
-            query, re.I,
-        )
-        if not expr:
-            return ""
-        candidate = expr.group(1).strip().rstrip("+-*/^%")
-        if candidate and re.fullmatch(r"[0-9\.\s\+\-*/%()\^]+", candidate):
-            return candidate
-        return ""
+        return extract_math_expression(query)
 
     @staticmethod
     def _extract_code_block(query: str) -> str:

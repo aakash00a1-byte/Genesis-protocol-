@@ -395,3 +395,30 @@ class TestChatHonoursToolPolicy:
         )
         assert any("code_execution" in f for f in failures)
         assert text == "No tool results"
+
+
+class TestArithmeticReachesTheToolPath:
+    """Arithmetic only runs on the tool path, and the tool path only runs in
+    autonomous mode. "calculate 17*23" triggered neither, so no calculator ran
+    and the model answered from memory (the live probe returned 437).
+    """
+
+    def test_arithmetic_selects_autonomous_mode(self):
+        from genesis_protocol.ai.autonomous_mode import get_mode_manager
+
+        manager = get_mode_manager()
+        assert manager.should_use_autonomous("calculate 17*23") is True
+        assert manager.should_use_autonomous("what is 2+2") is True
+
+    def test_ordinary_question_does_not(self):
+        from genesis_protocol.ai.autonomous_mode import get_mode_manager
+
+        manager = get_mode_manager()
+        assert manager.should_use_autonomous("what is the capital of France") is False
+        assert manager.should_use_autonomous("hi") is False
+
+    def test_math_expression_helper(self):
+        from genesis_protocol.ai.autonomous_mode import extract_math_expression
+
+        assert extract_math_expression("calculate 17*23") == "17*23"
+        assert extract_math_expression("what is the capital of France") == ""

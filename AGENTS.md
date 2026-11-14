@@ -1035,3 +1035,10 @@ Arithmetic now routes to the safe `calculator` tool (whitelist AST evaluator in
 `code_execution`. `GenesisAgent._math_expression` extracts the expression and
 `_extract_code_block` extracts the fence. Keep these separate: never send plain
 arithmetic to code execution again.
+
+Arithmetic also had to select autonomous mode: the tool path only runs there,
+and `should_use_autonomous` matched none of the trigger keywords for
+"calculate 17*23", so no calculator ran and the model answered from memory -
+the same wrong-number failure from the other direction. `extract_math_expression`
+(living in `ai.autonomous_mode`) is the single source of truth, used both to
+select the mode and to route the query to the calculator.
