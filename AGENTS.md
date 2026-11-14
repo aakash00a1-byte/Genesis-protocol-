@@ -1099,6 +1099,32 @@ system prompt asks for short, flowing Hinglish prose: no headings, no bold, no
 bullet lists unless the user asked for a list or there are three or more items,
 no emoji unless the user used one, and no closing filler.
 
+### Telegram and web report the same runtime facts
+
+Telegram `/status`, `/capabilities`, `/github` and `/prs` are answered from
+`genesis_protocol/integrations/telegram_commands.py`, which reads the same
+`agentic.identity.describe_runtime()` and `integrations.github_status` the web
+`/api/identity`, `/api/capabilities` and `/api/github` endpoints use. So the two
+surfaces cannot disagree. `/status` used to be a hardcoded blurb that claimed
+"Groq-powered" even when Gemini answered - a false claim. `github_status` is
+read-only (it never merges, pushes or deploys) and never includes the token.
+
+Command routing order matters: a bare `/status` is GLUTEN's runtime status and
+is handled before the update transport, but `/status <id>` is the update lookup
+and still falls through to it. `/task` and `/task_status` are owner-gated
+(they read/write per-user durable task state); the read-only commands are open,
+matching the public `/api/identity`.
+
+### The web chat GLUTEN also knows its GitHub and task state
+
+Web chat runs through `Agent.process` -> `route_identity`, so the same
+`identity_router` answers both surfaces. Status-intent questions route to the
+live sources: "is github connected" / "how many prs open" read
+`integrations.github_status`, and "my work orders" reads the durable
+`/tmp/telegram_task_queue.json`. The keyword lists are status-intent phrases on
+purpose - a bare "what is github" is general knowledge and must still reach the
+provider, not a status dump.
+
 ### Identity answers are prose, not a data dump
 
 The deterministic identity replies in `genesis_protocol/ai/identity_router.py`

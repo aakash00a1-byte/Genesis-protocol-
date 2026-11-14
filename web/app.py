@@ -1058,6 +1058,19 @@ def api_capabilities():
     })
 
 
+@app.route('/api/github', methods=['GET'])
+def api_github():
+    """Read-only GitHub connection status and open PRs.
+
+    Same source as the Telegram ``/github`` and ``/prs`` commands, so both
+    surfaces agree. Read-only on purpose: it never merges, pushes or deploys.
+    The token value is never included.
+    """
+    from genesis_protocol.integrations.github_status import status
+
+    return jsonify(status())
+
+
 @app.route('/api/memory', methods=['GET'])
 @login_required
 def api_agent_memory_list():
@@ -2000,6 +2013,25 @@ def telegram_webhook():
     except Exception as e:
         print(f"Work-order routing error: {e}")
 
+    # Runtime, secret-free commands answered from the same source as
+    # /api/identity and /api/capabilities, so Telegram and web agree. Placed
+    # before the update-command parking below: a bare "/status" is GLUTEN's
+    # runtime status, not an update lookup ("/status <id>" still goes there).
+    # Read-only commands are open; /task and /task_status are owner-gated.
+    try:
+        from genesis_protocol.integrations.telegram_commands import (
+            handle_extra_command,
+            is_extra_command,
+        )
+        if is_extra_command(text):
+            answer = handle_extra_command(text, user_id=user.get('id', 0), is_owner=is_admin)
+            if answer:
+                _append_reply(chat_id, answer)
+                return jsonify({'ok': True, 'command': text.split()[0].lower()})
+            # None means "not mine" (e.g. "/status 3"): fall through.
+    except Exception as e:
+        print(f"Extra command error: {e}")
+
     # Owner update commands are parked for the self-improvement harness, which
     # is the only thing that may act on them. They get no immediate reply; the
     # harness replies after it merges or rejects.
@@ -2025,9 +2057,15 @@ def telegram_webhook():
 
     # Build reply text
     if text == '/start':
-        reply = "🤖 *Genesis Protocol* online!\n\nI'm your autonomous AI. Send me any message or question!\n\nCommands:\n/start - Welcome\n/status - Bot status\n/ask <question> - Ask AI\n/council <question> - Ask several models at once"
+        reply = "🤖 *Genesis Protocol* online!\n\nI'm your autonomous AI. Send me any message or question!\n\nCommands:\n/start - Welcome\n/status - Bot status\n/capabilities - Tools and permissions\n/github - GitHub connection\n/prs - Open pull requests\n/ask <question> - Ask AI\n/council <question> - Ask several models at once\n/help - All commands"
     elif text == '/status':
-        reply = "✅ GLUTEN bot running (webhook + relay mode)\n🚀 HF Space: LIVE\n🧠 AI: Groq-powered\n📡 Replies relayed via GitHub Actions"
+        # Runtime facts, not a hardcoded blurb: the old text claimed
+        # "Groq-powered" even when Gemini answered, which is a false claim.
+        try:
+            from genesis_protocol.integrations.telegram_commands import format_status
+            reply = format_status()
+        except Exception as e:
+            reply = f"Status: UNKNOWN ({str(e)[:100]})"
     elif text.startswith('/ask '):
         question = text[5:].strip()
         reply = None

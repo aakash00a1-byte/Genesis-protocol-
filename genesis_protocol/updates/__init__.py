@@ -104,7 +104,14 @@ HELP_TEXT = (
     "/updates — list pending updates (agent proposals)\n"
     "/approve <id|number> — approve, push and deploy an update\n"
     "/reject <id|number> [reason] — reject an update\n"
-    "/status <id> — show one update"
+    "/status <id> — show one update\n"
+    "\n"
+    "GLUTEN runtime commands:\n"
+    "/capabilities — tools GLUTEN can actually run\n"
+    "/github — GitHub connection status (read-only)\n"
+    "/prs — open pull requests (read-only)\n"
+    "/task <goal> — record a bounded task (owner)\n"
+    "/task_status [id] — task state (owner)"
 )
 
 
