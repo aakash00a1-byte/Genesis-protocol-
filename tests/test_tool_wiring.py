@@ -487,3 +487,20 @@ class TestWeekdayIsProvided:
 
     def test_system_prompt_tells_the_model_to_derive_weekdays(self):
         assert "WORK OUT WEEKDAYS" in _agent()._get_system_prompt()
+
+    def test_system_prompt_lists_upcoming_weekday_dates(self):
+        # The model computed these itself and got them wrong; they are now given.
+        assert "UPCOMING WEEKDAY DATES" in _agent()._get_system_prompt()
+
+    def test_upcoming_weekdays_are_the_next_occurrence(self):
+        from datetime import datetime, timedelta, timezone
+
+        from genesis_protocol.integrations.live_info_service import _upcoming_weekdays
+
+        # Saturday 14 November 2026 -> next Friday is 20 November, not 17/18/21.
+        now = datetime(2026, 11, 14, 10, 0, tzinfo=timezone.utc)
+        upcoming = _upcoming_weekdays(now)
+        assert upcoming["Sunday"] == "15 November 2026"
+        assert upcoming["Friday"] == "20 November 2026"
+        assert upcoming["Saturday"] == "21 November 2026"
+        assert len(upcoming) == 7

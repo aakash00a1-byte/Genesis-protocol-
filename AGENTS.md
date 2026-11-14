@@ -1051,3 +1051,10 @@ weekdays itself and got them wrong: on Saturday 14 November 2026 it called
 `LiveInfo.weekday` is now populated (`%A`, IST) and the prompt prints
 `"<weekday>, <date>"` plus an explicit instruction to derive weekdays from it.
 Keep the weekday next to the date - a bare date invites the model to guess.
+
+Even with the weekday present, the model still derived the date of "next
+Friday" itself and got it wrong (Saturday 14 Nov 2026 -> it said 21 November;
+the next Friday is 20 November). Date arithmetic is therefore done in code:
+`_upcoming_weekdays` returns the next occurrence of each weekday and the prompt
+prints them as `Friday = 20 November 2026`, with an explicit "do NOT compute it
+yourself". Never leave weekday arithmetic to the model.

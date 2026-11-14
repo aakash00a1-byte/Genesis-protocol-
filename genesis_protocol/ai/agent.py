@@ -874,10 +874,20 @@ class GenesisAgent:
         weekday = getattr(info, "weekday", None) if info else None
         today = f"{weekday}, {info.date}" if (info and info.date and weekday) else (
             info.date if info and info.date else "Unknown")
+        upcoming = getattr(info, "upcoming_weekdays", None) if info else None
+        upcoming_line = ""
+        if upcoming:
+            pairs = ", ".join(f"{name} = {date}" for name, date in upcoming.items())
+            upcoming_line = (
+                f"- UPCOMING WEEKDAY DATES (already computed for you): {pairs}\n"
+                "- For a weekday deadline (\"by Friday\", \"next Monday\") use the "
+                "date from the line above. Do NOT compute it yourself."
+            )
 
         return f"""**IMPORTANT - REAL-TIME DATA RULES:**
 - TODAY IS: {today}
-- WORK OUT WEEKDAYS FROM THAT LINE. Do not guess: a date has exactly one
+{upcoming_line}
+- WORK OUT WEEKDAYS FROM THE LINES ABOVE. Do not guess: a date has exactly one
   weekday, and "this Friday" is the next Friday on or after today.
 - CURRENT TIME: {live_time}
 - Do NOT guess the date - use the date provided above

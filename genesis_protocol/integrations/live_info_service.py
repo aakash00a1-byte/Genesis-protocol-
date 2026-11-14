@@ -48,10 +48,25 @@ class LiveInfo:
     date: str
     time: str
     weekday: str = ""
+    upcoming_weekdays: Dict[str, str] = None
     weather: Optional[WeatherInfo] = None
     location: Optional[LocationInfo] = None
     news: list = None
     error: str = None
+
+
+def _upcoming_weekdays(now) -> Dict[str, str]:
+    """Next occurrence of each weekday, e.g. {"Friday": "20 November 2026"}.
+
+    The model computed these itself and got them wrong (on Saturday 14 Nov 2026
+    it called "this Friday" 17/18/21 November; the next Friday is 20 November),
+    so the correct dates are computed here and handed over instead.
+    """
+    result: Dict[str, str] = {}
+    for offset in range(1, 8):
+        day = now + timedelta(days=offset)
+        result.setdefault(day.strftime("%A"), day.strftime("%d %B %Y"))
+    return result
 
 
 class LiveInfoService:
@@ -252,6 +267,7 @@ class LiveInfoService:
             date=now_ist.strftime("%d %B %Y"),
             weekday=now_ist.strftime("%A"),
             time=now_ist.strftime("%I:%M:%S %p IST"),
+            upcoming_weekdays=_upcoming_weekdays(now_ist),
             weather=weather,
             location=location,
             news=news
