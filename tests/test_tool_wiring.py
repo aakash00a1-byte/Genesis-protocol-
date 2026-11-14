@@ -438,3 +438,33 @@ class TestArithmeticDoesNotTriggerSearch:
     def test_non_arithmetic_question_still_searches(self):
         agent = _agent()
         assert "web_search" in agent._detect_tool_needs("what is the capital of France")
+
+
+class TestLocalIntentsDoNotSearch:
+    """Notes, tasks and memory are answered from the user's own data, so they
+    must not also fire a web search. "create task: submit report by friday"
+    matched "day" (inside "friday") and "tomorrow" and returned a stray
+    "Sources" block beside the task confirmation.
+    """
+
+    def test_task_creation_does_not_search(self):
+        agent = _agent()
+        needs = agent._detect_tool_needs("create task: submit report by friday")
+        assert "task_manager" in needs
+        assert "web_search" not in needs
+
+    def test_note_save_does_not_search(self):
+        agent = _agent()
+        needs = agent._detect_tool_needs("save note: meeting at 5pm tomorrow")
+        assert "notes" in needs
+        assert "web_search" not in needs
+
+    def test_memory_store_does_not_search(self):
+        agent = _agent()
+        needs = agent._detect_tool_needs("remember that my favourite color is teal")
+        assert "memory_store" in needs
+        assert "web_search" not in needs
+
+    def test_general_question_still_searches(self):
+        agent = _agent()
+        assert "web_search" in agent._detect_tool_needs("what is the capital of Japan")

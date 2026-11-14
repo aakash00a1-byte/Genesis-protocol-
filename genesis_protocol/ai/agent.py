@@ -505,6 +505,15 @@ class GenesisAgent:
         if any(m in query_lower for m in task_markers):
             tools.append("task_manager")
 
+        # A local intent - the user's own notes or tasks, or a memory write - is
+        # answered from the user's own data, so it must not also fire a search.
+        # "create task: submit report by friday" matched "day" (inside "friday")
+        # and "tomorrow", so a stray "Sources" block appeared beside the task
+        # confirmation.
+        local_tools = ("notes", "task_manager", "memory_store", "memory_recall")
+        if any(t in tools for t in local_tools):
+            tools = [t for t in tools if t != "web_search"]
+
         return tools
     
     def _tool_policy(self):
