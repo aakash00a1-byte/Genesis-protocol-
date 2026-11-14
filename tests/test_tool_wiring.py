@@ -329,14 +329,25 @@ class TestCapabilitiesResponseIsHonest:
     kubernetes whether or not those binaries existed.
     """
 
-    def test_capabilities_exclude_missing_binaries(self):
+    def test_capabilities_match_runtime_availability(self):
+        # The reply must list exactly the tools that cannot run here, whatever
+        # this environment happens to have. Asserting a specific binary (kubectl)
+        # was absent made the test depend on the machine: GitHub runners ship
+        # kubectl, so CI failed while a dev box passed.
         from genesis_protocol.ai.identity_router import get_identity_router
+        from genesis_protocol.tools.tool_registry import get_tool_registry
 
         text = get_identity_router()._what_capabilities()
-        assert "NOT usable here" in text
-        # kubectl is not installed in this environment; it must be listed as
-        # unusable, not offered as a working capability.
-        assert "kubectl" in text.split("NOT usable here")[1]
+        unavailable = sorted(
+            m.name for m in get_tool_registry().get_all_tools() if not m.is_available()
+        )
+        if unavailable:
+            assert "NOT usable here" in text
+            listed = text.split("NOT usable here")[1]
+            for name in unavailable:
+                assert name in listed, f"{name} cannot run but was not flagged"
+        else:
+            assert "NOT usable here" not in text
 
     def test_capabilities_mention_working_tools(self):
         from genesis_protocol.ai.identity_router import get_identity_router
