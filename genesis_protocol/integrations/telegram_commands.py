@@ -58,7 +58,7 @@ def _verb_arg(text: str) -> tuple[str, str]:
     return verb, arg
 
 
-def _format_capabilities() -> str:
+def format_capabilities() -> str:
     """Tools GLUTEN can actually run, grouped by permission. Runtime facts."""
     from genesis_protocol.agentic.identity import describe_runtime
 
@@ -93,7 +93,7 @@ def _format_capabilities() -> str:
     return "\n".join(lines)
 
 
-def _format_status() -> str:
+def format_status() -> str:
     """Runtime status, read from the same source as /api/identity."""
     from genesis_protocol.agentic.identity import describe_runtime
 
@@ -112,13 +112,13 @@ def _format_status() -> str:
     return "\n".join(lines)
 
 
-def _format_github(*, http: Callable[[str], Any] | None = None) -> str:
+def format_github(*, http: Callable[[str], Any] | None = None) -> str:
     from genesis_protocol.integrations.github_status import format_status, status
 
     return format_status(status(http=http))
 
 
-def _format_prs(*, http: Callable[[str], Any] | None = None) -> str:
+def format_prs(*, http: Callable[[str], Any] | None = None) -> str:
     from genesis_protocol.integrations.github_status import status
 
     data = status(http=http)
@@ -136,7 +136,7 @@ def _format_prs(*, http: Callable[[str], Any] | None = None) -> str:
     return "\n".join(lines)
 
 
-def _create_task(user_id: int, goal: str) -> str:
+def create_task(user_id: int, goal: str) -> str:
     """Record a bounded task. Never runs an open-ended job from a chat command."""
     if not goal:
         return "Kya task banana hai? Bhejo: /task <goal>"
@@ -152,7 +152,7 @@ def _create_task(user_id: int, goal: str) -> str:
     )
 
 
-def _task_status(user_id: int, task_id: str) -> str:
+def task_status(user_id: int, task_id: str) -> str:
     from genesis_protocol.agentic.tasks import get_task_store
 
     store = get_task_store()
@@ -203,20 +203,20 @@ def handle_extra_command(
         # updates transport's update-lookup, so leave that form to it.
         if arg:
             return None
-        return _format_status()
+        return format_status()
     if verb == "capabilities":
-        return _format_capabilities()
+        return format_capabilities()
     if verb == "github":
-        return _format_github(http=http)
+        return format_github(http=http)
     if verb == "prs":
-        return _format_prs(http=http)
+        return format_prs(http=http)
 
     # Task commands write/read per-user durable state: owner only, fail closed.
     if verb in {"task", "task_status"}:
         if not is_owner:
             return "Ye command sirf owner ke liye hai."
         if verb == "task":
-            return _create_task(user_id, arg)
-        return _task_status(user_id, arg)
+            return create_task(user_id, arg)
+        return task_status(user_id, arg)
 
     return None

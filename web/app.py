@@ -2062,8 +2062,8 @@ def telegram_webhook():
         # Runtime facts, not a hardcoded blurb: the old text claimed
         # "Groq-powered" even when Gemini answered, which is a false claim.
         try:
-            from genesis_protocol.integrations.telegram_commands import _format_status
-            reply = _format_status()
+            from genesis_protocol.integrations.telegram_commands import format_status
+            reply = format_status()
         except Exception as e:
             reply = f"Status: UNKNOWN ({str(e)[:100]})"
     elif text.startswith('/ask '):

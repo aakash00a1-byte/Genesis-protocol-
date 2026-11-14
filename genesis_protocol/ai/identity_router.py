@@ -76,6 +76,28 @@ class IdentityRouter:
         "capabilities", "can you do", "what can you",
         "your skills", "your features", "your powers"
     ]
+
+    # GitHub / repository *status* keywords. Answered from the live read-only
+    # github_status module, never guessed. Deliberately status-intent phrases:
+    # a bare "github" or "repository" is general knowledge and must still reach
+    # the provider, not this status dump.
+    GITHUB_KEYWORDS = [
+        "github connected", "github status", "github se juda", "github juda",
+        "repo connected", "repo status", "repository connected",
+        "is github connected", "is the repo connected",
+        "open prs", "open pull request", "open pull requests",
+        "khuli pr", "kitni pr", "pr ka status", "my pull requests",
+        "pull requests kya", "how many prs",
+    ]
+
+    # Work-order / task *status* keywords. Answered from the live work-order
+    # store. Status-intent only, for the same reason as above.
+    WORK_KEYWORDS = [
+        "work order", "work orders", "my work orders", "mere work order",
+        "my tasks", "mere tasks", "task status", "mere kaam ka status",
+        "kaam ka status", "pending tasks", "pending work", "work queue",
+        "kya kaam chal raha", "kaam chal raha",
+    ]
     
     def __init__(self):
         """Initialize identity router."""
@@ -112,6 +134,14 @@ class IdentityRouter:
 
         # Check for capability keywords
         for keyword in self.CAPABILITY_KEYWORDS:
+            if keyword in query_lower:
+                return True
+
+        # Check for GitHub / work-order status keywords
+        for keyword in self.GITHUB_KEYWORDS:
+            if keyword in query_lower:
+                return True
+        for keyword in self.WORK_KEYWORDS:
             if keyword in query_lower:
                 return True
         
@@ -173,6 +203,12 @@ class IdentityRouter:
         
         elif any(k in query_lower for k in ["capability", "skill", "power", "feature", "can you do", "what can you"]):
             return self._what_capabilities()
+
+        elif any(k in query_lower for k in self.GITHUB_KEYWORDS):
+            return self._what_github()
+
+        elif any(k in query_lower for k in self.WORK_KEYWORDS):
+            return self._what_work_orders()
 
         elif any(k in query_lower for k in self.PROVIDER_MODEL_KEYWORDS):
             return self._what_provider_model()
@@ -369,6 +405,56 @@ Status: {tests['status']}"""
             for skill in get_skill_registry().list_all_skills()
             if tools_for_skill(skill.name)
         ]
+
+    def _what_github(self) -> str:
+        """Report the live, read-only GitHub connection status.
+
+        Reads the same ``integrations.github_status`` the Telegram ``/github``
+        command and the web ``/api/github`` endpoint use, so the chat answer and
+        the other surfaces cannot disagree. Read-only: never merges or pushes.
+        """
+        try:
+            from genesis_protocol.integrations.github_status import format_status, status
+
+            return format_status(status())
+        except Exception as exc:  # noqa: BLE001 - report, never invent a status
+            return f"GitHub status check nahi ho paya: {str(exc)[:150]}"
+
+    def _what_work_orders(self) -> str:
+        """List the owner's work orders, read from the durable queue.
+
+        The queue file is the one the Telegram webhook parks ``/do`` orders in
+        (``web/app.py``). Read-only: this never runs, cancels or merges one.
+        """
+        import json
+        import os
+
+        path = os.environ.get("GLUTEN_WORK_ORDER_QUEUE", "/tmp/telegram_task_queue.json")
+        try:
+            if not os.path.exists(path):
+                return "Koi work order nahi hai. Naya order Telegram se: /do <instruction>"
+            with open(path, encoding="utf-8") as handle:
+                orders = json.load(handle)
+        except Exception as exc:  # noqa: BLE001
+            return f"Work orders padh nahi paya: {str(exc)[:150]}"
+
+        if not isinstance(orders, list) or not orders:
+            return "Koi work order nahi hai. Naya order Telegram se: /do <instruction>"
+
+        icon = {"queued": "🕓", "running": "⚙️", "done": "✅", "failed": "❌", "cancelled": "🚫"}
+        lines = [f"{len(orders)} work order(s):"]
+        for order in orders[-10:]:
+            if not isinstance(order, dict):
+                continue
+            mark = icon.get(order.get("state", ""), "•")
+            extra = order.get("pr") or order.get("note") or ""
+            lines.append(
+                f"{mark} #{order.get('id')} [{order.get('state')}] "
+                f"{str(order.get('instruction', ''))[:60]}"
+                + (f" — {extra}" if extra else "")
+            )
+        lines.append("Ye read-only list hai; order dene ke liye: /do <instruction>")
+        return "\n".join(lines)
 
 
 

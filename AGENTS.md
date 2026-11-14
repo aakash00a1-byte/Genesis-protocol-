@@ -1115,6 +1115,16 @@ and still falls through to it. `/task` and `/task_status` are owner-gated
 (they read/write per-user durable task state); the read-only commands are open,
 matching the public `/api/identity`.
 
+### The web chat GLUTEN also knows its GitHub and task state
+
+Web chat runs through `Agent.process` -> `route_identity`, so the same
+`identity_router` answers both surfaces. Status-intent questions route to the
+live sources: "is github connected" / "how many prs open" read
+`integrations.github_status`, and "my work orders" reads the durable
+`/tmp/telegram_task_queue.json`. The keyword lists are status-intent phrases on
+purpose - a bare "what is github" is general knowledge and must still reach the
+provider, not a status dump.
+
 ### Identity answers are prose, not a data dump
 
 The deterministic identity replies in `genesis_protocol/ai/identity_router.py`
