@@ -414,8 +414,9 @@ def _render_item(r: Dict) -> str:
     publisher = r.get("publisher")
     source = publisher or r.get("domain") or "unknown"
     age = r.get("age") or "unknown"
+    tag = (r.get("label") or LABEL_DEVELOPING).upper()
     return (
-        f"- {r.get('title', '').strip()}\n"
+        f"- [{tag}] {r.get('title', '').strip()}\n"
         f"    source: {source} ({r.get('reason')})\n"
         f"    published: {age}\n"
         f"    url: {r.get('url') or 'none'}"

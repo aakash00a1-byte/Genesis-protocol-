@@ -226,6 +226,18 @@ class TestPublisherUrlAttribution:
                        publisher_url="https://nobody.example")
         assert out["label"] == "developing"
 
+    def test_every_item_carries_its_label_tag(self):
+        from genesis_protocol.integrations.source_credibility import assess, format_for_model
+
+        text = format_for_model(assess([
+            {"title": "V", "url": "https://www.reuters.com/a"},
+            {"title": "D", "url": "https://random.xyz/b"},
+            {"title": "P", "url": "https://www.globenewswire.com/c"},
+        ]))
+        assert "[VERIFIED] V" in text
+        assert "[DEVELOPING] D" in text
+        assert "[PROMOTIONAL-UNVERIFIED] P" in text
+
     def test_format_includes_age(self):
         from genesis_protocol.integrations.source_credibility import assess, format_for_model
 

@@ -618,6 +618,9 @@ class GenesisAgent:
   reporting. If a section is empty, omit it.
 - Mention how old each item is when the tool gives a "published" age. Do not
   present an item older than a day as if it were today's news.
+- Every item in the tool output carries a tag such as [VERIFIED], [DEVELOPING]
+  or [PROMOTIONAL-UNVERIFIED]. Keep that tag with the item. Never move an item
+  under a stronger heading than its tag, and never drop the tag.
 
 **RESPONSE STYLE - CRITICAL:**
 - Give DIRECT, CONCISE answers only
