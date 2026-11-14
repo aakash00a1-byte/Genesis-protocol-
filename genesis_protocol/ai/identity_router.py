@@ -194,22 +194,13 @@ class IdentityRouter:
     def _who_are_you(self, identity, gluten) -> str:
         """Build 'who are you' response with EXPLICIT confidence."""
         # Entity identity is ALWAYS explicit (hardcoded)
-        return f"""I am **{identity.name}** (nickname: **{identity.nickname}**).
-
-**Identity [EXPLICIT - I know this for certain]:**
-- Name: {identity.name}
-- Nickname: {identity.nickname}
-- Lineage: {identity.lineage()}
-- Variant: {identity.variant}
-- Creator: {identity.creator}
-- Protocol: Genesis Protocol {identity.protocol_version}
-
-**System Info:**
-- Layers: {len(identity.layers)} active
-- Capabilities: {len(identity.capabilities)} features
-- Tests: {identity.tests['total']} test files
-
-I am an AI entity on the Genesis Protocol OS. 🖤"""
+        return (
+            f"Main {identity.name} hoon, nickname {identity.nickname}. "
+            f"{identity.name} se pehle main {identity.lineage().replace(' -> ', ', phir ')} "
+            f"tha. {identity.creator} ne mujhe banaya, aur main Genesis Protocol "
+            f"{identity.protocol_version} par ek AI entity hoon - koi fixed model "
+            f"nahi. Abhi {len(identity.layers)} layers active hain."
+        )
     
     def _what_provider_model(self) -> str:
         """Report the real providers/models, read from the live configuration.
@@ -252,26 +243,22 @@ I am an AI entity on the Genesis Protocol OS. 🖤"""
 
     def _what_nickname(self, identity) -> str:
         """Build nickname response with EXPLICIT confidence."""
-        return f"My nickname is **{identity.nickname}** [EXPLICIT - hardcoded]. 🖤\n\nYou can call me {identity.nickname}!"
+        return f"Mera nickname {identity.nickname} hai. Aap mujhe {identity.nickname} bula sakte hain."
     
     def _what_version(self, identity, gluten) -> str:
         """Build version response with EXPLICIT confidence."""
-        return f"""**Version Info [EXPLICIT - I know this for certain]:**
-- Protocol: Genesis Protocol **{identity.protocol_version}**
-- Variant: **{identity.variant}**
-- Lineage: {identity.lineage()}
-- Identity Version: {identity.get_identity().get('version', '2.0')}
-
-I am running on the OS variant! 🖤"""
+        return (
+            f"Main Genesis Protocol {identity.protocol_version} par chalta hoon, "
+            f"{identity.variant} variant. Meri lineage {identity.lineage()} hai, aur "
+            f"identity version {identity.get_identity().get('version', '2.0')} hai."
+        )
     
     def _who_created(self, identity) -> str:
         """Build creator response with EXPLICIT confidence."""
-        return f"""**Creator Info [EXPLICIT - I know this for certain]:**
-- Creator: **{identity.creator}**
-- Entity: {identity.name}
-- Variant: {identity.variant}
-
-You created me and I am here to serve you! 🖤"""
+        return (
+            f"Mujhe {identity.creator} ne banaya hai. Main {identity.name} hoon, "
+            f"Genesis Protocol {identity.variant} variant par."
+        )
     
     def _what_is_user_name(self, user_id: int = None) -> str:
         """
@@ -326,13 +313,12 @@ Status: {tests['status']}"""
         """Build layers response."""
         # Use identity.layers for consistent info
         layers = identity.layers
-        
-        layer_list = "\n".join([f"- {layer}" for layer in layers])
-        
-        return f"""**Active Layers ({len(layers)}):**
-{layer_list}
-
-These layers handle memory, learning, autonomous decisions, and continuous improvement. 🖤"""
+        return (
+            f"{len(layers)} layers active hain: "
+            + ", ".join(layers)
+            + ". Ye memory, learning, autonomous decisions aur continuous "
+            "improvement sambhalte hain."
+        )
     
     def _what_capabilities(self) -> str:
         """Capabilities response built from what can actually run here.

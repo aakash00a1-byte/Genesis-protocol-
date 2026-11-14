@@ -100,7 +100,7 @@ class Identity:
         ]
 
     def greet(self) -> str:
-        return f"I am {self.name}. You can call me {self.nickname}. 🖤"
+        return f"I am {self.name}. You can call me {self.nickname}."
 
     def describe_self(self) -> str:
         return (

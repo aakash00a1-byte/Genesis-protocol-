@@ -1083,6 +1083,13 @@ system prompt asks for short, flowing Hinglish prose: no headings, no bold, no
 bullet lists unless the user asked for a list or there are three or more items,
 no emoji unless the user used one, and no closing filler.
 
+### Identity answers are prose, not a data dump
+
+The deterministic identity replies in `genesis_protocol/ai/identity_router.py`
+were bullet lists full of `**bold**` and 🖤 emoji ("Identity [EXPLICIT - I know
+this for certain]"). They now read as short Hinglish prose. Keep new identity
+answers in the same style.
+
 ### Identity and instruction privacy
 
 A live probe showed the model quoting its own rules back ("rules mein likha hai")
