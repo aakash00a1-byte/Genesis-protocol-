@@ -51,6 +51,11 @@ class PolicyDecision:
         }
 
 
+def owner_ids_from_env() -> Set[int]:
+    """Owner ids from ``GLUTEN_OWNER_IDS`` without building the policy."""
+    return _owner_ids_from_env()
+
+
 def _owner_ids_from_env() -> Set[int]:
     raw = os.environ.get("GLUTEN_OWNER_IDS", "").strip()
     ids: Set[int] = set()

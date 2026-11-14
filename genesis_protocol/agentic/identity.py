@@ -108,7 +108,11 @@ def describe_runtime(chain: Optional[Any] = None) -> Dict[str, Any]:
             "code_execution_memory_mb": _limit("sandbox", "DEFAULT_MEMORY_MB"),
             "code_execution_cpu_s": _limit("sandbox", "DEFAULT_CPU_SECONDS"),
         },
+        "owner_configured": _owner_configured(),
         "notes": [
+            "owner_configured is True when GLUTEN_OWNER_IDS lists at least one "
+            "user id. Restricted tools and code execution are denied to everyone "
+            "when it is False (fail closed).",
             "Provider and model names are read from the live configuration, never guessed.",
             "default_provider is the chain default; the scoring engine may choose a "
             "different configured provider per query. The provider that answered a "
@@ -117,6 +121,21 @@ def describe_runtime(chain: Optional[Any] = None) -> Dict[str, Any]:
             "Credential values are never included; only availability is reported.",
         ],
     }
+
+
+def _owner_configured() -> bool:
+    """Whether any owner id is configured (no ids are revealed).
+
+    Reads the environment directly instead of the policy singleton: building
+    the singleton here would cache it before a later caller sets the owner
+    env, leaving a stale, owner-less policy behind.
+    """
+    try:
+        from genesis_protocol.agentic.policy import owner_ids_from_env
+
+        return bool(owner_ids_from_env())
+    except Exception:
+        return False
 
 
 def _limit(module: str, name: str):

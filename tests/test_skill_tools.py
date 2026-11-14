@@ -45,8 +45,19 @@ def test_declared_tools_report_a_permission_level():
 def test_tools_for_skill_returns_only_runnable_names():
     from genesis_protocol.tools.skill_tools import tools_for_skill
 
+    # web_search declares tavily + http. tavily is only runnable when an API
+    # key is configured; http always is. The filter must reflect that instead
+    # of advertising tavily unconditionally.
     runnable = tools_for_skill("web_search")
-    assert set(runnable) == {"tavily", "http"}
+    assert "http" in runnable
+    from genesis_protocol.config import get_config
+
+    cfg = get_config()
+    tavily_cfg = getattr(cfg, "tavily", None) if cfg else None
+    if tavily_cfg and getattr(tavily_cfg, "api_key", None):
+        assert "tavily" in runnable
+    else:
+        assert "tavily" not in runnable
 
 
 def test_unavailable_cli_tool_fails_honestly():

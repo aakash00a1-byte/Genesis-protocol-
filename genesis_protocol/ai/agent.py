@@ -494,6 +494,54 @@ class GenesisAgent:
 
         return tools
     
+    def _tool_policy(self):
+        """The policy used to authorize chat tool calls (lazy import)."""
+        try:
+            from genesis_protocol.agentic.policy import get_agent_policy
+
+            return get_agent_policy()
+        except Exception:
+            return None
+
+    def _authorize_chat_tool(self, policy, tool_name: str, user_id: int):
+        """Authorize one chat tool call by its registry permission level.
+
+        The chat path used to run every detected tool with no policy check, so
+        a non-owner could reach restricted tools (code_execution, file_reader)
+        that the policy layer intends to reserve for the owner. The permission
+        is read from the canonical registry; a tool that is not there is left
+        to the tool system (returns ``None`` meaning "no opinion").
+        """
+        if policy is None:
+            return None
+        # Chat tool names that are not canonical registry entries, mapped to the
+        # permission level their implementation carries.
+        chat_only_permissions = {
+            "code_execution": "restricted",
+            "file_reader": "restricted",
+            "get_weather": "safe",
+            "get_exchange_rate": "safe",
+        }
+        try:
+            from genesis_protocol.tools.tool_registry import get_tool_registry
+
+            tool = get_tool_registry().get_tool(tool_name)
+            if tool is not None:
+                perm = getattr(getattr(tool, "permission", None), "value", None)
+            else:
+                perm = chat_only_permissions.get(tool_name)
+            if perm is None:
+                return None
+            # A chat request from the owner is the owner's own instruction, so
+            # it counts as approval for restricted tools. Non-owners are still
+            # refused; they can never approve their own restricted call.
+            return policy.authorize_tool(
+                user_id, tool_name, permission=perm,
+                owner_approved=policy.is_owner(user_id),
+            )
+        except Exception:
+            return None
+
     async def _execute_tools(self, tools: List[str], query: str,
                              user_id: int = 0) -> tuple:
         """Execute required tools.
@@ -508,8 +556,18 @@ class GenesisAgent:
         failures = []
         self._last_search_results = []
 
+        policy = self._tool_policy()
+
         for tool_name in tools:
             try:
+                decision = self._authorize_chat_tool(policy, tool_name, user_id)
+                if decision is not None and not decision.allowed:
+                    # A restricted tool the caller may not run is reported as a
+                    # failure, not silently skipped: the model is then told not
+                    # to invent a result for it.
+                    failures.append(f"{tool_name}: {decision.reason}")
+                    continue
+
                 params = self._build_tool_params(tool_name, query, user_id)
                 result = await self.tool_system.execute_tool(tool_name, params)
 

@@ -51,12 +51,25 @@ class TestCodeExtraction:
 
 
 class TestCodeExecutionRuns:
+    # Code execution is a restricted tool, so these exercise the owner path
+    # (chat authorizes each tool by its registry permission now).
+    _OWNER = 1
+
+    @pytest.fixture(autouse=True)
+    def _owner(self, monkeypatch):
+        monkeypatch.setenv("GLUTEN_OWNER_IDS", str(self._OWNER))
+        import genesis_protocol.agentic.policy as policy
+
+        policy._default = None
+
     def test_calculate_produces_output(self):
         import asyncio
 
         agent = _agent()
         query = "calculate 17*23"
-        text, failures = asyncio.run(agent._execute_tools(["code_execution"], query))
+        text, failures = asyncio.run(
+            agent._execute_tools(["code_execution"], query, user_id=self._OWNER)
+        )
         assert failures == []
         assert "391" in text
 
@@ -65,7 +78,9 @@ class TestCodeExecutionRuns:
 
         agent = _agent()
         query = "run\n```python\nprint(sum(range(1,11)))\n```"
-        text, failures = asyncio.run(agent._execute_tools(["code_execution"], query))
+        text, failures = asyncio.run(
+            agent._execute_tools(["code_execution"], query, user_id=self._OWNER)
+        )
         assert failures == []
         assert "55" in text
 
@@ -296,3 +311,54 @@ class TestCapabilitiesResponseIsHonest:
         text = get_identity_router()._what_capabilities()
         assert "calculator" in text
         assert "bounded sandbox" in text
+
+
+class TestChatHonoursToolPolicy:
+    """The chat path ran every detected tool with no policy check, so a
+    non-owner could reach restricted tools (code_execution, file_reader) the
+    policy layer reserves for the owner. Chat now authorizes each tool by its
+    registry permission.
+    """
+
+    def _agent(self, owner_ids):
+        import os
+
+        import genesis_protocol.agentic.policy as policy
+        from genesis_protocol.ai.agent import GenesisAgent
+
+        os.environ["GLUTEN_OWNER_IDS"] = ",".join(str(i) for i in owner_ids)
+        # Drop the cached policy so it re-reads the owner ids set above.
+        policy._default = None
+        return GenesisAgent()
+
+    def test_non_owner_cannot_reach_restricted_tools(self):
+        agent = self._agent({1})
+        policy = agent._tool_policy()
+        for tool in ("code_execution", "file_reader"):
+            decision = agent._authorize_chat_tool(policy, tool, 2)
+            assert decision is not None and decision.allowed is False, tool
+
+    def test_owner_can_reach_restricted_tools(self):
+        agent = self._agent({1})
+        policy = agent._tool_policy()
+        decision = agent._authorize_chat_tool(policy, "code_execution", 1)
+        assert decision is None or decision.allowed is True
+
+    def test_safe_tools_allowed_for_everyone(self):
+        agent = self._agent({1})
+        policy = agent._tool_policy()
+        for tool in ("web_search", "get_weather", "calculator", "notes", "task_manager"):
+            decision = agent._authorize_chat_tool(policy, tool, 2)
+            assert decision is None or decision.allowed is True, tool
+
+    def test_denied_tool_is_reported_as_a_failure(self):
+        import asyncio
+
+        agent = self._agent({1})
+        # A non-owner asking for code: the tool must not run and the failure
+        # must be surfaced, not silently dropped.
+        text, failures = asyncio.run(
+            agent._execute_tools(["code_execution"], "run print(1)", user_id=2)
+        )
+        assert any("code_execution" in f for f in failures)
+        assert text == "No tool results"

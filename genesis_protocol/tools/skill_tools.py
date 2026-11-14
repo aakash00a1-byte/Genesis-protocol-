@@ -289,6 +289,22 @@ class TavilyTool(_DeclaredTool):
     _category = "web_browser"
     _permission = ToolPermission.RESTRICTED
 
+    def is_available(self) -> bool:
+        """Tavily is only runnable when an API key is configured.
+
+        The tool resolved on the registry and reported itself runnable, but
+        every call failed with "no Tavily credential configured", which made
+        the web_search skill look fully runnable when its Tavily half was not.
+        """
+        try:
+            from genesis_protocol.config import get_config
+
+            config = get_config()
+            tavily = getattr(config, "tavily", None) if config else None
+            return bool(tavily and getattr(tavily, "api_key", None))
+        except Exception:
+            return False
+
     def execute(self, query: str, max_results: int = 5, **kwargs: Any) -> Dict[str, Any]:
         try:
             from genesis_protocol.config import get_config

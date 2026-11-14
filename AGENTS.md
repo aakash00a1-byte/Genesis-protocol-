@@ -1010,3 +1010,17 @@ canonical registry so there is one implementation, not two.
 `agentic.sandbox.run_python`, not a bare `subprocess.run`: rlimits, a stripped
 child environment (no API keys or `GITHUB_TOKEN`) and capped captured output.
 Do not reintroduce a direct `python3 -c` call there.
+
+### Chat enforces the tool policy
+
+The chat path (`ai.agent._execute_tools`) used to run every detected tool with
+no policy check, so a non-owner could reach restricted tools
+(`code_execution`, `file_reader`) that the policy layer reserves for the owner
+- the agent loop and `/api/agent/run` were gated, chat was not. Chat now
+authorizes each tool via `_authorize_chat_tool` using the registry permission
+(falling back to an explicit map for chat-only names such as `code_execution`,
+which the registry spells `python`). A denial is reported as a failure so the
+model does not invent a result for a tool that did not run. The owner's own
+chat request counts as approval; a non-owner can never approve a restricted
+call. `GET /api/identity` reports `owner_configured` (a boolean, never the ids)
+so the fail-closed state is observable in production.
