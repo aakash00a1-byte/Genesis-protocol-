@@ -135,6 +135,32 @@ class ToolSystem:
             handler=self._tool_file_reader
         ))
         
+        # Notes (per-user)
+        self.register_tool(Tool(
+            name="notes",
+            description="Save, read, list or delete the user's notes. Use when the user asks to keep a note or see their notes.",
+            parameters={
+                "action": {"type": "string", "description": "save/get/list/delete", "required": True},
+                "key": {"type": "string", "description": "Note identifier"},
+                "content": {"type": "string", "description": "Note content (for save)"},
+                "user_id": {"type": "int", "description": "Owner of the notes", "required": True}
+            },
+            handler=self._tool_notes
+        ))
+
+        # Tasks (per-user)
+        self.register_tool(Tool(
+            name="task_manager",
+            description="Create, list or complete the user's tasks. Use when the user adds a task or asks for their tasks.",
+            parameters={
+                "action": {"type": "string", "description": "create/list/complete", "required": True},
+                "name": {"type": "string", "description": "Task name (for create)"},
+                "task_id": {"type": "string", "description": "Task id (for complete)"},
+                "user_id": {"type": "int", "description": "Owner of the tasks", "required": True}
+            },
+            handler=self._tool_task_manager
+        ))
+
         self.logger.info(f"Registered {len(self.tools)} tools")
     
     def register_tool(self, tool: Tool):
@@ -377,6 +403,28 @@ class ToolSystem:
             return ToolResult(False, error=f"File not found: {path}")
         except Exception as e:
             return ToolResult(False, error=f"Read error: {e}")
+
+    async def _tool_notes(self, params: Dict) -> ToolResult:
+        """Notes, delegated to the canonical tool registry.
+
+        The registry owns the per-user storage, so chat and /api/skills share
+        one implementation instead of two that can drift apart.
+        """
+        from genesis_protocol.tools.tool_registry import get_tool_registry
+
+        result = get_tool_registry().execute("notes", dict(params))
+        if result.get("success"):
+            return ToolResult(True, data=result)
+        return ToolResult(False, error=result.get("error", "notes failed"))
+
+    async def _tool_task_manager(self, params: Dict) -> ToolResult:
+        """Tasks, delegated to the canonical tool registry."""
+        from genesis_protocol.tools.tool_registry import get_tool_registry
+
+        result = get_tool_registry().execute("task_manager", dict(params))
+        if result.get("success"):
+            return ToolResult(True, data=result)
+        return ToolResult(False, error=result.get("error", "task_manager failed"))
 
 
 # Singleton

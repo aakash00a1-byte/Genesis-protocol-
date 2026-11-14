@@ -161,19 +161,25 @@ class NotesTool(Tool):
             "content": "Note content (for save)"
         }
     
-    def execute(self, action: str, key: str = "", content: str = "") -> Dict[str, Any]:
+    def execute(self, action: str, key: str = "", content: str = "",
+                user_id: int = 0) -> Dict[str, Any]:
+        if not user_id:
+            return {"success": False, "error": "notes need a user id"}
+
+        user_notes = self._notes.setdefault(int(user_id), {})
+
         if action == "save":
-            self._notes[key] = {"content": content, "created_at": datetime.now().isoformat()}
+            user_notes[key] = {"content": content, "created_at": datetime.now().isoformat()}
             return {"success": True, "message": f"Note '{key}' saved"}
         elif action == "get":
-            if key in self._notes:
-                return {"success": True, "note": self._notes[key]}
+            if key in user_notes:
+                return {"success": True, "note": user_notes[key]}
             return {"success": False, "error": f"Note '{key}' not found"}
         elif action == "list":
-            return {"success": True, "notes": list(self._notes.keys())}
+            return {"success": True, "notes": list(user_notes.keys())}
         elif action == "delete":
-            if key in self._notes:
-                del self._notes[key]
+            if key in user_notes:
+                del user_notes[key]
                 return {"success": True, "message": f"Note '{key}' deleted"}
             return {"success": False, "error": f"Note '{key}' not found"}
         return {"success": False, "error": "Unknown action"}
@@ -236,27 +242,47 @@ class TaskManagerTool(Tool):
             "priority": "Priority 1-10"
         }
     
-    def execute(self, action: str, name: str = "", priority: int = 5, user_id: int = 0) -> Dict[str, Any]:
+    def execute(self, action: str, name: str = "", priority: int = 5,
+                user_id: int = 0, task_id: str = "") -> Dict[str, Any]:
+        """Manage a user's tasks.
+
+        ``create`` and ``complete`` were both broken: ``add_task`` was called
+        without its required ``func_name``, and ``update_status`` was called
+        with a ``new_status`` keyword and the user id where a task id belongs,
+        so neither call could succeed. Both now use the real signatures.
+        """
+        if not user_id:
+            return {"success": False, "error": "task_manager needs a user id"}
+
         try:
             from genesis_protocol.tasks import TaskQueue, TaskStatus
-            
+
             queue = TaskQueue()
-            
+
             if action == "create":
-                task_id = queue.add_task(name=name, user_id=user_id, priority=priority)
-                return {"success": True, "task_id": task_id, "message": f"Task '{name}' created"}
-            
+                if not name:
+                    return {"success": False, "error": "task name required"}
+                new_id = queue.add_task(
+                    name=name, func_name="", user_id=user_id, priority=priority
+                )
+                return {"success": True, "task_id": new_id, "message": f"Task '{name}' created"}
+
             elif action == "list":
                 tasks = queue.get_user_tasks(user_id)
                 return {
                     "success": True,
                     "tasks": [{"id": t.id, "name": t.name, "status": t.status.value} for t in tasks]
                 }
-            
+
             elif action == "complete":
-                queue.update_status(task_id=user_id, new_status=TaskStatus.COMPLETED)
+                if not task_id:
+                    return {"success": False, "error": "task_id required"}
+                owned = {t.id for t in queue.get_user_tasks(user_id)}
+                if task_id not in owned:
+                    return {"success": False, "error": "task not found for this user"}
+                queue.update_status(task_id=task_id, status=TaskStatus.COMPLETED)
                 return {"success": True, "message": "Task completed"}
-            
+
             return {"success": False, "error": "Unknown action"}
         except Exception as e:
             return {"success": False, "error": str(e)}

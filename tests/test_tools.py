@@ -24,11 +24,24 @@ class TestToolRegistry:
     def test_notes(self):
         from genesis_protocol.tools import get_tool_registry
         registry = get_tool_registry()
-        result = registry.execute("notes", {"action": "save", "key": "test", "content": "Hello"})
+        result = registry.execute(
+            "notes", {"action": "save", "key": "test", "content": "Hello", "user_id": 1}
+        )
         assert result["success"] is True
-        result = registry.execute("notes", {"action": "get", "key": "test"})
+        result = registry.execute("notes", {"action": "get", "key": "test", "user_id": 1})
         assert result["success"] is True
         assert result["note"]["content"] == "Hello"
+
+    def test_notes_are_isolated_per_user(self):
+        from genesis_protocol.tools import get_tool_registry
+        registry = get_tool_registry()
+        registry.execute(
+            "notes", {"action": "save", "key": "mine", "content": "secret", "user_id": 11}
+        )
+        other = registry.execute("notes", {"action": "list", "user_id": 22})
+        assert other["success"] is True
+        assert "mine" not in other["notes"]
+        assert registry.execute("notes", {"action": "list"})["success"] is False
 
 
 class TestToolChains:

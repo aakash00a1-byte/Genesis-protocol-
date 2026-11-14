@@ -981,3 +981,32 @@ reported success while doing nothing:
 When adding a tool, check that its parameters are actually produced and that
 its result is formatted for the model; a silent empty-parameter call is the
 usual failure mode here.
+
+### Availability truth (not just registration)
+
+A name that resolves on the registry is not necessarily runnable. `Tool.is_available()`
+reports whether a tool can actually run here; `_CliTool` answers from
+`shutil.which`, `_UnavailableTool` returns `False`. `tools_for_skill`,
+`SkillRunner.resolve`, `/api/skills` and `/api/capabilities` all filter on it.
+Without this, `kubectl`, `aws`, `gcloud`, `az`, `terraform`, `pdflatex`,
+`pandoc` and `crontab` were advertised as runnable and then failed with "not
+installed". When adding a tool backed by an external binary, override
+`is_available()` or the capability report will overclaim again.
+
+### Chat reachability
+
+The chat tool system (`ai.tool_system.ToolSystem`) keeps its own tool list,
+separate from the canonical registry. A tool registered in
+`tools.tool_registry` is invisible to chat until it is registered in
+`ToolSystem`, detected in `GenesisAgent._detect_tool_needs`, given parameters
+in `_build_tool_params`, and formatted in `_format_tool_data`. `notes` and
+`task_manager` were registered but unreachable from chat for exactly this
+reason; they are now wired end to end, and the handlers delegate to the
+canonical registry so there is one implementation, not two.
+
+### Code execution is bounded
+
+`ai.tool_system._tool_code_execution` runs through
+`agentic.sandbox.run_python`, not a bare `subprocess.run`: rlimits, a stripped
+child environment (no API keys or `GITHUB_TOKEN`) and capped captured output.
+Do not reintroduce a direct `python3 -c` call there.

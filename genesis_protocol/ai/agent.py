@@ -475,6 +475,23 @@ class GenesisAgent:
         elif any(m in query_lower for m in recall_markers):
             tools.append("memory_recall")
         
+        # Notes and tasks: the user's own saved notes and task list. The action
+        # (save/list/create/complete) is chosen in _build_tool_params, which
+        # sees the same query.
+        notes_markers = ["save note", "make a note", "take a note", "add a note",
+                         "note down", "note this", "note le lo", "note likh",
+                         "my notes", "list notes", "show notes", "mere notes",
+                         "notes dikhao", "saved notes"]
+        if any(m in query_lower for m in notes_markers):
+            tools.append("notes")
+
+        task_markers = ["add task", "create task", "new task", "add a task",
+                        "task add", "task banao", "kaam add",
+                        "my tasks", "list tasks", "show tasks", "mere tasks",
+                        "task list", "kaam dikhao"]
+        if any(m in query_lower for m in task_markers):
+            tools.append("task_manager")
+
         return tools
     
     async def _execute_tools(self, tools: List[str], query: str,
@@ -577,6 +594,39 @@ class GenesisAgent:
                     break
             return {"key": text[:60] or "fact", "value": text, "user_id": user_id}
 
+        if tool_name == "notes":
+            lower = query.lower()
+            store_markers = ["save note", "make a note", "take a note", "add a note",
+                             "note down", "note this", "note le lo", "note likh"]
+            if any(m in lower for m in store_markers):
+                text = query
+                for lead in ("save note", "make a note", "take a note", "add a note",
+                             "note down", "note this", "note le lo", "note likh"):
+                    pos = lower.find(lead)
+                    if pos != -1:
+                        text = query[pos + len(lead):].lstrip(" :,-")
+                        break
+                return {"action": "save", "key": (text[:60] or "note"),
+                        "content": text, "user_id": user_id}
+            return {"action": "list", "user_id": user_id}
+
+        if tool_name == "task_manager":
+            lower = query.lower()
+            create_markers = ["add task", "create task", "new task", "add a task",
+                              "task add", "task banao", "kaam add"]
+            if any(m in lower for m in create_markers):
+                text = query
+                for lead in ("add task", "create task", "new task", "add a task",
+                             "task add", "task banao", "kaam add"):
+                    pos = lower.find(lead)
+                    if pos != -1:
+                        text = query[pos + len(lead):].lstrip(" :,-")
+                        break
+                return {"action": "create", "name": text[:120] or "task",
+                        "user_id": user_id}
+            return {"action": "list", "user_id": user_id}
+
+
         if tool_name == "get_exchange_rate":
             codes = re.findall(r"\b[A-Z]{3}\b", query.upper())
             # Fall back to well-known currency words when no ISO code is present.
@@ -622,6 +672,23 @@ class GenesisAgent:
             if err:
                 parts.append(f"stderr:\n{err}")
             return "\n".join(parts) or "(no output)"
+
+        if tool_name == "notes" and isinstance(data, dict):
+            if "notes" in data:
+                items = data.get("notes") or []
+                return "no saved notes" if not items else "\n".join(f"- {n}" for n in items)
+            return data.get("message") or "(note handled)"
+
+        if tool_name == "task_manager" and isinstance(data, dict):
+            if "tasks" in data:
+                items = data.get("tasks") or []
+                if not items:
+                    return "no tasks"
+                return "\n".join(
+                    f"- [{t.get('status')}] {t.get('name')} (id {t.get('id')})" for t in items
+                )
+            return data.get("message") or "(task handled)"
+
 
         if tool_name in ("memory_store", "memory_recall") and isinstance(data, dict):
             if data.get("stored"):

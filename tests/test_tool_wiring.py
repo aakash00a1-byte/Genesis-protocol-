@@ -206,3 +206,93 @@ class TestCodeExecutionIsSandboxed:
         result = self._run("raise ValueError('boom')")
         assert result.success is False
         assert "ValueError" in (result.error or "")
+
+
+class TestChatReachesNotesAndTasks:
+    """Notes and tasks were registered in the canonical registry but the chat
+    tool system never exposed them, so a user could not save a note or add a
+    task by asking. They are now registered, detected and parameterised.
+    """
+
+    def _agent(self):
+        from genesis_protocol.ai.agent import GenesisAgent
+
+        return GenesisAgent()
+
+    def test_notes_save_is_detected_and_parameterised(self):
+        agent = self._agent()
+        query = "save note: buy milk tomorrow"
+        assert "notes" in agent._detect_tool_needs(query)
+        params = agent._build_tool_params("notes", query, user_id=7)
+        assert params["action"] == "save"
+        assert params["user_id"] == 7
+        assert "buy milk" in params["content"]
+
+    def test_notes_list_is_detected(self):
+        agent = self._agent()
+        query = "my notes"
+        assert "notes" in agent._detect_tool_needs(query)
+        assert agent._build_tool_params("notes", query, user_id=7)["action"] == "list"
+
+    def test_task_create_is_detected_and_parameterised(self):
+        agent = self._agent()
+        query = "add task finish report"
+        assert "task_manager" in agent._detect_tool_needs(query)
+        params = agent._build_tool_params("task_manager", query, user_id=7)
+        assert params["action"] == "create"
+        assert params["name"] == "finish report"
+        assert params["user_id"] == 7
+
+    def test_task_list_is_detected(self):
+        agent = self._agent()
+        assert agent._build_tool_params("task_manager", "my tasks", user_id=7)["action"] == "list"
+
+    def test_chat_can_save_and_list_a_note(self):
+        import asyncio
+
+        agent = self._agent()
+        saved = asyncio.run(agent.tool_system.execute_tool(
+            "notes", {"action": "save", "key": "k", "content": "v", "user_id": 7}
+        ))
+        assert saved.success is True
+        listed = asyncio.run(agent.tool_system.execute_tool(
+            "notes", {"action": "list", "user_id": 7}
+        ))
+        assert listed.success is True
+        assert "k" in listed.data["notes"]
+
+    def test_chat_can_create_and_list_a_task(self):
+        import asyncio
+
+        agent = self._agent()
+        created = asyncio.run(agent.tool_system.execute_tool(
+            "task_manager", {"action": "create", "name": "report", "user_id": 7}
+        ))
+        assert created.success is True
+        listed = asyncio.run(agent.tool_system.execute_tool(
+            "task_manager", {"action": "list", "user_id": 7}
+        ))
+        assert listed.success is True
+        assert any(t["name"] == "report" for t in listed.data["tasks"])
+
+
+class TestCapabilitiesResponseIsHonest:
+    """The 'what can you do' reply printed a fixed list including docker and
+    kubernetes whether or not those binaries existed.
+    """
+
+    def test_capabilities_exclude_missing_binaries(self):
+        from genesis_protocol.ai.identity_router import get_identity_router
+
+        text = get_identity_router()._what_capabilities()
+        assert "NOT usable here" in text
+        # kubectl is not installed in this environment; it must be listed as
+        # unusable, not offered as a working capability.
+        assert "kubectl" in text.split("NOT usable here")[1]
+
+    def test_capabilities_mention_working_tools(self):
+        from genesis_protocol.ai.identity_router import get_identity_router
+
+        text = get_identity_router()._what_capabilities()
+        assert "calculator" in text
+        assert "bounded sandbox" in text

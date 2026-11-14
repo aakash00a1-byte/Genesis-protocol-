@@ -303,17 +303,6 @@ You created me and I am here to serve you! 🖤"""
 
 Status: {tests['status']}"""
     
-    def _what_capabilities(self) -> str:
-        """Build capabilities response."""
-        caps = self._get_all_capabilities_list()
-        cap_list = "\n".join([f"- {c}" for c in caps[:10]])
-        
-        return f"""**My Capabilities:**
-{cap_list}
-...
-
-Total: {len(caps)} capabilities. Ask me what you need! 🖤"""
-    
     def _get_all_capabilities_list(self) -> List[str]:
         """Get all capabilities."""
         try:
@@ -346,35 +335,54 @@ Total: {len(caps)} capabilities. Ask me what you need! 🖤"""
 These layers handle memory, learning, autonomous decisions, and continuous improvement. 🖤"""
     
     def _what_capabilities(self) -> str:
-        """Build capabilities response."""
-        try:
-            from genesis_protocol.gluten_os import get_capabilities
-            cap = get_capabilities()
-            caps = cap.get_all_capabilities()
-            
-            categories = []
-            for cat in caps.get('categories', [])[:5]:
-                name = cat['category']
-                count = len(cat['capabilities'])
-                categories.append(f"- {name}: {count} capabilities")
-            
-            return f"""**My Capabilities:**
+        """Capabilities response built from what can actually run here.
 
-{chr(10).join(categories)}
+        The previous version printed a fixed marketing list - docker, cloud,
+        kubernetes - whether or not the backing binary existed, which is how
+        the agent came to claim capabilities it could not exercise.
+        """
+        available, unavailable = self._runtime_tool_summary()
+        runnable_skills = self._runtime_skill_summary()
 
-I can help with coding, file management, web interactions, automation, and more. Ask me what you need!"""
-        except Exception:
-            return """**My Capabilities:**
+        report = ["**My Capabilities (checked against this deployment):**", ""]
+        if available:
+            report.append("Tools that work right now: " + ", ".join(available))
+        if runnable_skills:
+            report.append("Skills with at least one working tool: " + ", ".join(runnable_skills))
+        if unavailable:
+            report.append(
+                "Declared but NOT usable here (missing binary or integration): "
+                + ", ".join(unavailable)
+            )
+        report.append("")
+        report.append(
+            "Limits: code runs in a bounded sandbox (CPU/memory capped, secrets "
+            "stripped); restricted tools need the owner; background autonomy is "
+            "off, so execution is caller-driven."
+        )
+        return "\n".join(report)
 
-- Coding & Development: Code writing, editing, debugging
-- File Management: Create, edit, organize files
-- Web & Browser: Navigate, extract data, API calls
-- Automation: Cron jobs, GitHub Actions, integrations
-- Cloud & DevOps: Docker, Kubernetes, deployments
-- Specialized Tools: Linear, Notion, Slack, GitHub
-- Document Creation: LaTeX, Markdown, Reports
+    def _runtime_tool_summary(self):
+        """Split registered tools into those that can run and those that cannot."""
+        from genesis_protocol.tools.tool_registry import get_tool_registry
 
-Ask me what you need!"""
+        registry = get_tool_registry()
+        available, unavailable = [], []
+        for meta in registry.get_all_tools():
+            (available if meta.is_available() else unavailable).append(meta.name)
+        return sorted(available), sorted(unavailable)
+
+    def _runtime_skill_summary(self) -> List[str]:
+        """Skills that have at least one tool which can actually run."""
+        from genesis_protocol.skills import get_skill_registry
+        from genesis_protocol.tools.skill_tools import tools_for_skill
+
+        return [
+            skill.name
+            for skill in get_skill_registry().list_all_skills()
+            if tools_for_skill(skill.name)
+        ]
+
 
 
 # Singleton
