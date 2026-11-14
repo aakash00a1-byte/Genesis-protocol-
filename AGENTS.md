@@ -924,7 +924,13 @@ prefix, so "Bloomberg.com" and "Business Insider India" resolve to one source,
 while a bare ambiguous name such as "ABC News" (US and Australia) is labelled
 developing rather than attributed to the wrong outlet. Results are rendered as
 Verified / Developing / Promotional-Unverified sections, and the prompt asks
-for the same three sections in the answer.
+for the same three sections in the answer. Each item also carries its own
+[VERIFIED]/[DEVELOPING]/[PROMOTIONAL-UNVERIFIED] tag, so the model cannot move
+an item under a stronger heading. The feed's <source url> gives the publisher's
+own domain (authoritative attribution) and <pubDate> gives the age, which is
+shown per item and used to sort freshest-first. The Google News link is a JS
+redirect, so the real article URL cannot be recovered from it; we report the
+publisher domain plus the link rather than inventing a deep link.
 Google News links point at news.google.com, so the real attribution is the
 "- Publisher" suffix in the title; `PUBLISHER_TO_DOMAIN` maps known names, and
 an unrecognised publisher is named but not trusted. `web_search` labels every
