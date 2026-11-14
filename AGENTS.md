@@ -956,3 +956,28 @@ unconfirmed items as unverified; "weather in Delhi" returns 24C from wttr.in;
 
 Note: the sandbox lost its user site-packages at one point; reinstall with
 `python3 -m pip install --user -r requirements.txt pytest pytest-asyncio`.
+
+
+## Tool wiring (verified by probing the live deployment)
+
+Registering a tool is not the same as running it. An audit of the live Space
+found two registered tools that could never work, and one endpoint that
+reported success while doing nothing:
+
+* `code_execution` was called with empty parameters, so it always returned
+  "No code provided". The tool-first path runs before the model writes, so
+  nothing was ever going to supply the code. It now extracts runnable Python
+  from the query itself (fenced block or arithmetic expression) and only fires
+  when there is code. `_extract_code` is the gate.
+* `memory_store` was never selected (every "remember" matched the recall list)
+  and wrote to a global bucket (`user_id=0`). Storage is now per-user through
+  `agentic.memory`, the caller's user id is threaded through `_execute_tools`
+  and `_build_tool_params`, and a store without a user id is refused.
+* `/api/agent/run` returned `state="completed"` with zero steps because the
+  default plan was a single no-op `respond`. `AgentLoop._plan_from_goal` now
+  plans real steps (only safe, registry-backed ones) or returns an empty plan,
+  which the loop reports as `state="no_plan"`.
+
+When adding a tool, check that its parameters are actually produced and that
+its result is formatted for the model; a silent empty-parameter call is the
+usual failure mode here.

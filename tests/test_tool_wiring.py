@@ -116,3 +116,40 @@ class TestMemoryIsPerUser:
         )
         assert result.success is False
         assert "user id" in (result.error or "")
+
+
+class TestAgentLoopDoesNotFakeCompletion:
+    """``/api/agent/run`` used to return 'completed' with zero steps."""
+
+    def _loop(self):
+        from genesis_protocol.agentic.agent_loop import AgentLoop
+
+        return AgentLoop()
+
+    def test_goal_with_expression_runs_calculator(self):
+        result = self._loop().run(user_id=1, goal="calculate 12+30")
+        assert result["state"] == "completed"
+        tools = [s for s in result["steps"] if s["type"] == "tool"]
+        assert tools and tools[0]["tool"] == "calculator"
+        assert tools[0]["result"]["result"] == 42
+
+    def test_unplannable_goal_reports_no_plan(self):
+        result = self._loop().run(user_id=1, goal="tell me a joke")
+        assert result["state"] == "no_plan"
+        assert result["steps"] == []
+        assert "note" in result
+
+    def test_restricted_goal_is_not_auto_planned(self):
+        # File listing needs a restricted tool; it is left to explicit steps
+        # rather than auto-planned into a denied call.
+        result = self._loop().run(user_id=1, goal="list the files in this directory")
+        assert result["state"] == "no_plan"
+
+    def test_explicit_steps_still_run(self):
+        result = self._loop().run(
+            user_id=1,
+            goal="math",
+            steps=[{"type": "tool", "tool": "calculator", "params": {"expression": "6*7"}}],
+        )
+        assert result["state"] == "completed"
+        assert result["steps"][0]["result"]["result"] == 42

@@ -22,6 +22,7 @@ claim to be one.
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 
 from genesis_protocol.agentic.audit import AuditLog, get_audit_log
@@ -78,7 +79,33 @@ class AgentLoop:
             if len(steps) > MAX_STEPS:
                 raise ValueError(f"too many steps: {len(steps)} (max {MAX_STEPS})")
             return [self._validate_step(s) for s in steps]
-        return [{"type": "respond", "goal": goal}]
+        return self._plan_from_goal(goal)
+
+    def _plan_from_goal(self, goal: str) -> List[Dict[str, Any]]:
+        """Plan real tool steps from the goal, or an empty plan.
+
+        An empty plan is honest: it means no step could be planned, and the
+        caller is told so rather than being handed a "completed" task that ran
+        nothing. Only tools that exist in the registry are planned.
+        """
+        planned: List[Dict[str, Any]] = []
+
+        try:
+            available = {t.name for t in self.registry.get_all_tools()}
+        except Exception:
+            available = set()
+
+        # Only safe, clearly-supported steps are planned automatically. Anything
+        # needing a restricted tool (files, subprocess, network) is left to the
+        # caller to specify explicitly, since it would otherwise be denied.
+        match = re.search(r"[-+]?\d[\d\s.+\-*/()]*\d", goal or "")
+        if match and "calculator" in available:
+            planned.append({"type": "tool", "tool": "calculator",
+                            "params": {"expression": match.group(0).strip()}})
+
+        if planned:
+            planned.append({"type": "respond", "goal": goal})
+        return planned
 
     @staticmethod
     def _validate_step(step: Dict[str, Any]) -> Dict[str, Any]:
@@ -106,6 +133,20 @@ class AgentLoop:
     ) -> Dict[str, Any]:
         """Run the loop for ``goal``. Returns structured evidence."""
         planned = self.plan(goal, steps)
+
+        if not planned:
+            # No step could be planned. Report that plainly; do not create a
+            # task that looks "completed" while nothing ran.
+            return {
+                "task_id": task_id,
+                "user_id": int(user_id),
+                "goal": goal,
+                "state": "no_plan",
+                "steps": [],
+                "resumed_from": 0,
+                "note": "no executable step could be planned from this goal; "
+                        "supply explicit steps",
+            }
 
         if task_id is None:
             task = self.tasks.create(user_id, goal)
