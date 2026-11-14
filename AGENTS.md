@@ -1058,3 +1058,14 @@ the next Friday is 20 November). Date arithmetic is therefore done in code:
 `_upcoming_weekdays` returns the next occurrence of each weekday and the prompt
 prints them as `Friday = 20 November 2026`, with an explicit "do NOT compute it
 yourself". Never leave weekday arithmetic to the model.
+
+### ADMIN_PASSWORD is the source of truth for the admin login
+
+The Space sets `ADMIN_PASSWORD`, so the documented default
+(`genesis-admin-2024`) never matched the seeded hash. Seeding also only ran when
+no admin row existed, so rotating the secret never took effect and the login
+kept failing against the old hash. `init_db` now creates the admin with
+`ADMIN_PASSWORD` when it is set, and reconciles an existing admin's password to
+it on startup. The default is used only when `ADMIN_PASSWORD` is unset. Never
+log the password. To rotate: change the `ADMIN_PASSWORD` secret and restart the
+Space.

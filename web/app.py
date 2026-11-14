@@ -344,15 +344,30 @@ def init_db():
         )
     ''')
     
-    # Create default admin user if not exists
-    cursor.execute('SELECT id FROM users WHERE role = "admin"')
-    if not cursor.fetchone():
-        admin_hash = generate_password_hash(os.environ.get('ADMIN_PASSWORD', 'genesis-admin-2024'))
+    # Admin provisioning. ADMIN_PASSWORD is the source of truth: when it is set
+    # the admin account is created with it, and an existing admin is brought in
+    # line with it. Only seeding on first run meant a rotated ADMIN_PASSWORD
+    # never took effect - the login kept failing against the old hash, and the
+    # documented default ('genesis-admin-2024') failed too because the Space set
+    # ADMIN_PASSWORD at creation. Never log the password itself.
+    admin_password = os.environ.get('ADMIN_PASSWORD')
+    cursor.execute('SELECT id, password_hash FROM users WHERE username = "admin"')
+    admin_row = cursor.fetchone()
+    if admin_row is None:
+        password = admin_password or 'genesis-admin-2024'
+        if not admin_password:
+            logger.warning(
+                "Default admin password in use; set ADMIN_PASSWORD in production")
         cursor.execute('''
             INSERT INTO users (username, email, password_hash, role)
             VALUES (?, ?, ?, ?)
-        ''', ('admin', 'admin@genesis.ai', admin_hash, 'admin'))
-        logger.info("Default admin user created")
+        ''', ('admin', 'admin@genesis.ai', generate_password_hash(password), 'admin'))
+        logger.info("Administrator account provisioned")
+    elif admin_password and not check_password_hash(
+            admin_row['password_hash'], admin_password):
+        cursor.execute('UPDATE users SET password_hash = ? WHERE id = ?',
+                       (generate_password_hash(admin_password), admin_row['id']))
+        logger.info("Administrator password reconciled with ADMIN_PASSWORD")
     
     conn.commit()
     conn.close()
