@@ -312,34 +312,46 @@ class ToolSystem:
             return ToolResult(False, error=f"Memory recall error: {e}")
 
     async def _tool_code_execution(self, params: Dict) -> ToolResult:
-        """Execute Python code."""
+        """Execute Python code in the bounded sandbox.
+
+        The previous version ran ``python3 -c`` through a bare ``subprocess.run``:
+        no CPU or memory cap, no file-size limit, and the parent's environment
+        (including API keys) inherited by the child. It now runs through
+        ``agentic.sandbox.run_python``, which applies rlimits, strips secrets
+        from the child environment and caps captured output.
+        """
         code = params.get("code", "")
         timeout = params.get("timeout", 30)
-        
+
         if not code:
             return ToolResult(False, error="No code provided")
-        
+
         try:
-            # Execute code with timeout
-            result = subprocess.run(
-                ["python3", "-c", code],
-                capture_output=True,
-                text=True,
-                timeout=timeout
-            )
-            
-            if result.returncode == 0:
+            from genesis_protocol.agentic.sandbox import run_python
+
+            result = run_python(code, timeout=float(timeout))
+            if result.success:
                 return ToolResult(True, data={
                     "output": result.stdout,
-                    "error": result.stderr if result.stderr else None
+                    "error": result.stderr if result.stderr else None,
+                    "duration_ms": result.duration_ms,
+                    "limits": result.limits,
                 })
+            if result.error:
+                reason = result.error
+            elif result.stderr:
+                reason = result.stderr
             else:
-                return ToolResult(False, error=result.stderr or "Execution failed")
-        except subprocess.TimeoutExpired:
-            return ToolResult(False, error=f"Code execution timed out after {timeout}s")
+                reason = (
+                    f"execution failed (exit code {result.exit_code}); "
+                    f"it may have hit a resource limit "
+                    f"(cpu {result.limits.get('cpu_seconds')}s, "
+                    f"memory {result.limits.get('memory_mb')}MB)"
+                )
+            return ToolResult(False, error=reason)
         except Exception as e:
             return ToolResult(False, error=f"Execution error: {e}")
-    
+
     async def _tool_file_reader(self, params: Dict) -> ToolResult:
         """Read file contents."""
         path = params.get("path", "")

@@ -67,6 +67,9 @@ class SkillRunner:
             if perm is None:
                 unavailable.append({"name": name, "reason": "unknown permission"})
                 continue
+            if not tool.is_available():
+                unavailable.append({"name": name, "reason": "not available in this deployment"})
+                continue
             runnable.append(name)
 
         return {

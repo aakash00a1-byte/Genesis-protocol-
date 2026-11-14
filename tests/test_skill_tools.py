@@ -149,3 +149,60 @@ def test_agent_loop_runs_a_skill_step():
     step = result["steps"][0]
     assert step["type"] == "skill"
     assert step["executed"] is True
+
+
+class TestToolAvailabilityIsHonest:
+    """A registered tool that cannot run must not be reported as runnable.
+
+    ``tools_for_skill`` and ``SkillRunner.resolve`` used to call a name
+    runnable if it merely resolved on the registry. CLI tools whose binary is
+    absent (kubectl, aws, pdflatex, ...) were therefore advertised as runnable
+    and then failed at execution time.
+    """
+
+    def test_cli_tool_reports_unavailable_when_binary_absent(self):
+        from genesis_protocol.tools.skill_tools import _cli
+
+        tool = _cli("absent_cli", "definitely-not-a-real-binary-xyz")()
+        assert tool.is_available() is False
+
+    def test_cli_tool_reports_available_when_binary_present(self):
+        from genesis_protocol.tools.skill_tools import _cli
+
+        assert _cli("sh_cli", "sh")().is_available() is True
+
+    def test_unavailable_tool_is_not_runnable(self):
+        from genesis_protocol.tools.skill_tools import _unavailable
+
+        assert _unavailable("x", "nope")().is_available() is False
+
+    def test_builtin_tools_are_available(self):
+        from genesis_protocol.tools.tool_registry import get_tool_registry
+
+        for name in ("calculator", "json", "web_search"):
+            assert get_tool_registry().get_tool(name).is_available() is True
+
+    def test_tools_for_skill_excludes_missing_binaries(self, monkeypatch):
+        import genesis_protocol.tools.skill_tools as st
+        from genesis_protocol.tools.tool_registry import get_tool_registry
+
+        registry = get_tool_registry()
+        # With binaries present the CLI tool is advertised.
+        monkeypatch.setattr(st.shutil, "which", lambda b: f"/usr/bin/{b}")
+        assert "docker" in st.tools_for_skill("docker_management", registry=registry)
+        # With binaries absent it is dropped, not advertised.
+        monkeypatch.setattr(st.shutil, "which", lambda _b: None)
+        assert "docker" not in st.tools_for_skill("docker_management", registry=registry)
+        assert st.tools_for_skill("kubernetes_management", registry=registry) == []
+
+    def test_runner_resolve_marks_missing_binary_unavailable(self, monkeypatch):
+        import genesis_protocol.tools.skill_tools as st
+        from genesis_protocol.agentic.skills import SkillRunner
+        from genesis_protocol.tools.tool_registry import get_tool_registry
+
+        monkeypatch.setattr(st.shutil, "which", lambda _b: None)
+        runner = SkillRunner(registry=get_tool_registry())
+        info = runner.resolve("kubernetes_management")
+        assert "kubectl" not in info["runnable_tools"]
+        reasons = {u["name"]: u["reason"] for u in info["unavailable_tools"]}
+        assert reasons.get("kubectl") == "not available in this deployment"

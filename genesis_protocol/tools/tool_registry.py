@@ -58,6 +58,16 @@ class Tool:
     def execute(self, **kwargs) -> Dict[str, Any]:
         raise NotImplementedError
     
+    def is_available(self) -> bool:
+        """Whether this tool can actually run in this deployment.
+
+        Registering a tool is not the same as being able to run it: a tool
+        backed by an external binary is useless when the binary is absent.
+        Callers that report capabilities must consult this instead of assuming
+        every registered name works.
+        """
+        return True
+
     def get_metadata(self) -> ToolMetadata:
         return ToolMetadata(
             name=self.name,

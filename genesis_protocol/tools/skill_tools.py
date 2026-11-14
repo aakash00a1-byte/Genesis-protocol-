@@ -333,6 +333,9 @@ class _CliTool(_DeclaredTool):
 
     _binary = ""
 
+    def is_available(self) -> bool:
+        return bool(shutil.which(self._binary))
+
     def execute(self, args: str = "", **kwargs: Any) -> Dict[str, Any]:
         if not shutil.which(self._binary):
             return {"success": False, "error": f"'{self._binary}' is not installed"}
@@ -371,6 +374,9 @@ class _UnavailableTool(_DeclaredTool):
     """
 
     _reason = "no implementation in this deployment"
+
+    def is_available(self) -> bool:
+        return False
 
     def execute(self, **kwargs: Any) -> Dict[str, Any]:
         return {"success": False, "error": f"tool '{self._name}' is unavailable: {self._reason}"}
@@ -442,4 +448,10 @@ def tools_for_skill(skill_name: str, registry: Optional[ToolRegistry] = None) ->
     skill = get_skill_registry().get_skill(skill_name)
     if skill is None:
         return []
-    return [name for name in (skill.tools or []) if registry.get_tool(name) is not None]
+    available: List[str] = []
+    for name in skill.tools or []:
+        tool = registry.get_tool(name)
+        # A name that resolves but cannot run (missing binary) is not runnable.
+        if tool is not None and tool.is_available():
+            available.append(name)
+    return available

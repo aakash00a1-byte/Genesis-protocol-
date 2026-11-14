@@ -163,3 +163,46 @@ class TestEmptyStepsStillPlans:
         result = AgentLoop().run(user_id=1, goal="calculate 12+30", steps=[])
         assert result["state"] == "completed"
         assert result["steps"][0]["result"]["result"] == 42
+
+
+class TestCodeExecutionIsSandboxed:
+    """Code execution used a bare subprocess with the parent's env inherited.
+
+    It must now run bounded: rlimits applied, secrets stripped from the child
+    environment, and captured output capped.
+    """
+
+    def _run(self, code):
+        import asyncio
+
+        from genesis_protocol.ai.tool_system import get_tool_system
+
+        return asyncio.run(get_tool_system().execute_tool("code_execution", {"code": code}))
+
+    def test_simple_code_runs(self):
+        result = self._run("print(sum(range(1,11)))")
+        assert result.success is True
+        assert "55" in result.data["output"]
+
+    def test_limits_are_reported(self):
+        result = self._run("print('ok')")
+        limits = result.data["limits"]
+        assert limits["memory_mb"] > 0
+        assert limits["cpu_seconds"] > 0
+
+    def test_child_does_not_inherit_secrets(self):
+        result = self._run(
+            "import os; print([k for k in os.environ if 'TOKEN' in k or 'KEY' in k or 'SECRET' in k])"
+        )
+        assert result.success is True
+        assert result.data["output"].strip() == "[]"
+
+    def test_infinite_loop_is_killed(self):
+        result = self._run("while True: pass")
+        assert result.success is False
+        assert result.error
+
+    def test_error_reports_traceback(self):
+        result = self._run("raise ValueError('boom')")
+        assert result.success is False
+        assert "ValueError" in (result.error or "")
