@@ -131,7 +131,13 @@ class AutonomousModeManager:
         "news", "khabar", "headline", "latest", "breaking",
         "weather", "mausam", "forecast", "temperature",
         "current events", "right now", "as of today", "today's",
-        "stock price", "share price", "exchange rate", "live score"
+        "stock price", "share price", "exchange rate", "live score",
+        # Crypto prices come from the exact get_crypto_price tool, which only
+        # runs on the autonomous (tool) path. Without these a "bitcoin price"
+        # question stayed in normal mode, no tool ran, and the model answered
+        # the price from memory - the live probe showed a price ~20x too high.
+        "bitcoin", "btc", "ethereum", "solana", "dogecoin", "litecoin",
+        "ripple", "crypto", "cryptocurrency", "altcoin", "coin price"
     ]
     
     def __init__(self):

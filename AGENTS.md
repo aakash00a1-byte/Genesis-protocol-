@@ -1070,6 +1070,11 @@ unavailable". CoinGecko's free tier also rate-limits (HTTP 429), so
 Frankfurter ECB rate for INR. The chat routes coin queries to
 `get_crypto_price` (a safe tool) and keeps them out of web_search.
 
+The tool path only runs in autonomous mode, so crypto words must also appear in
+`AUTONOMOUS_TRIGGERS` (`autonomous_mode.py`). Without them a coin question
+stayed in NORMAL mode, no tool ran, and the model answered the price from
+memory (the live probe reported ~20x the real price).
+
 ### Bare arithmetic must reach the calculator
 
 `extract_math_expression` only matched a prefixed expression

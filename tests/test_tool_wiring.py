@@ -657,3 +657,20 @@ class TestCryptoProviderParsesFlatKeys:
 
         assert data["price_usd"] == 67175.845
         assert data["price_inr"] == round(67175.845 * 94.25)
+
+
+class TestCryptoQueriesReachAutonomousMode:
+    """The tool path only runs in autonomous mode.
+
+    Live probe: "bitcoin price" stayed in NORMAL mode (no crypto trigger
+    existed), so no tool ran and the model answered the price from memory -
+    it reported ~20x the real price.
+    """
+
+    def test_crypto_queries_trigger_autonomous_mode(self):
+        from genesis_protocol.ai.autonomous_mode import get_mode_manager
+
+        manager = get_mode_manager()
+        for query in ("bitcoin price", "Bitcoin market update", "btc ka rate",
+                      "aaj bitcoin kitne ka hai", "ethereum price"):
+            assert manager.should_use_autonomous(query), query
