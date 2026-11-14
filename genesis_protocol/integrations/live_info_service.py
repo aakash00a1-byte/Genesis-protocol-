@@ -47,6 +47,7 @@ class LiveInfo:
     timestamp: str
     date: str
     time: str
+    weekday: str = ""
     weather: Optional[WeatherInfo] = None
     location: Optional[LocationInfo] = None
     news: list = None
@@ -249,6 +250,7 @@ class LiveInfoService:
         return LiveInfo(
             timestamp=now_ist.isoformat(),
             date=now_ist.strftime("%d %B %Y"),
+            weekday=now_ist.strftime("%A"),
             time=now_ist.strftime("%I:%M:%S %p IST"),
             weather=weather,
             location=location,

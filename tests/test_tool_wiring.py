@@ -468,3 +468,22 @@ class TestLocalIntentsDoNotSearch:
     def test_general_question_still_searches(self):
         agent = _agent()
         assert "web_search" in agent._detect_tool_needs("what is the capital of Japan")
+
+
+class TestWeekdayIsProvided:
+    """The prompt gave the date but not the weekday, so the model derived
+    weekdays itself and got them wrong: on Saturday 14 November 2026 it called
+    "this Friday" 17/18 November (the real next Friday is 20 November).
+    """
+
+    def test_live_info_carries_weekday(self):
+        from genesis_protocol.integrations.live_info_service import LiveInfo
+
+        info = LiveInfo(
+            timestamp="t", date="14 November 2026", time="10:00 AM IST",
+            weekday="Saturday",
+        )
+        assert info.weekday == "Saturday"
+
+    def test_system_prompt_tells_the_model_to_derive_weekdays(self):
+        assert "WORK OUT WEEKDAYS" in _agent()._get_system_prompt()

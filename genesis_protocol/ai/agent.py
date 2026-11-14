@@ -871,8 +871,14 @@ class GenesisAgent:
             live_location = "Unknown"
             news_headline = "Unknown"
         
+        weekday = getattr(info, "weekday", None) if info else None
+        today = f"{weekday}, {info.date}" if (info and info.date and weekday) else (
+            info.date if info and info.date else "Unknown")
+
         return f"""**IMPORTANT - REAL-TIME DATA RULES:**
-- TODAY IS: {info.date if info and info.date else "Unknown"}
+- TODAY IS: {today}
+- WORK OUT WEEKDAYS FROM THAT LINE. Do not guess: a date has exactly one
+  weekday, and "this Friday" is the next Friday on or after today.
 - CURRENT TIME: {live_time}
 - Do NOT guess the date - use the date provided above
 - If user asks about weather, news, or current events - USE WEB SEARCH

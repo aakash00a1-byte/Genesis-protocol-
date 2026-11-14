@@ -1042,3 +1042,12 @@ and `should_use_autonomous` matched none of the trigger keywords for
 the same wrong-number failure from the other direction. `extract_math_expression`
 (living in `ai.autonomous_mode`) is the single source of truth, used both to
 select the mode and to route the query to the calculator.
+
+### The prompt must carry the weekday
+
+The system prompt gave the date but not the weekday, so the model derived
+weekdays itself and got them wrong: on Saturday 14 November 2026 it called
+"this Friday" 17/18 November, when the next Friday is 20 November.
+`LiveInfo.weekday` is now populated (`%A`, IST) and the prompt prints
+`"<weekday>, <date>"` plus an explicit instruction to derive weekdays from it.
+Keep the weekday next to the date - a bare date invites the model to guess.
