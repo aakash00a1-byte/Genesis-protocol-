@@ -75,7 +75,10 @@ class AgentLoop:
         up to ``MAX_STEPS``. Otherwise a minimal, honest plan is produced: a
         single ``respond`` step. No fabricated tool calls are invented here.
         """
-        if steps is not None:
+        # An empty list is treated as "no steps supplied" so the goal is
+        # planned. The web route defaults to [] rather than None, and reading
+        # that as an explicit empty plan meant auto-planning never ran.
+        if steps:
             if len(steps) > MAX_STEPS:
                 raise ValueError(f"too many steps: {len(steps)} (max {MAX_STEPS})")
             return [self._validate_step(s) for s in steps]

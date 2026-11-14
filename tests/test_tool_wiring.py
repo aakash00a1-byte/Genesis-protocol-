@@ -153,3 +153,13 @@ class TestAgentLoopDoesNotFakeCompletion:
         )
         assert result["state"] == "completed"
         assert result["steps"][0]["result"]["result"] == 42
+
+
+class TestEmptyStepsStillPlans:
+    def test_empty_steps_list_triggers_auto_plan(self):
+        # The web route sends steps=[]; that must not mean "explicit empty plan".
+        from genesis_protocol.agentic.agent_loop import AgentLoop
+
+        result = AgentLoop().run(user_id=1, goal="calculate 12+30", steps=[])
+        assert result["state"] == "completed"
+        assert result["steps"][0]["result"]["result"] == 42
