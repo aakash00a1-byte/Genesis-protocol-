@@ -931,6 +931,13 @@ own domain (authoritative attribution) and <pubDate> gives the age, which is
 shown per item and used to sort freshest-first. The Google News link is a JS
 redirect, so the real article URL cannot be recovered from it; we report the
 publisher domain plus the link rather than inventing a deep link.
+
+Prompt rules alone were not enough: live output once placed a syndicated press
+item under a "Verified" heading. So `GenesisAgent._sources_footer()` appends a
+sources list built from the labelled tool data (`_last_search_results`, reset
+per request), not from the model's text. The label, source, age and link in
+that footer are the tool's, so the model cannot move an item to a stronger
+section or drop it.
 Google News links point at news.google.com, so the real attribution is the
 "- Publisher" suffix in the title; `PUBLISHER_TO_DOMAIN` maps known names, and
 an unrecognised publisher is named but not trusted. `web_search` labels every
