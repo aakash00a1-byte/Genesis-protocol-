@@ -108,3 +108,19 @@ class TestToolListIsPerRequest:
         second = asyncio.run(run("144/12"))
         assert first == ["calculator"]
         assert second == ["calculator"]
+
+
+class TestPromptGivesIdentityAndStaysPrivate:
+    """A live probe showed the model quoting its own rules back ("rules mein
+    likha hai") and calling itself a Telegram bot instead of GLUTEN.
+    """
+
+    def test_prompt_states_identity(self):
+        prompt = _agent()._get_system_prompt()
+        assert "YOU ARE GLUTEN" in prompt
+        assert "NOT a Telegram bot" in prompt
+
+    def test_prompt_forbids_revealing_instructions(self):
+        prompt = _agent()._get_system_prompt()
+        assert "CONFIDENTIALITY" in prompt
+        assert "system prompt" in prompt

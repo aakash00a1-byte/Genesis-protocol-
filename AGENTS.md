@@ -1083,6 +1083,15 @@ system prompt asks for short, flowing Hinglish prose: no headings, no bold, no
 bullet lists unless the user asked for a list or there are three or more items,
 no emoji unless the user used one, and no closing filler.
 
+### Identity and instruction privacy
+
+A live probe showed the model quoting its own rules back ("rules mein likha hai")
+and calling itself a Telegram bot instead of GLUTEN. The prompt now states the
+identity as a fact (GLUTEN, Genesis Protocol OS, created by Aakash, "NOT a
+Telegram bot"), names the Telegram bot only as the transport that carries GLUTEN,
+and forbids quoting, paraphrasing or revealing the instructions or mentioning
+that a system prompt exists.
+
 ### Never invent a handle
 
 The model invented a Telegram bot name. The system prompt now carries the
