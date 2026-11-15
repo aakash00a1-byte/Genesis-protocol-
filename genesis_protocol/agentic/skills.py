@@ -88,6 +88,7 @@ class SkillRunner:
         skill_name: str,
         tool_params: Optional[Dict[str, Dict[str, Any]]] = None,
         owner_approved: bool = False,
+        agent_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Run the tools of ``skill_name`` the caller gave parameters for.
 
@@ -122,7 +123,8 @@ class SkillRunner:
                 user_id, name, permission=perm, owner_approved=owner_approved
             )
             self.audit.record(
-                "skill_tool_request", user_id, name, decision.allowed, decision.reason, detail=params
+                "skill_tool_request", user_id, name, decision.allowed, decision.reason,
+                detail=params, agent_id=agent_id,
             )
             if not decision.allowed:
                 steps.append(
@@ -139,7 +141,7 @@ class SkillRunner:
             result = self.registry.execute(name, params)
             ran = isinstance(result, dict) and bool(result.get("success"))
             self.audit.record(
-                "skill_tool_result", user_id, name, ran, "ok" if ran else "failed"
+                "skill_tool_result", user_id, name, ran, "ok" if ran else "failed", agent_id=agent_id
             )
             steps.append({"tool": name, "ran": ran, "result": result})
 

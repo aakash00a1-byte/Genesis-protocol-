@@ -45,6 +45,7 @@ class AuditLog:
         allowed: Optional[bool] = None,
         reason: str = "",
         detail: Any = None,
+        agent_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         entry = {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -54,6 +55,10 @@ class AuditLog:
             "allowed": allowed,
             "reason": reason,
         }
+        # Identity is recorded when the caller has one. Kept optional and last
+        # so existing callers (and their positional arguments) are unchanged.
+        if agent_id is not None:
+            entry["agent_id"] = agent_id
         if detail is not None:
             entry["detail"] = _redact(json.dumps(detail, default=str))
         with self._lock:
