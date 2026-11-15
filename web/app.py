@@ -1442,6 +1442,56 @@ def api_audit_tail():
     return jsonify({'entries': get_audit_log().tail(limit)})
 
 
+@app.route('/api/guardian/status', methods=['GET'])
+@login_required
+def api_guardian_status():
+    """Owner-only: read-only guardian status (chain integrity, event counts).
+
+    The guardian never takes a defensive action, so this reports state only.
+    """
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.guardian import Guardian
+
+    return jsonify(Guardian().status())
+
+
+@app.route('/api/guardian/scan', methods=['POST'])
+@login_required
+def api_guardian_scan():
+    """Owner-only: run one read-only monitoring pass.
+
+    Detects, classifies, records and recommends. It does not act: the response
+    always reports ``read_only: true`` and an empty ``actions_taken``. Optional
+    ``observations`` is a caller-supplied event stream (auth/webhook/api/secret).
+    """
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.guardian import Guardian
+
+    data = request.get_json(silent=True) or {}
+    observations = data.get('observations') or []
+    if not isinstance(observations, list):
+        return jsonify({'error': 'observations must be a list'}), 400
+    report = Guardian().monitor(observations=observations)
+    return jsonify(report.to_dict())
+
+
+@app.route('/api/guardian/forensics', methods=['GET'])
+@login_required
+def api_guardian_forensics():
+    """Owner-only: tamper-evident security event timeline with chain integrity."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.guardian import Guardian
+
+    actor = request.args.get('actor')
+    return jsonify(Guardian().incident_timeline(actor=actor))
+
+
 @app.route('/api/agents', methods=['GET'])
 @login_required
 def api_agents_list():
