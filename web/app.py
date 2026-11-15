@@ -1492,6 +1492,45 @@ def api_guardian_forensics():
     return jsonify(Guardian().incident_timeline(actor=actor))
 
 
+@app.route('/api/autonomy/status', methods=['GET'])
+@login_required
+def api_autonomy_status():
+    """Owner-only: bounded-autonomy status (mode, budgets, rate, failover)."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.bounded import get_bounded_autonomy
+
+    return jsonify(get_bounded_autonomy().status())
+
+
+@app.route('/api/autonomy/authorize', methods=['POST'])
+@login_required
+def api_autonomy_authorize():
+    """Owner-only: dry-run the bounded-autonomy gate for a proposed action.
+
+    Read-only: it answers whether the action would be permitted, without
+    performing it, so limits can be checked before a task is started.
+    """
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.bounded import get_bounded_autonomy
+
+    data = request.get_json(silent=True) or {}
+    scope = data.get('scope') or f'user:{user_id}'
+    action = data.get('action') or 'chat'
+    manager = get_bounded_autonomy()
+    decision = manager.authorize(
+        scope, action,
+        work=data.get('work', 'standard'),
+        cost_usd=float(data.get('cost_usd', 0.0) or 0.0),
+        tokens=int(data.get('tokens', 0) or 0),
+        tool_calls=int(data.get('tool_calls', 0) or 0),
+    )
+    return jsonify(decision.to_dict())
+
+
 @app.route('/api/agents', methods=['GET'])
 @login_required
 def api_agents_list():
