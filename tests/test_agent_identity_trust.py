@@ -598,6 +598,62 @@ class TestIdentityWebSurface:
 
 
 # ---------------------------------------------------------------------------
+# Review hardening: defects found during PR review, with regression tests
+# ---------------------------------------------------------------------------
+
+class TestReviewHardening:
+    def test_verify_malformed_agent_id_fails_closed_not_raises(self):
+        """A non-string agent_id is denied, never a crash that could bypass a gate."""
+        reg = _registry()
+        for bad in ({"x": 1}, ["a"], 123, object()):
+            result = reg.verify(bad)
+            assert result.ok is False
+
+    def test_get_malformed_agent_id_returns_none(self):
+        reg = _registry()
+        assert reg.get({"x": 1}) is None
+        assert reg.get(["a"]) is None
+
+    def test_boundary_check_malformed_agent_id_is_denied(self):
+        reg = _registry()
+        guard = BoundaryGuard(identities=reg, policy=_owner())
+        assert guard.check_tool({"x": 1}, "calculator", user_id=1).allowed is False
+
+    def test_one_tool_call_counts_once(self):
+        """A request+result pair is one outcome, not two successes."""
+        reg = _registry()
+        a = reg.register(name="w", role="worker", owner_id=1, owner_approved=True)
+        one_call = [
+            {"event": "tool_request", "allowed": True, "agent_id": a.agent_id},
+            {"event": "tool_result", "allowed": True, "agent_id": a.agent_id},
+        ]
+        report = TrustEvaluator(audit=reg.audit).evaluate(a, history=one_call)
+        assert report.evidence["successes"] == 1
+
+    def test_denied_request_counts_as_denial_not_failure(self):
+        reg = _registry()
+        a = reg.register(name="w", role="worker", owner_id=1, owner_approved=True)
+        history = [{"event": "tool_request", "allowed": False, "agent_id": a.agent_id}] * 3
+        report = TrustEvaluator(audit=reg.audit).evaluate(a, history=history)
+        assert report.evidence["denials"] == 3
+        assert report.evidence["failures"] == 0
+
+    def test_cannot_reactivate_child_while_parent_suspended(self):
+        reg = _registry()
+        parent = reg.register(name="p", role="orchestrator", owner_id=1,
+                              tools=["calculator"], owner_approved=True)
+        child = reg.register(name="c", role="worker", owner_id=1, parent_id=parent.agent_id,
+                             tools=["calculator"], owner_approved=True)
+        reg.suspend(parent.agent_id, owner_approved=True)  # cascades
+        with pytest.raises(IdentityError):
+            reg.reactivate(child.agent_id, owner_approved=True)
+        # Reactivating the parent first, then the child, works.
+        reg.reactivate(parent.agent_id, owner_approved=True)
+        reg.reactivate(child.agent_id, owner_approved=True)
+        assert reg.verify(child.agent_id).ok is True
+
+
+# ---------------------------------------------------------------------------
 # Backward compatibility: identity is optional and additive
 # ---------------------------------------------------------------------------
 

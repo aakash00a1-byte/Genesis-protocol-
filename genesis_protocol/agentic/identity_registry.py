@@ -150,7 +150,9 @@ class IdentityRegistry:
     # -- reads ----------------------------------------------------------------
 
     def get(self, agent_id: Optional[str]) -> Optional[AgentIdentity]:
-        if not agent_id:
+        # A malformed id (non-string) is treated as "no such agent", never a
+        # crash: callers must not be able to raise the gate into an error path.
+        if not agent_id or not isinstance(agent_id, str):
             return None
         with self._lock:
             return self._agents.get(agent_id)
@@ -340,7 +342,11 @@ class IdentityRegistry:
         return self._set_status(agent_id, "suspended", reason, owner_approved, cascade=True)
 
     def reactivate(self, agent_id: str, owner_approved: bool = False) -> AgentIdentity:
-        """Reactivate a suspended agent. Refuses if an ancestor is revoked."""
+        """Reactivate a suspended agent. Refuses while an ancestor is not active.
+
+        A child may not become active while its parent is revoked or suspended:
+        that would leave an active agent hanging off a dead branch.
+        """
         if not owner_approved:
             raise IdentityError("reactivating an agent requires owner approval")
         identity = self.get(agent_id)
@@ -348,9 +354,10 @@ class IdentityRegistry:
             raise IdentityError(f"unknown agent '{agent_id}'")
         if identity.status == "revoked":
             raise IdentityError("a revoked agent cannot be reactivated")
-        ancestor = self._revoked_ancestor(identity)
+        ancestor = self._inactive_ancestor(identity)
         if ancestor is not None:
-            raise IdentityError(f"ancestor '{ancestor}' is revoked")
+            ancestor_id, ancestor_status = ancestor
+            raise IdentityError(f"ancestor '{ancestor_id}' is {ancestor_status}")
         with self._lock:
             identity.status = "active"
             identity.updated_at = _utcnow()
@@ -408,7 +415,8 @@ class IdentityRegistry:
                               allowed=(status == "active"), reason=reason or status)
         return identity
 
-    def _revoked_ancestor(self, identity: AgentIdentity) -> Optional[str]:
+    def _inactive_ancestor(self, identity: AgentIdentity) -> Optional[tuple]:
+        """First ancestor that is not active, as ``(agent_id, status)``."""
         seen = set()
         current = identity.parent_id
         while current and current not in seen:
@@ -416,8 +424,8 @@ class IdentityRegistry:
             ancestor = self.get(current)
             if ancestor is None:
                 return None
-            if ancestor.status == "revoked":
-                return ancestor.agent_id
+            if ancestor.status != "active":
+                return (ancestor.agent_id, ancestor.status)
             current = ancestor.parent_id
         return None
 
@@ -430,7 +438,7 @@ class IdentityRegistry:
         is supplied - that the credential is live and belongs to this agent.
         Any failure denies the action (fail closed).
         """
-        if not agent_id:
+        if not agent_id or not isinstance(agent_id, str):
             return VerificationResult(False, "no agent identity supplied")
         identity = self.get(agent_id)
         if identity is None:

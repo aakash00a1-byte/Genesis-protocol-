@@ -26,13 +26,12 @@ from genesis_protocol.agentic.identity_registry import AgentIdentity
 
 TRUST_LEVELS = ("untrusted", "provisional", "trusted", "verified")
 
-# Outcomes that count as evidence of reliability.
-_SUCCESS_EVENTS = {
-    "tool_result": True,
-    "skill_tool_result": True,
-    "tool_request": True,
-}
-_DENIED_EVENTS = {"tool_request"}
+# Outcome events: exactly one per executed tool call, so a single call counts
+# once. ``tool_request``/``skill_tool_request`` are *decision* events, not
+# outcomes - counting them as successes too would double every call - and are
+# used only to count denials.
+_SUCCESS_EVENTS = {"tool_result", "skill_tool_result"}
+_REQUEST_EVENTS = {"tool_request", "skill_tool_request"}
 
 
 @dataclass
@@ -74,13 +73,13 @@ class TrustEvaluator:
         for entry in history:
             event = entry.get("event")
             allowed = entry.get("allowed")
-            if event in _SUCCESS_EVENTS and allowed is True:
-                successes += 1
-            elif event in _SUCCESS_EVENTS and allowed is False:
-                if event in _DENIED_EVENTS:
-                    denials += 1
-                else:
+            if event in _SUCCESS_EVENTS:
+                if allowed is True:
+                    successes += 1
+                elif allowed is False:
                     failures += 1
+            elif event in _REQUEST_EVENTS and allowed is False:
+                denials += 1
 
         evidence = {
             "successes": successes,
