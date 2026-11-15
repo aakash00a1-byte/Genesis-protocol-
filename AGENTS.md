@@ -916,6 +916,59 @@ security-sensitive proposal. `tests/test_persistent_learning.py` holds the
 contract and the adversarial cases (injection, secrets, conflicts, staleness,
 false claims, owner-only verification, restart persistence, legacy migration).
 
+## AI Guardian & self-defence (V7 P5, 2026-11-10)
+
+P5 adds `genesis_protocol/guardian/`, a **read-only** security monitor. It
+detects, classifies, records and *recommends*; it never acts. It composes the
+canonical systems (`agentic/audit.py`, `identity_registry`, `policy`,
+`tools/tool_registry`, `trust`, `survival/resource_monitor`,
+`core/admin_alerts`) and duplicates none of them.
+
+- **`guardian/events.py`** - append-only, hash-chained `SecurityEventLog`
+  (SHA-256 over `prev_hash + canonical(entry)`). `verify()` returns the first
+  broken index; editing/reordering/deleting an entry is detectable. Payloads are
+  redacted before storage. This is **separate from** `agentic/audit.py`, which is
+  not tamper-evident.
+- **`guardian/threat_intel.py`** - advisories from CERT-In, CISA, NVD, OWASP and
+  vendor sources with source link, published time, `retrieved_at` and an
+  **explained** confidence (source tier + CVE id + named packages - no link
+  reduces it). Relevance is matched against `requirements.txt`. No fabricated
+  intelligence: an empty input yields an empty result. Live `fetch()` is opt-in
+  and never called by the monitoring loop.
+- **`guardian/detection.py`** - runtime detectors over the audit log and a
+  supplied observation stream: auth brute force, webhook abuse, API burst,
+  identity spoofing (audit agent id that does not verify), privilege escalation
+  (denied privileged ops / repeated denials), secret exposure (secret-shaped
+  strings, value never stored), unexpected tool execution (unregistered tool, or
+  a result after a denial - tracked per `(agent, tool)`). Thresholds are named
+  module constants.
+- **`guardian/behaviour.py`** - per-agent patterns: unusual tool variety, policy
+  violations, repeated denials, grant escape, and a `correlate()` view joining
+  identity + trust + history + timeline.
+- **`guardian/health.py`** - resources (CPU/memory/disk thresholds), memory DB
+  integrity (`PRAGMA integrity_check`, opened **read-only** via a `file:...?mode=ro`
+  URI so the check never writes), task-store readability, and
+  `detect_behaviour_change(baseline, current, tolerance)`.
+- **`guardian/response.py`** - reversible, owner-gated recommendations only.
+  `FORBIDDEN_ACTIONS` (delete_account, rotate_credential, modify_code, deploy,
+  change_settings, grant_permission, push_main) raise if ever proposed;
+  `PRIVILEGED_ACTIONS` are always `requires_owner_approval=True, automatic=False`;
+  `info` findings produce no recommendation.
+- **`guardian/guardian.py`** - the orchestrator: one read-only `monitor()` pass
+  records findings to the forensic log, builds an incident timeline and reports
+  `read_only: true` with an empty `actions_taken`.
+- **Surface** (owner-only, read-only): `GET /api/guardian/status`,
+  `POST /api/guardian/scan`, `GET /api/guardian/forensics`. No route takes a
+  defensive action.
+
+Rules: reuse the canonical `AgentPolicy`/`ToolRegistry`/`IdentityRegistry`/
+`AuditLog`. Read-only - no automatic account deletion, credential rotation, code
+modification, deployment or settings change. Any privileged response requires
+owner approval and is proposed, never taken. Never claim attribution the evidence
+does not support. `tests/test_guardian_selfdefence.py` holds the contract and the
+adversarial cases (simulated attacks, spoofing, malicious tool requests, secret
+leakage, false alerts, tamper detection, detection accuracy, FP budget).
+
 ## Reasoning, planning & decision intelligence (V7 P4, 2026-11-10)
 
 P4 adds a **deterministic reasoning/planning/decision layer** on top of the
