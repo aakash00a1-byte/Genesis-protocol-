@@ -10,13 +10,21 @@ Contract:
 
 * Only approved facts are stored; a caller must pass ``approved=True``.
 * Credential-shaped content is refused, never written.
+* Instruction-shaped content is refused: stored text is untrusted data and is
+  never treated as an executable instruction (see ``agentic/memory_safety``).
 * Every read/write is scoped by ``user_id``; one user can never see another's
   memory.
 * Memories can be inspected, corrected and deleted by their owner.
 * Recall spans sessions: a new session for the same user sees earlier facts.
+
+V7 P3 adds provenance, verification status, confidence and freshness so a
+memory can be told apart as a *verified fact*, *user-provided* information, a
+*hypothesis* or an *unverified claim*. Only an owner may promote an item to
+``verified``; an agent can never promote its own assumption into a fact.
 """
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 import threading
@@ -25,36 +33,53 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# Credential-shaped content is refused rather than stored. These patterns are
-# deliberately broad: a false positive only means the user rephrases, while a
-# false negative would persist a secret.
-_SECRET_PATTERNS = [
-    re.compile(r"\b(sk|pk|rk)-[A-Za-z0-9]{16,}\b"),                 # OpenAI-style keys
-    re.compile(r"\bgsk_[A-Za-z0-9]{20,}\b"),                        # Groq
-    re.compile(r"\bAIza[0-9A-Za-z_\-]{30,}\b"),                     # Google API key
-    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),                # Slack
-    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),                  # GitHub token
-    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                            # AWS access key id
-    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),              # PEM private key
-    re.compile(r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\."),  # JWT
-    re.compile(r"(?i)\b(password|passwd|secret|api[_-]?key|token)\b\s*[:=]\s*\S{4,}"),
-    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._\-]{12,}"),
+from genesis_protocol.agentic.memory_safety import (
+    UnsafeMemory,
+    is_instruction_like,
+    looks_like_secret,
+    redact_secrets,
+    scan_content,
+)
+
+__all__ = [
+    "AgentMemory",
+    "MemoryRejected",
+    "get_agent_memory",
+    "looks_like_secret",
+    "is_instruction_like",
+    "VERIFICATION_LEVELS",
+    "MEMORY_SOURCES",
 ]
 
 MAX_CONTENT_LEN = 4000
 
+# Ordered from least to most trustworthy. ``verified`` is the only level an
+# agent cannot set for itself.
+VERIFICATION_LEVELS = ("unverified", "hypothesis", "user_provided", "verified")
 
-def looks_like_secret(text: str) -> bool:
-    """True when ``text`` contains something shaped like a credential."""
-    return any(p.search(text or "") for p in _SECRET_PATTERNS)
+# Where a memory came from. Provenance is descriptive, not a trust grant.
+MEMORY_SOURCES = ("user", "owner", "agent", "task", "reflection", "import")
+
+
+class MemoryRejected(UnsafeMemory):
+    """Raised when content must not be stored (secret/instruction-shaped or too long).
+
+    Subclasses :class:`UnsafeMemory` so callers that already catch
+    ``MemoryRejected`` keep working and callers of the safety layer catch the
+    same error.
+    """
 
 
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-class MemoryRejected(ValueError):
-    """Raised when content must not be stored (secret-shaped or too long)."""
+def _coerce_confidence(value: Any, default: float = 0.5) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return max(0.0, min(1.0, number))
 
 
 class AgentMemory:
@@ -73,25 +98,62 @@ class AgentMemory:
         self._conn.row_factory = sqlite3.Row
         self._init_schema()
 
+    # -- schema ---------------------------------------------------------------
+
     def _init_schema(self) -> None:
         with self._lock, self._conn:
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS agent_memories (
-                    id          TEXT PRIMARY KEY,
-                    user_id     INTEGER NOT NULL,
-                    session_id  TEXT,
-                    kind        TEXT NOT NULL DEFAULT 'fact',
-                    content     TEXT NOT NULL,
-                    source      TEXT NOT NULL DEFAULT 'user',
-                    created_at  TEXT NOT NULL,
-                    updated_at  TEXT NOT NULL
+                    id            TEXT PRIMARY KEY,
+                    user_id       INTEGER NOT NULL,
+                    session_id    TEXT,
+                    kind          TEXT NOT NULL DEFAULT 'fact',
+                    content       TEXT NOT NULL,
+                    source        TEXT NOT NULL DEFAULT 'user',
+                    created_at    TEXT NOT NULL,
+                    updated_at    TEXT NOT NULL
                 )
                 """
             )
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_agent_mem_user ON agent_memories(user_id)"
             )
+        # Additive columns. Existing databases predate P3, so each column is
+        # added only if missing; this is the whole migration.
+        for column, ddl in (
+            ("verification", "TEXT NOT NULL DEFAULT 'unverified'"),
+            ("confidence", "REAL NOT NULL DEFAULT 0.5"),
+            ("origin", "TEXT"),
+            ("provenance", "TEXT"),
+            ("expires_at", "TEXT"),
+            ("superseded_by", "TEXT"),
+            ("deleted", "INTEGER NOT NULL DEFAULT 0"),
+            ("deleted_at", "TEXT"),
+            ("updated_by", "INTEGER"),
+        ):
+            self._ensure_column(column, ddl)
+
+    def _ensure_column(self, column: str, ddl: str) -> None:
+        with self._lock, self._conn:
+            existing = {
+                row["name"]
+                for row in self._conn.execute("PRAGMA table_info(agent_memories)").fetchall()
+            }
+            if column not in existing:
+                self._conn.execute(f"ALTER TABLE agent_memories ADD COLUMN {column} {ddl}")
+
+    # -- validation -----------------------------------------------------------
+
+    @staticmethod
+    def _validate(content: str) -> str:
+        content = (content or "").strip()
+        if len(content) > MAX_CONTENT_LEN:
+            raise MemoryRejected(f"content exceeds {MAX_CONTENT_LEN} characters")
+        ok, reason = scan_content(content)
+        if not ok:
+            raise MemoryRejected(reason)
+        return content
 
     # -- writes ---------------------------------------------------------------
 
@@ -102,62 +164,158 @@ class AgentMemory:
         kind: str = "fact",
         session_id: Optional[str] = None,
         approved: bool = False,
+        source: str = "user",
+        verification: str = "unverified",
+        confidence: float = 0.5,
+        origin: Optional[str] = None,
+        provenance: Optional[Dict[str, Any]] = None,
+        expires_at: Optional[str] = None,
+        supersedes: Optional[str] = None,
     ) -> str:
-        """Store an approved fact. Raises ``MemoryRejected`` otherwise.
+        """Store an approved memory. Raises ``MemoryRejected`` otherwise.
 
         ``approved`` must be True: memory is opt-in, never scraped silently.
+        ``verification`` may be any level except ``verified``: only the owner can
+        verify a memory through :meth:`verify`. An agent cannot certify its own
+        assumption as fact.
         """
         if not approved:
             raise MemoryRejected("memory is only stored when approved=True")
-        content = (content or "").strip()
-        if not content:
-            raise MemoryRejected("empty content")
-        if len(content) > MAX_CONTENT_LEN:
-            raise MemoryRejected(f"content exceeds {MAX_CONTENT_LEN} characters")
-        if looks_like_secret(content):
-            raise MemoryRejected("content looks like a credential; refused")
+        content = self._validate(content)
+        if verification not in VERIFICATION_LEVELS:
+            raise MemoryRejected(f"unknown verification level '{verification}'")
+        if verification == "verified":
+            raise MemoryRejected(
+                "only the owner may store a memory as verified; use verify() with owner approval"
+            )
+        if source not in MEMORY_SOURCES:
+            raise MemoryRejected(f"unknown source '{source}'")
 
         memory_id = uuid.uuid4().hex[:12]
         now = _utcnow()
         with self._lock, self._conn:
             self._conn.execute(
-                "INSERT INTO agent_memories (id, user_id, session_id, kind, content, source, created_at, updated_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (memory_id, int(user_id), session_id, kind, content, "user", now, now),
+                "INSERT INTO agent_memories (id, user_id, session_id, kind, content, source,"
+                " created_at, updated_at, verification, confidence, origin, provenance,"
+                " expires_at, superseded_by, deleted, deleted_at, updated_by)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?)",
+                (
+                    memory_id, int(user_id), session_id, kind, content, source,
+                    now, now, verification, _coerce_confidence(confidence),
+                    origin, json.dumps(provenance) if provenance else None,
+                    expires_at, None, int(user_id),
+                ),
             )
+            if supersedes:
+                self._conn.execute(
+                    "UPDATE agent_memories SET superseded_by = ?, updated_at = ?"
+                    " WHERE id = ? AND user_id = ?",
+                    (memory_id, now, supersedes, int(user_id)),
+                )
         return memory_id
 
-    def correct(self, user_id: int, memory_id: str, new_content: str) -> bool:
-        """Replace a memory's content. Only the owner may correct it."""
-        new_content = (new_content or "").strip()
-        if not new_content:
-            raise MemoryRejected("empty content")
-        if len(new_content) > MAX_CONTENT_LEN:
-            raise MemoryRejected(f"content exceeds {MAX_CONTENT_LEN} characters")
-        if looks_like_secret(new_content):
-            raise MemoryRejected("content looks like a credential; refused")
+    def correct(
+        self, user_id: int, memory_id: str, new_content: str, updated_by: Optional[int] = None
+    ) -> bool:
+        """Replace a memory's content. Only the owner may correct it.
+
+        Correcting content invalidates any prior verification: a changed fact is
+        no longer the thing that was verified, so it drops back to
+        ``user_provided``. This stops content being swapped under a ``verified``
+        badge.
+        """
+        new_content = self._validate(new_content)
         with self._lock, self._conn:
             cur = self._conn.execute(
-                "UPDATE agent_memories SET content = ?, updated_at = ? WHERE id = ? AND user_id = ?",
-                (new_content, _utcnow(), memory_id, int(user_id)),
+                "UPDATE agent_memories SET content = ?, updated_at = ?,"
+                " verification = CASE WHEN verification = 'verified' THEN 'user_provided'"
+                " ELSE verification END, updated_by = ?"
+                " WHERE id = ? AND user_id = ? AND deleted = 0",
+                (new_content, _utcnow(), updated_by if updated_by is not None else int(user_id),
+                 memory_id, int(user_id)),
+            )
+            return cur.rowcount > 0
+
+    def verify(
+        self, user_id: int, memory_id: str, owner_approved: bool = False,
+        confidence: float = 1.0, note: str = "",
+    ) -> bool:
+        """Promote a memory to ``verified``. Owner-only.
+
+        This is the only path to ``verified``. It requires explicit owner
+        approval, so an assumption cannot become a verified fact on its own.
+        """
+        if not owner_approved:
+            raise MemoryRejected("promoting a memory to verified requires owner approval")
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "UPDATE agent_memories SET verification = 'verified', confidence = ?,"
+                " updated_at = ?, updated_by = ?, provenance = ?"
+                " WHERE id = ? AND user_id = ? AND deleted = 0",
+                (
+                    _coerce_confidence(confidence, 1.0), _utcnow(), int(user_id),
+                    json.dumps({"verified_note": redact_secrets(note)[:200]}) if note else None,
+                    memory_id, int(user_id),
+                ),
+            )
+            return cur.rowcount > 0
+
+    def revoke(self, user_id: int, memory_id: str, reason: str = "") -> bool:
+        """Soft-delete a memory (revocation). The row is retained for the audit trail.
+
+        Revoked memories are excluded from every read, so recall never returns
+        them, but the fact that a deletion happened is not erased.
+        """
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "UPDATE agent_memories SET deleted = 1, deleted_at = ?, updated_at = ?,"
+                " provenance = ?, updated_by = ?"
+                " WHERE id = ? AND user_id = ? AND deleted = 0",
+                (
+                    _utcnow(), _utcnow(),
+                    json.dumps({"revoked_reason": redact_secrets(reason)[:200]}) if reason else None,
+                    int(user_id), memory_id, int(user_id),
+                ),
             )
             return cur.rowcount > 0
 
     def forget(self, user_id: int, memory_id: str) -> bool:
-        """Delete a memory. Only the owner may delete it."""
+        """Delete a memory. Only the owner may delete it.
+
+        This is the historical entry point; it now performs a revocation
+        (soft delete) so the deletion itself is auditable. Use
+        :meth:`hard_delete` to purge the row entirely.
+        """
+        return self.revoke(user_id, memory_id, reason="forget")
+
+    def hard_delete(self, user_id: int, memory_id: str) -> bool:
+        """Permanently purge a revoked memory's row. Owner-scoped."""
         with self._lock, self._conn:
             cur = self._conn.execute(
-                "DELETE FROM agent_memories WHERE id = ? AND user_id = ?",
+                "DELETE FROM agent_memories WHERE id = ? AND user_id = ? AND deleted = 1",
                 (memory_id, int(user_id)),
             )
             return cur.rowcount > 0
 
     # -- reads ----------------------------------------------------------------
 
-    def list_memories(self, user_id: int, kind: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Inspect a user's memories, newest first."""
+    def get(self, user_id: int, memory_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch one memory by id, scoped to its owner."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM agent_memories WHERE id = ? AND user_id = ?",
+                (memory_id, int(user_id)),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_memories(
+        self, user_id: int, kind: Optional[str] = None, include_revoked: bool = False
+    ) -> List[Dict[str, Any]]:
+        """Inspect a user's memories, newest first. Revoked items are hidden."""
         sql = "SELECT * FROM agent_memories WHERE user_id = ?"
         params: List[Any] = [int(user_id)]
+        if not include_revoked:
+            sql += " AND deleted = 0"
         if kind:
             sql += " AND kind = ?"
             params.append(kind)
@@ -166,19 +324,26 @@ class AgentMemory:
             rows = self._conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
 
-    def recall(self, user_id: int, query: str = "", limit: int = 10) -> List[Dict[str, Any]]:
+    def recall(
+        self, user_id: int, query: str = "", limit: int = 10, include_expired: bool = False
+    ) -> List[Dict[str, Any]]:
         """Return memories relevant to ``query`` for this user only.
 
         Relevance is keyword overlap, then recency. Recall is cross-session by
         design: memories from earlier sessions of the same user are eligible.
+        Revoked memories are never returned. Each item carries its provenance,
+        verification status, confidence and freshness so the caller can judge it.
         """
         limit = max(1, min(int(limit), 100))
         with self._lock:
             rows = self._conn.execute(
-                "SELECT * FROM agent_memories WHERE user_id = ? ORDER BY created_at DESC",
+                "SELECT * FROM agent_memories WHERE user_id = ? AND deleted = 0"
+                " ORDER BY created_at DESC",
                 (int(user_id),),
             ).fetchall()
         memories = [dict(r) for r in rows]
+        if not include_expired:
+            memories = [m for m in memories if not self._is_expired(m)]
         terms = {t for t in re.findall(r"\w+", (query or "").lower()) if len(t) > 2}
         if not terms:
             return memories[:limit]
@@ -194,11 +359,22 @@ class AgentMemory:
             return memories[:limit]
         return relevant[:limit]
 
+    @staticmethod
+    def _is_expired(memory: Dict[str, Any]) -> bool:
+        expires_at = memory.get("expires_at")
+        if not expires_at:
+            return False
+        try:
+            return datetime.fromisoformat(expires_at) < datetime.now(timezone.utc)
+        except (TypeError, ValueError):
+            return False
+
     def count(self, user_id: int) -> int:
         with self._lock:
             return int(
                 self._conn.execute(
-                    "SELECT COUNT(*) FROM agent_memories WHERE user_id = ?", (int(user_id),)
+                    "SELECT COUNT(*) FROM agent_memories WHERE user_id = ? AND deleted = 0",
+                    (int(user_id),),
                 ).fetchone()[0]
             )
 

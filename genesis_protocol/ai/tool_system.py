@@ -346,7 +346,18 @@ class ToolSystem:
             from genesis_protocol.agentic.memory import MemoryRejected, get_agent_memory
 
             memory = get_agent_memory()
-            memory_id = memory.remember(int(user_id), value, kind="fact", approved=True)
+            # Source is 'agent' unless the caller says otherwise; verification is
+            # never 'verified' here (only the owner may verify).
+            memory_id = memory.remember(
+                int(user_id),
+                value,
+                kind=params.get("kind", "fact"),
+                approved=True,
+                source=params.get("source", "agent"),
+                verification=params.get("verification", "unverified"),
+                confidence=params.get("confidence", 0.5),
+                origin=key or None,
+            )
             return ToolResult(True, data={"stored": True, "key": key, "id": memory_id})
         except MemoryRejected as e:
             return ToolResult(False, error=f"memory rejected: {e}")
@@ -354,7 +365,12 @@ class ToolSystem:
             return ToolResult(False, error=f"Memory store error: {e}")
 
     async def _tool_memory_recall(self, params: Dict) -> ToolResult:
-        """Recall the user's own memories, never another user's."""
+        """Recall the user's own memories, never another user's.
+
+        Ranking and provenance come from the retrieval layer so the model sees
+        each item's verification status and confidence, and any conflicts are
+        surfaced rather than silently resolved.
+        """
         query = params.get("query", "")
         limit = params.get("limit", 5)
         user_id = params.get("user_id") or 0
@@ -364,9 +380,16 @@ class ToolSystem:
 
         try:
             from genesis_protocol.agentic.memory import get_agent_memory
+            from genesis_protocol.agentic.retrieval import MemoryRetriever
 
-            memories = get_agent_memory().recall(int(user_id), query, limit=limit)
-            return ToolResult(True, data={"results": memories, "count": len(memories)})
+            retriever = MemoryRetriever(memory=get_agent_memory())
+            ranked = retriever.search(int(user_id), query, limit=limit)
+            results = [s.memory for s in ranked]
+            payload = {"results": results, "count": len(results)}
+            conflicts = retriever.conflicts(int(user_id))
+            if conflicts:
+                payload["conflicts"] = [c.to_dict() for c in conflicts]
+            return ToolResult(True, data=payload)
         except Exception as e:
             return ToolResult(False, error=f"Memory recall error: {e}")
 
