@@ -1231,11 +1231,21 @@ def api_agent_run():
     steps = data.get('steps') or []
     task_id = data.get('task_id')
     owner_approved = bool(data.get('owner_approved', False))
+    agent_id = data.get('agent_id')
     if not goal:
         return jsonify({'error': 'goal required'}), 400
 
     user_id = session['user_id']
     owner = _is_owner(user_id)
+
+    # An optional agent identity must verify before the run. The loop fails the
+    # whole run closed if it does not, so a forged agent_id cannot act.
+    if agent_id:
+        from genesis_protocol.agentic.identity_registry import get_identity_registry
+
+        verification = get_identity_registry().verify(agent_id)
+        if not verification.ok:
+            return jsonify({'error': f'identity not verified: {verification.reason}'}), 403
 
     # Least privilege: refuse code execution for non-owners up front.
     for step in steps:
@@ -1253,6 +1263,7 @@ def api_agent_run():
             steps=steps,
             task_id=task_id,
             owner_approved=owner_approved,
+            agent_id=agent_id,
         )
     except (ValueError, KeyError) as exc:
         return jsonify({'error': str(exc)}), 400
@@ -1337,6 +1348,65 @@ def api_audit_tail():
 
     limit = request.args.get('limit', 50, type=int)
     return jsonify({'entries': get_audit_log().tail(limit)})
+
+
+@app.route('/api/agents', methods=['GET'])
+@login_required
+def api_agents_list():
+    """Owner-only view of registered agent identities and their trust level.
+
+    Read-only. Identities carry no credential material; trust is reported with
+    the evidence behind it.
+    """
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.agentic.identity_registry import get_identity_registry
+    from genesis_protocol.agentic.trust import get_trust_evaluator
+
+    registry = get_identity_registry()
+    evaluator = get_trust_evaluator()
+    agents = []
+    for identity in registry.list_agents():
+        record = identity.to_dict()
+        record['trust'] = evaluator.evaluate(identity).to_dict()
+        agents.append(record)
+    return jsonify({'count': len(agents), 'agents': agents})
+
+
+@app.route('/api/agents/<agent_id>', methods=['GET'])
+@login_required
+def api_agent_get(agent_id):
+    """Owner-only view of one agent identity, its trust and its credentials."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.agentic.credentials import get_credential_store
+    from genesis_protocol.agentic.identity_registry import get_identity_registry
+    from genesis_protocol.agentic.trust import get_trust_evaluator
+
+    identity = get_identity_registry().get(agent_id)
+    if identity is None:
+        return jsonify({'error': 'not found'}), 404
+    record = identity.to_dict()
+    record['trust'] = get_trust_evaluator().evaluate(identity).to_dict()
+    record['credentials'] = get_credential_store().list_for_agent(agent_id)
+    return jsonify(record)
+
+
+@app.route('/api/agents/<agent_id>/verify', methods=['POST'])
+@login_required
+def api_agent_verify(agent_id):
+    """Owner-only identity verification probe. Never returns a secret."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.agentic.identity_registry import get_identity_registry
+
+    data = request.get_json(silent=True) or {}
+    credential = data.get('credential')  # optional; never logged or echoed
+    result = get_identity_registry().verify(agent_id, credential=credential)
+    return jsonify(result.to_dict())
 
 
 @app.route('/api/chat/history', methods=['GET'])

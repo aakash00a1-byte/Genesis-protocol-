@@ -822,6 +822,50 @@ claim more than it does.
 State files default to `data/` (gitignored): `gluten_memory.db`,
 `gluten_tasks.json`, `gluten_audit.jsonl`.
 
+## Agent identity & trust control (V7 P2, 2026-11-10)
+
+`genesis_protocol/agentic/` gained a verifiable identity and permission
+foundation. It *composes* the existing engines instead of adding a second
+permission system:
+
+- **Identity registry** (`agentic/identity_registry.py`): every agent has a
+  unique, immutable identity - id (`agt_...`), name, role, owner, provider,
+  model, parent, status (`active`/`suspended`/`revoked`) and a tool grant.
+  Registration, grant changes, suspend, revoke and reactivate all require
+  `owner_approved=True`; an agent can never widen its own identity. A child's
+  grant must be a subset of its parent's, so privilege only narrows down the
+  tree. State: `data/gluten_agents.json` (`GLUTEN_AGENT_DB`).
+- **Credentials** (`agentic/credentials.py`): short-lived bearer tokens bound to
+  one agent. Only a SHA-256 hash is stored; the raw token is returned once by
+  `issue` and never persisted, listed or logged. TTL is always bounded
+  (default 900s, max 24h); single-use by default. Revocation drops live
+  credentials. State: `data/gluten_agent_credentials.json` (`GLUTEN_CRED_DB`).
+- **Boundaries** (`agentic/boundaries.py`): the least-privilege gate. A tool
+  runs only when the identity verifies **and** the canonical `AgentPolicy`
+  allows it **and** the tool is within the agent's grant. The grant is a ceiling
+  that can only restrict, never expand, what policy allows.
+- **Trust** (`agentic/trust.py`): evidence-based levels (`untrusted` <
+  `provisional` < `trusted` < `verified`) computed only from audited outcomes.
+  Trust never grants an action: a revoked identity is always `untrusted`, a poor
+  record never exceeds `provisional`, and a `verified` agent still cannot reach
+  a privileged operation.
+- **Audit** (`agentic/audit.py`): `record(...)` gained an optional `agent_id`
+  (kept last, so existing callers are unchanged). `agent_loop.run(...,
+  agent_id=...)` and `SkillRunner.run(..., agent_id=...)` now bind each entry to
+  an identity, and an unverifiable `agent_id` fails the whole run closed
+  (`state="denied"`).
+- **Surfaces** (owner-only, read-only): `GET /api/agents`,
+  `GET /api/agents/<id>`, `POST /api/agents/<id>/verify`. `POST /api/agent/run`
+  accepts an optional `agent_id`. Identity is optional and additive everywhere:
+  callers that pass no `agent_id` behave exactly as before.
+
+Rules: this is an identity store, not a permission engine - do not add a second
+policy/registry here. Never store a raw credential. Do not let trust or identity
+bypass `AgentPolicy`. `tests/test_agent_identity_trust.py` holds the contract
+and the eight adversarial cases (spoofed id, privilege escalation, forged
+parent, expired/exhausted/revoked credential, unauthorized tool access,
+self-granted privilege, privileged operation).
+
 ## Telegram active-hours window (2026-11-12)
 
 The relay used to broadcast 24/7: news (3-4 categories), market, AI briefing,

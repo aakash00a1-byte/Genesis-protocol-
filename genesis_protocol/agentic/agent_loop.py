@@ -133,8 +133,14 @@ class AgentLoop:
         task_id: Optional[str] = None,
         owner_approved: bool = False,
         on_error: str = "stop",
+        agent_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Run the loop for ``goal``. Returns structured evidence."""
+        """Run the loop for ``goal``. Returns structured evidence.
+
+        ``agent_id`` is optional and purely additive: when supplied, every
+        audit entry records which agent acted, so the trail binds an action to
+        an identity. Callers without an identity behave exactly as before.
+        """
         planned = self.plan(goal, steps)
 
         if not planned:
@@ -166,10 +172,30 @@ class AgentLoop:
         results: List[Dict[str, Any]] = []
         failed = False
 
+        # When the caller names an agent, its identity must verify before any
+        # step runs. An unverifiable identity fails the whole run closed.
+        if agent_id is not None:
+            verification = self._verify_agent(agent_id)
+            if not verification.ok:
+                self.audit.record(
+                    "identity_denied", user_id, allowed=False,
+                    reason=verification.reason, agent_id=agent_id,
+                )
+                return {
+                    "task_id": task_id,
+                    "user_id": int(user_id),
+                    "goal": goal,
+                    "state": "denied",
+                    "steps": [],
+                    "resumed_from": 0,
+                    "agent_id": agent_id,
+                    "error": f"identity not verified: {verification.reason}",
+                }
+
         for index, step in enumerate(planned):
             if index < start_index:
                 continue  # resume: skip steps already completed in a prior run
-            outcome = self._run_step(user_id, step, owner_approved)
+            outcome = self._run_step(user_id, step, owner_approved, agent_id)
             outcome["index"] = index
             self.tasks.append_step(user_id, task_id, outcome)
             results.append(outcome)
@@ -190,22 +216,38 @@ class AgentLoop:
             "state": final_state,
             "steps": results,
             "resumed_from": start_index,
+            "agent_id": agent_id,
         }
 
-    def _run_step(self, user_id: int, step: Dict[str, Any], owner_approved: bool) -> Dict[str, Any]:
+    def _verify_agent(self, agent_id: str):
+        """Verify an agent identity. Fail closed when the layer is unavailable."""
+        try:
+            from genesis_protocol.agentic.identity_registry import get_identity_registry
+
+            return get_identity_registry().verify(agent_id)
+        except Exception as exc:  # noqa: BLE001 - any failure denies the run
+            from genesis_protocol.agentic.identity_registry import VerificationResult
+
+            return VerificationResult(False, f"identity layer unavailable: {exc}")
+
+    def _run_step(
+        self, user_id: int, step: Dict[str, Any], owner_approved: bool,
+        agent_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         stype = step["type"]
         if stype == "tool":
-            return self._run_tool_step(user_id, step, owner_approved)
+            return self._run_tool_step(user_id, step, owner_approved, agent_id)
         if stype == "skill":
-            return self._run_skill_step(user_id, step, owner_approved)
+            return self._run_skill_step(user_id, step, owner_approved, agent_id)
         if stype == "generate_code":
             return self._run_generate_code_step(user_id, step)
         if stype == "execute_code":
-            return self._run_execute_code_step(user_id, step)
+            return self._run_execute_code_step(user_id, step, agent_id)
         return self._run_respond_step(user_id, step)
 
     def _run_tool_step(
-        self, user_id: int, step: Dict[str, Any], owner_approved: bool
+        self, user_id: int, step: Dict[str, Any], owner_approved: bool,
+        agent_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         name = step["tool"]
         params = dict(step.get("params", {}) or {})
@@ -225,7 +267,7 @@ class AgentLoop:
 
         if tool is None:
             decision = self.policy.authorize_tool(user_id, name, permission=None)
-            self.audit.record("tool_request", user_id, name, False, decision.reason)
+            self.audit.record("tool_request", user_id, name, False, decision.reason, agent_id=agent_id)
             return {
                 "type": "tool",
                 "tool": name,
@@ -236,9 +278,25 @@ class AgentLoop:
             }
 
         perm = getattr(getattr(tool, "permission", None), "value", None)
+
+        # An agent's identity grant is a ceiling: a tool outside it is denied
+        # before the canonical policy is even consulted. The grant can only
+        # narrow, never widen, what policy allows.
+        if agent_id is not None and not self._within_grant(agent_id, name):
+            reason = f"tool '{name}' is outside agent {agent_id}'s grant"
+            self.audit.record("tool_request", user_id, name, False, reason, agent_id=agent_id)
+            return {
+                "type": "tool",
+                "tool": name,
+                "success": False,
+                "error": reason,
+                "denied": True,
+            }
+
         decision = self.policy.authorize_tool(user_id, name, permission=perm, owner_approved=owner_approved)
         self.audit.record(
-            "tool_request", user_id, name, decision.allowed, decision.reason, detail=params
+            "tool_request", user_id, name, decision.allowed, decision.reason,
+            detail=params, agent_id=agent_id,
         )
         if not decision.allowed:
             return {
@@ -257,7 +315,8 @@ class AgentLoop:
 
         verified = self._verify_tool_result(result)
         self.audit.record(
-            "tool_result", user_id, name, verified, "verified" if verified else "verification failed"
+            "tool_result", user_id, name, verified, "verified" if verified else "verification failed",
+            agent_id=agent_id,
         )
         return {
             "type": "tool",
@@ -268,8 +327,21 @@ class AgentLoop:
             "error": None if verified else result.get("error", "verification failed"),
         }
 
+    def _within_grant(self, agent_id: str, tool_name: str) -> bool:
+        """Whether ``tool_name`` is inside the agent's grant (empty = no ceiling)."""
+        try:
+            from genesis_protocol.agentic.identity_registry import get_identity_registry
+
+            identity = get_identity_registry().get(agent_id)
+        except Exception:
+            return False
+        if identity is None:
+            return False
+        return (not identity.tools) or tool_name in identity.tools
+
     def _run_skill_step(
-        self, user_id: int, step: Dict[str, Any], owner_approved: bool
+        self, user_id: int, step: Dict[str, Any], owner_approved: bool,
+        agent_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Run a skill through the tools it declares."""
         from genesis_protocol.agentic.skills import SkillRunner
@@ -280,6 +352,7 @@ class AgentLoop:
             skill_name=step["skill"],
             tool_params=step.get("tool_params", {}),
             owner_approved=owner_approved,
+            agent_id=agent_id,
         )
         return {
             "type": "skill",
@@ -307,9 +380,12 @@ class AgentLoop:
             "note": "generated only; not executed",
         }
 
-    def _run_execute_code_step(self, user_id: int, step: Dict[str, Any]) -> Dict[str, Any]:
+    def _run_execute_code_step(
+        self, user_id: int, step: Dict[str, Any], agent_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         code = step["code"]
-        self.audit.record("code_execution", user_id, tool="sandbox", allowed=True, reason="sandboxed")
+        self.audit.record("code_execution", user_id, tool="sandbox", allowed=True,
+                          reason="sandboxed", agent_id=agent_id)
         result = run_python(
             code,
             timeout=step.get("timeout", 5.0),
