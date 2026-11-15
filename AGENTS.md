@@ -969,6 +969,56 @@ does not support. `tests/test_guardian_selfdefence.py` holds the contract and th
 adversarial cases (simulated attacks, spoofing, malicious tool requests, secret
 leakage, false alerts, tamper detection, detection accuracy, FP budget).
 
+## Secure agent coordination (V7 P7, 2026-11-10)
+
+P7 adds `genesis_protocol/coordination/`, the layer that lets multiple Genesis
+agents work together **without any of them gaining authority**. Every capability
+is *derived* from the canonical systems (`agentic/identity_registry`,
+`agentic/policy`, `tools/tool_registry`) and can only ever narrow.
+
+- **`coordination/registry.py`** - `CapabilityRegistry`. `manifest(agent_id)`
+  derives a `CapabilityManifest` (role, status, tools, parent, depth,
+  `can_delegate`, provider/model) from the identity registry. The grant is
+  intersected with the canonical tool set, so a manifest never names a tool that
+  does not exist and never adds one. `can_use` requires *both* a grant and a
+  policy allow. `record_provider`/`provider_status` track provider/model use and
+  flag fallbacks.
+- **`coordination/messaging.py`** - `MessageBus` + `Envelope`. Messages are
+  signed with the sender's short-lived credential (HMAC-SHA256 over a canonical
+  body) and validated before they are read: shape (known type + required fields),
+  sender identity + credential (reused via `CredentialStore.verify(consume=False)`
+  - a message credential is a TTL-bounded signing key, not a one-time token),
+  signature (constant-time compare), freshness window and a seen-nonce set
+  (replay). `provenance(task_id)` is the ordered chain for a task.
+- **`coordination/tasks.py`** - `TaskCoordinator`. Single-owner tasks; `assign`
+  is idempotent on an idempotency key (a retry cannot duplicate a task);
+  conflicting claims record a resolution (earliest owner wins). `delegate` is
+  allowed only from the owner, only to an agent whose tools are a subset of the
+  delegator's, and only for a role whose manifest has `can_delegate`.
+- **`coordination/context.py`** - `SharedContext`. Field-tagged entries with
+  `public`/`internal`/`private` sensitivity; a role's clearance is a fixed map
+  (unknown role -> public, fail closed). `private` entries are visible only to
+  the owner/originator. **Secrets are redacted before sharing** using the same
+  patterns as `guardian/detection.py`, so a leaked key cannot propagate.
+- **`coordination/interfaces.py`** - `InterfaceAuthorizer`. Resolves a
+  Telegram/GitHub/web/Gluten principal to one canonical decision by delegating to
+  `AgentPolicy`/`CapabilityRegistry`; an unknown interface or unresolvable
+  principal is denied (fail closed), so the *same* request is allowed or denied
+  identically on every interface.
+- **`coordination/manager.py`** - `CoordinationManager`, a facade wiring the
+  above; `get_coordination_manager()` is the process-wide instance.
+- **Surface** (owner-only, read-only except the dry-run): `GET
+  /api/coordination/status`, `GET /api/coordination/manifests`, `POST
+  /api/coordination/authorize` (answers whether a call *would* be allowed).
+
+Rules: no agent may grant itself or another agent privileges - the registry
+stores no grants of its own and exposes no `grant`/`escalate` method. Child
+grants must be a subset of the parent's (enforced again at identity registration).
+Only verified identities may put a message on the bus. Shared context is filtered
+by clearance and secret-redacted. `tests/test_coordination.py` holds the contract
+(manifests, messaging security, task dedup/delegation/conflicts, context privacy,
+provider tracking, cross-interface consistency, no-escalation).
+
 ## Reasoning, planning & decision intelligence (V7 P4, 2026-11-10)
 
 P4 adds a **deterministic reasoning/planning/decision layer** on top of the

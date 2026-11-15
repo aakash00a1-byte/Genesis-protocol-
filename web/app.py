@@ -1492,6 +1492,54 @@ def api_guardian_forensics():
     return jsonify(Guardian().incident_timeline(actor=actor))
 
 
+@app.route('/api/coordination/status', methods=['GET'])
+@login_required
+def api_coordination_status():
+    """Owner-only: coordination status (agents, tasks, messages, providers)."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.coordination import get_coordination_manager
+
+    return jsonify(get_coordination_manager().status())
+
+
+@app.route('/api/coordination/manifests', methods=['GET'])
+@login_required
+def api_coordination_manifests():
+    """Owner-only: capability manifests for every registered agent."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.coordination import get_coordination_manager
+
+    return jsonify({'manifests': get_coordination_manager().manifests()})
+
+
+@app.route('/api/coordination/authorize', methods=['POST'])
+@login_required
+def api_coordination_authorize():
+    """Owner-only: dry-run an authorization decision for an interface/principal.
+
+    Read-only: it answers whether a tool call would be allowed, without performing
+    it, so the same decision can be checked before wiring a new interface.
+    """
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.coordination import get_coordination_manager
+
+    data = request.get_json(silent=True) or {}
+    interface = data.get('interface') or 'web'
+    tool = data.get('tool')
+    if not tool:
+        return jsonify({'error': 'tool is required'}), 400
+    manager = get_coordination_manager()
+    return jsonify(manager.authorize(interface, data.get('principal', user_id), tool,
+                                     agent_id=data.get('agent_id'),
+                                     owner_approved=bool(data.get('owner_approved'))))
+
+
 @app.route('/api/agents', methods=['GET'])
 @login_required
 def api_agents_list():
