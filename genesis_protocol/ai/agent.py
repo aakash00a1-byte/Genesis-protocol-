@@ -404,21 +404,25 @@ class GenesisAgent:
         """Append durable, user-approved memory to the chat context.
 
         Only approved facts from this user's own store are eligible, so recall
-        is cross-session but never cross-user. Any failure here is swallowed:
-        memory is an enhancement, and must not break chat.
+        is cross-session but never cross-user. The block is built by the
+        retrieval layer, which ranks by provenance/confidence/freshness and wraps
+        every item in an untrusted-data envelope, so stored text is never treated
+        as an instruction and conflicts are surfaced. Any failure here is
+        swallowed: memory is an enhancement, and must not break chat.
         """
         if not user_id:
             return base_context
         try:
             from genesis_protocol.agentic.memory import get_agent_memory
+            from genesis_protocol.agentic.retrieval import MemoryRetriever
 
-            recalled = get_agent_memory().recall(user_id, query, limit=5)
+            block = MemoryRetriever(memory=get_agent_memory()).build_context(
+                user_id, query, limit=5
+            )
         except Exception:
             return base_context
-        if not recalled:
+        if not block:
             return base_context
-        lines = "\n".join(f"- {m['content'][:200]}" for m in recalled)
-        block = f"Known facts about this user (approved memory):\n{lines}"
         return f"{base_context}\n\n{block}" if base_context else block
 
     def _detect_tool_needs(self, query: str) -> List[str]:

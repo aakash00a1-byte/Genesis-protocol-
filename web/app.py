@@ -1186,10 +1186,72 @@ def api_agent_memory_correct(memory_id):
 @app.route('/api/memory/<memory_id>', methods=['DELETE'])
 @login_required
 def api_agent_memory_delete(memory_id):
-    """Delete one of this user's memories."""
+    """Delete one of this user's memories (revocation; the row is kept for audit)."""
     from genesis_protocol.agentic.memory import get_agent_memory
 
     if not get_agent_memory().forget(session['user_id'], memory_id):
+        return jsonify({'error': 'not found'}), 404
+    return jsonify({'success': True})
+
+
+@app.route('/api/memory/search', methods=['GET'])
+@login_required
+def api_agent_memory_search():
+    """Owner-scoped semantic-ish search over this user's memory.
+
+    Returns ranked items with provenance, verification, confidence and freshness,
+    plus any detected conflicts. Revoked items are excluded.
+    """
+    from genesis_protocol.agentic.memory import get_agent_memory
+    from genesis_protocol.agentic.retrieval import MemoryRetriever
+
+    user_id = session['user_id']
+    query = request.args.get('q', '')
+    limit = request.args.get('limit', 10, type=int)
+    retriever = MemoryRetriever(memory=get_agent_memory())
+    ranked = retriever.search(user_id, query, limit=limit)
+    return jsonify({
+        'count': len(ranked),
+        'results': [s.to_dict() for s in ranked],
+        'conflicts': [c.to_dict() for c in retriever.conflicts(user_id)],
+        'stale': [m['id'] for m in retriever.stale(user_id)],
+    })
+
+
+@app.route('/api/memory/conflicts', methods=['GET'])
+@login_required
+def api_agent_memory_conflicts():
+    """Report memories that disagree about the same key. Never auto-resolved."""
+    from genesis_protocol.agentic.memory import get_agent_memory
+    from genesis_protocol.agentic.retrieval import MemoryRetriever
+
+    retriever = MemoryRetriever(memory=get_agent_memory())
+    conflicts = retriever.conflicts(session['user_id'])
+    return jsonify({'count': len(conflicts), 'conflicts': [c.to_dict() for c in conflicts]})
+
+
+@app.route('/api/memory/<memory_id>/verify', methods=['POST'])
+@login_required
+def api_agent_memory_verify(memory_id):
+    """Owner-only: promote one of the owner's memories to verified.
+
+    This is the only path to a verified memory. A non-owner is refused even for
+    their own memory, so an assumption cannot be self-certified as fact.
+    """
+    from genesis_protocol.agentic.memory import MemoryRejected, get_agent_memory
+
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        ok = get_agent_memory().verify(
+            user_id, memory_id, owner_approved=True,
+            confidence=data.get('confidence', 1.0), note=data.get('note', ''),
+        )
+    except MemoryRejected as exc:
+        return jsonify({'error': str(exc)}), 400
+    if not ok:
         return jsonify({'error': 'not found'}), 404
     return jsonify({'success': True})
 
