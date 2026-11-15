@@ -916,6 +916,54 @@ security-sensitive proposal. `tests/test_persistent_learning.py` holds the
 contract and the adversarial cases (injection, secrets, conflicts, staleness,
 false claims, owner-only verification, restart persistence, legacy migration).
 
+## Reasoning, planning & decision intelligence (V7 P4, 2026-11-10)
+
+P4 adds a **deterministic reasoning/planning/decision layer** on top of the
+existing architecture. It is **not** a new reasoning engine and does not replace
+the LLM planners in `genesis_protocol/ai/` (`task_planner`, `reasoning_pipeline`,
+`council`), which keep serving `ai/agent.py` and the council route. The new
+modules call no model.
+
+- **Canonical execution is unchanged.** `agentic/agent_loop.py` (plan -> tool ->
+  policy -> execute -> verify, reachable via `POST /api/agent/run`) is still the
+  only thing that runs a step. P4 plans; it never executes.
+- **Canonical authorization is unchanged.** `agentic/policy.py` (fail-closed) and
+  `agentic/boundaries.py` (identity ceiling) remain the only allow/deny engines.
+  P4 *previews* steps with `AgentPolicy`; it never widens or bypasses them.
+- **`agentic/reasoning.py`** decomposes a goal into sub-problems and classifies
+  each claim as `fact` / `assumption` / `hypothesis` / `unknown`. A claim is a
+  `fact` only when a **verified** memory supports it; speculation is never
+  presented as verified truth. Surfaces missing information and contradictions
+  (goal-level and stored-memory conflicts via `retrieval`). Flags
+  instruction-shaped goals as untrusted.
+- **`agentic/planning.py`** builds candidate plans (`minimal`, `direct`,
+  `thorough`), compares feasibility / cost / time / dependencies / risk, and
+  recommends one with a stated reason (risk tolerance aware). It identifies
+  security / operational / financial risks and **rejects** any plan containing a
+  privileged operation, whether named in code (`deploy`) or phrased in prose
+  ("deploy the app", "merge the pull request", "rotate the secret",
+  "grant admin access") - see `privileged_operation_in`. A destructive (but not
+  privileged) plan is allowed to be *planned* but is flagged
+  `requires_owner_approval`, never marked autonomously executable.
+- **`agentic/decision.py`** records a `DecisionRecord` (chosen plan, evidence,
+  confidence, uncertainty, rationale, risks) and compares predicted vs actual
+  outcomes. Confidence is bounded by verified evidence, reasoning confidence and
+  plan feasibility, and capped at 0.95 - a plan that has not run is never
+  certain. `compare_outcome` reuses the P3 `ReflectionEngine` and stores the
+  lesson at `verification="hypothesis"`; it never promotes a hypothesis to a
+  fact.
+- **Surface** (login-scoped, additive): `POST /api/agent/plan` returns the
+  reasoning + candidate plans + decision and `executed: false`. It never runs a
+  step; `/api/agent/run` remains the executor.
+
+Rules: this is not a new reasoning engine - compose `agent_loop`, `policy`,
+`boundaries`, `retrieval`, `reflection`. Never present speculation as verified
+truth. Never bypass a permission check. Never plan a privileged operation as
+autonomously executable. Never promote a hypothesis to a fact.
+`tests/test_reasoning_planning.py` holds the contract and the adversarial cases
+(conflicting evidence, false assumptions, injection, misleading memories,
+uncertain decisions, adversarial plans, quality measurement).
+
 ## Telegram active-hours window (2026-11-12)
 
 The relay used to broadcast 24/7: news (3-4 categories), market, AI briefing,

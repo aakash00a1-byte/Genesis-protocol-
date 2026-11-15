@@ -1332,6 +1332,36 @@ def api_agent_run():
     return jsonify(result)
 
 
+@app.route('/api/agent/plan', methods=['POST'])
+@login_required
+def api_agent_plan():
+    """Reason about a goal and return candidate plans - without executing anything.
+
+    This is the P4 planning surface: it decomposes the goal, separates facts from
+    assumptions/hypotheses/unknowns, compares candidate plans on feasibility, cost,
+    time and risk, and recommends one with a reason. It never runs a step; the
+    bounded ``/api/agent/run`` loop remains the only executor, and it still applies
+    the canonical fail-closed policy per step.
+    """
+    from genesis_protocol.agentic.decision import DecisionEngine
+
+    data = request.get_json(silent=True) or {}
+    goal = (data.get('goal') or '').strip()
+    if not goal:
+        return jsonify({'error': 'goal required'}), 400
+
+    user_id = session['user_id']
+    risk_tolerance = data.get('risk_tolerance', 'moderate')
+    decision = DecisionEngine().decide(
+        goal,
+        user_id,
+        owner_approved=bool(data.get('owner_approved', False)),
+        risk_tolerance=risk_tolerance,
+    )
+    # A decision record is evidence, not an action: no step has run.
+    return jsonify({'decision': decision.to_dict(), 'executed': False})
+
+
 @app.route('/api/skills', methods=['GET'])
 @login_required
 def api_skills_list():

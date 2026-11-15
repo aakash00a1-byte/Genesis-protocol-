@@ -14,6 +14,15 @@ Genesis architecture (provider chain, task queue, tool registry):
 * ``reflection`` - evaluates completed tasks, records lessons as hypotheses, and
                   only ever proposes security-sensitive changes (never applies
                   them; owner approval required).
+* ``reasoning`` - decomposes a goal and classifies each claim as fact / assumption
+                  / hypothesis / unknown against verified evidence; surfaces gaps
+                  and contradictions. Deterministic, calls no model.
+* ``planning`` - builds candidate plans, compares feasibility/cost/time/risk,
+                  previews each step against the canonical policy, rejects unsafe
+                  or unauthorized plans and recommends one with a reason.
+* ``decision`` - records an evidence-backed decision (confidence, uncertainty,
+                  rationale) and compares predicted vs actual outcomes using the
+                  reflection engine; never promotes a hypothesis to a fact.
 * ``sandbox``   - resource-bounded code execution (subprocess + rlimits).
 * ``agent_loop``- a real plan -> tool -> policy -> execute -> verify loop.
 * ``skills``    - run a skill through the tools it declares, policy-checked.
