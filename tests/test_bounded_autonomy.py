@@ -17,13 +17,13 @@ from genesis_protocol.bounded import (
     BudgetLedger,
     BudgetLimits,
     FailoverChain,
+    LocalKillSwitch,
     RateLimiter,
     ResourceGovernor,
     ResourceReading,
     RunawayGuard,
     Thresholds,
 )
-from genesis_protocol.guardian import KillSwitch
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +47,10 @@ def _governor(cpu=10.0, mem=20.0, disk=30.0, thresholds=None):
 
 
 def _autonomy(**kw):
-    kw.setdefault("kill_switch", KillSwitch(":memory:"))
+    # P8 must not require P6 to run: the gate falls back to a local, fail-closed
+    # switch when the canonical one is absent. Tests inject the same fallback so
+    # they are hermetic and independent of the P6 branch.
+    kw.setdefault("kill_switch", LocalKillSwitch())
     kw.setdefault("governor", _governor())
     return BoundedAutonomy(**kw)
 
@@ -296,7 +299,7 @@ class TestBoundedAutonomyGate:
         assert decision.allowed is True and decision.mode == "normal"
 
     def test_kill_switch_blocks(self):
-        ks = KillSwitch(":memory:")
+        ks = LocalKillSwitch()
         ks.engage("incident")
         auto = _autonomy(kill_switch=ks)
         decision = auto.authorize("a", "chat")
@@ -386,3 +389,22 @@ class TestSafetyInvariants:
         auto = _autonomy(budgets=BudgetLedger(default_limits=BudgetLimits(
             cost_usd=0.0, tokens=0, requests=0, tool_calls=0, wall_seconds=0)))
         assert auto.authorize("a", "x").allowed is False
+
+    def test_local_fallback_is_fail_closed_and_owner_gated(self):
+        ks = LocalKillSwitch()
+        assert ks.is_engaged() is False
+        ks.engage("incident")
+        assert ks.is_engaged() is True
+        with pytest.raises(PermissionError):
+            ks.disengage(owner_approved=False)  # a non-owner cannot resume autonomy
+        ks.disengage(owner_approved=True, actor="owner")
+        assert ks.is_engaged() is False
+
+    def test_gate_resolves_canonical_switch_or_falls_back(self):
+        # Resolution must never raise, so P8 imports without P6.
+        from genesis_protocol.bounded import resolve_kill_switch
+
+        switch = resolve_kill_switch()
+        assert hasattr(switch, "is_engaged") and hasattr(switch, "status")
+        # With no explicit switch, the gate picks up whatever resolved.
+        assert _autonomy().kill_switch is not None

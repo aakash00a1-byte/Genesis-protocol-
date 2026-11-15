@@ -73,9 +73,9 @@ class BoundedAutonomy:
     @property
     def kill_switch(self) -> Any:
         if self._kill_switch is None:
-            from genesis_protocol.guardian.killswitch import get_kill_switch
+            from genesis_protocol.bounded.emergency import resolve_kill_switch
 
-            self._kill_switch = get_kill_switch()
+            self._kill_switch = resolve_kill_switch()
         return self._kill_switch
 
     @property

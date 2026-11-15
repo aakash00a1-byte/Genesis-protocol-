@@ -24,6 +24,7 @@ from genesis_protocol.bounded.budget import (
     BudgetLedger,
     BudgetLimits,
 )
+from genesis_protocol.bounded.emergency import LocalKillSwitch, resolve_kill_switch
 from genesis_protocol.bounded.failover import Candidate, FailoverChain
 from genesis_protocol.bounded.governor import (
     MODES,
@@ -53,6 +54,8 @@ __all__ = [
     "GovernorState",
     "Thresholds",
     "MODES",
+    "LocalKillSwitch",
+    "resolve_kill_switch",
     "BoundedAutonomy",
     "AutonomyDecision",
     "get_bounded_autonomy",
