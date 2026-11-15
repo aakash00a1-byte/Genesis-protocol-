@@ -1,11 +1,10 @@
 """Shared-secret enforcement on the Telegram webhook and reply queue.
 
-`web/app.py` accepts an optional shared secret (TELEGRAM_WEBHOOK_SECRET,
-header X-Telegram-Bot-Api-Secret-Token). These tests drive the real Flask
-routes to hold both halves of the contract: with the secret configured a
-missing or wrong header is rejected (401), the right header is accepted, and
-with no secret configured the endpoint stays open so an existing deployment
-does not break.
+`web/app.py` requires a shared secret (TELEGRAM_WEBHOOK_SECRET, header
+X-Telegram-Bot-Api-Secret-Token) and fails closed. These tests drive the real
+Flask routes to hold the contract: a missing or wrong header is rejected (401),
+the right header is accepted, and when no secret is configured at all every
+request is rejected rather than left open.
 """
 from __future__ import annotations
 
@@ -54,11 +53,21 @@ def test_webhook_accepts_matching_secret(client, monkeypatch):
     assert resp.get_json()["ok"] is True
 
 
-def test_webhook_open_when_secret_unset(client, monkeypatch):
+def test_webhook_fails_closed_when_secret_unset(client, monkeypatch):
+    """With no secret configured the webhook must reject, not stay open."""
     monkeypatch.delenv("TELEGRAM_WEBHOOK_SECRET", raising=False)
     resp = client.post("/api/telegram/webhook", json=_update())
-    assert resp.status_code == 200
-    assert resp.get_json()["ok"] is True
+    assert resp.status_code == 401
+    assert resp.get_json()["error"] == "unauthorized"
+
+
+def test_webhook_fails_closed_even_with_supplied_header(client, monkeypatch):
+    """An unconfigured server cannot validate a header, so it must reject."""
+    monkeypatch.delenv("TELEGRAM_WEBHOOK_SECRET", raising=False)
+    resp = client.post(
+        "/api/telegram/webhook", json=_update(), headers={HEADER: "anything"}
+    )
+    assert resp.status_code == 401
 
 
 def test_queue_enforces_same_secret(client, monkeypatch):
@@ -67,3 +76,8 @@ def test_queue_enforces_same_secret(client, monkeypatch):
     ok = client.get("/api/telegram/queue", headers={HEADER: "s3cret"})
     assert ok.status_code == 200
     assert ok.get_json() == {"replies": [], "count": 0}
+
+
+def test_queue_fails_closed_when_secret_unset(client, monkeypatch):
+    monkeypatch.delenv("TELEGRAM_WEBHOOK_SECRET", raising=False)
+    assert client.get("/api/telegram/queue").status_code == 401

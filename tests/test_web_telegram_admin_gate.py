@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 OWNER = 1863492058
 STRANGER = 999999999
+WEBHOOK_SECRET = "test-webhook-secret"
 
 
 @pytest.fixture
@@ -28,8 +29,13 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(appmod, "TELEGRAM_TASK_QUEUE", str(tmp_path / "tasks.json"))
     monkeypatch.setattr(appmod, "TELEGRAM_REPLY_QUEUE", str(tmp_path / "replies.json"))
     monkeypatch.setattr(appmod, "TELEGRAM_COMMAND_QUEUE", str(tmp_path / "commands.json"))
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", WEBHOOK_SECRET)
     appmod.app.config["TESTING"] = True
-    return appmod.app.test_client()
+    c = appmod.app.test_client()
+    # The webhook now fails closed without the shared secret; these tests are
+    # about the admin gate, so supply a valid secret on every request.
+    c.environ_base = {"HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN": WEBHOOK_SECRET}
+    return c
 
 
 def _msg(text, sender=OWNER, chat_id=OWNER):
@@ -100,13 +106,31 @@ def test_stranger_still_gets_ai_replies(client, tmp_path, monkeypatch):
     assert resp.status_code == 200
 
 
-def test_no_admin_configured_stays_open(client, tmp_path, monkeypatch):
-    """An existing deployment without admin ids must not break."""
+def test_no_admin_configured_denies_owner_commands(client, tmp_path, monkeypatch):
+    """No admin ids configured must deny owner commands, not stay open."""
     monkeypatch.delenv("TELEGRAM_ADMIN_IDS", raising=False)
     monkeypatch.delenv("TELEGRAM_ADMIN_ID", raising=False)
     resp = client.post("/api/telegram/webhook", json=_msg("/approve 7", sender=STRANGER))
     assert resp.status_code == 200
-    assert resp.get_json()["queued"] == "command"
+    assert _read(tmp_path / "commands.json") == []
+    assert resp.get_json().get("queued") != "command"
+
+
+def test_no_admin_configured_denies_work_orders(client, tmp_path, monkeypatch):
+    monkeypatch.delenv("TELEGRAM_ADMIN_IDS", raising=False)
+    monkeypatch.delenv("TELEGRAM_ADMIN_ID", raising=False)
+    client.post("/api/telegram/webhook", json=_msg("/do rm -rf /", sender=OWNER))
+    assert _read(tmp_path / "tasks.json") == []
+
+
+def test_no_admin_configured_denies_button_tap(client, tmp_path, monkeypatch):
+    monkeypatch.delenv("TELEGRAM_ADMIN_IDS", raising=False)
+    monkeypatch.delenv("TELEGRAM_ADMIN_ID", raising=False)
+    update = {"callback_query": {"id": "1", "from": {"id": OWNER}, "data": "approve:7",
+                                 "message": {"chat": {"id": OWNER}}}}
+    resp = client.post("/api/telegram/webhook", json=update)
+    assert resp.status_code == 200
+    assert _read(tmp_path / "commands.json") == []
 
 
 def test_admin_id_alias_is_honoured(client, tmp_path, monkeypatch):

@@ -12,6 +12,7 @@ import hmac
 import hashlib
 import logging
 import re
+import secrets
 import time
 import threading
 from datetime import datetime, timedelta
@@ -88,15 +89,74 @@ def get_metrics() -> Dict[str, Any]:
 app = Flask(__name__, 
             template_folder='templates',
             static_folder='static')
-_DEFAULT_SECRET_KEY = 'genesis-secret-key-change-in-production'
-app.secret_key = os.environ.get('SECRET_KEY', _DEFAULT_SECRET_KEY)
-app.permanent_session_lifetime = timedelta(days=7)
 
-if app.secret_key == _DEFAULT_SECRET_KEY:
+# A known secret key makes session cookies and mobile bearer tokens forgeable by
+# anyone. Production must supply a strong SECRET_KEY; a missing or public value
+# aborts startup instead of silently signing with a guessable key.
+_DEFAULT_SECRET_KEY = 'genesis-secret-key-change-in-production'
+_PRODUCTION_ENV_MARKERS = (
+    'SPACE_ID',              # Hugging Face Spaces (live host)
+    'RENDER',                # Render blueprint (standby)
+    'RAILWAY_ENVIRONMENT',   # Railway
+)
+_INSECURE_SECRET_KEYS = {
+    _DEFAULT_SECRET_KEY,
+    'change-this-to-a-secure-random-string',
+    'change-me',
+    'changeme',
+    'secret',
+    'test',
+    'dev',
+    'development',
+    'genesis',
+}
+
+
+def _looks_like_production() -> bool:
+    """True when a hosting marker is present, or the operator opts in."""
+    if any(os.environ.get(name) for name in _PRODUCTION_ENV_MARKERS):
+        return True
+    return os.environ.get('GENESIS_ENV', '').strip().lower() in {'production', 'prod'}
+
+
+def _resolve_secret_key() -> str:
+    """Return a safe secret key, or refuse to start.
+
+    Production (a hosting marker or ``GENESIS_ENV=production``) must supply a
+    strong SECRET_KEY; a missing or known-insecure value aborts startup rather
+    than falling back to a public default. Local development without
+    SECRET_KEY gets a fresh random per-process key, so sessions are never
+    signed with a public value and no secret is ever printed.
+    """
+    configured = os.environ.get('SECRET_KEY', '').strip()
+    if configured and configured not in _INSECURE_SECRET_KEYS and len(configured) >= 16:
+        return configured
+
+    if not configured:
+        reason = 'SECRET_KEY is not set'
+    elif configured in _INSECURE_SECRET_KEYS:
+        reason = 'SECRET_KEY is a known insecure default'
+    else:
+        reason = 'SECRET_KEY is too short (needs at least 16 characters)'
+
+    if _looks_like_production():
+        raise RuntimeError(
+            f"{reason}; refusing to start in production. Set a strong SECRET_KEY "
+            "(32+ random bytes). Generate one with: python -c "
+            "\"import secrets; print(secrets.token_urlsafe(48))\". "
+            "The value is never logged."
+        )
+
     logging.getLogger(__name__).warning(
-        "SECRET_KEY is unset; using the public default. Session cookies and "
-        "mobile bearer tokens are forgeable until SECRET_KEY is set."
+        "%s; using a random per-process key for local development only. "
+        "Sessions will not survive a restart or span multiple workers. "
+        "Set SECRET_KEY to a strong value for any real deployment.", reason
     )
+    return secrets.token_urlsafe(48)
+
+
+app.secret_key = _resolve_secret_key()
+app.permanent_session_lifetime = timedelta(days=7)
 
 # Behind the reverse proxy (HF Spaces, Railway) the socket peer is the proxy,
 # so request.remote_addr rotates per request and every IP-keyed control — the
@@ -1058,6 +1118,19 @@ def api_capabilities():
     })
 
 
+@app.route('/api/github', methods=['GET'])
+def api_github():
+    """Read-only GitHub connection status and open PRs.
+
+    Same source as the Telegram ``/github`` and ``/prs`` commands, so both
+    surfaces agree. Read-only on purpose: it never merges, pushes or deploys.
+    The token value is never included.
+    """
+    from genesis_protocol.integrations.github_status import status
+
+    return jsonify(status())
+
+
 @app.route('/api/memory', methods=['GET'])
 @login_required
 def api_agent_memory_list():
@@ -1606,15 +1679,16 @@ def api_health():
 def api_debug_telegram():
     """Debug endpoint: check if Telegram bot is running and what env vars are set.
 
-    Leaks the admin Telegram id and raw bot logs, so it requires the same
-    shared secret as the reply queue. No relay or workflow reads it.
+    Reports only whether configuration is present (booleans), never the admin
+    id itself, and still requires the shared secret as the reply queue. No
+    relay or workflow reads it.
     """
     if not _telegram_secret_ok():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     import subprocess
     env_status = {
         'TELEGRAM_BOT_TOKEN': bool(os.environ.get('TELEGRAM_BOT_TOKEN')),
-        'TELEGRAM_ADMIN_IDS': os.environ.get('TELEGRAM_ADMIN_IDS', ''),
+        'TELEGRAM_ADMIN_IDS': bool(_telegram_admin_ids()),
         'GROQ_API_KEY': bool(os.environ.get('GROQ_API_KEY')),
     }
     # Check if telegram process is running
@@ -1893,13 +1967,19 @@ def _telegram_secret_ok():
     """Shared-secret check for the Telegram webhook and the reply queue.
 
     Set TELEGRAM_WEBHOOK_SECRET in the Space env and register it with Telegram
-    (setWebhook secret_token). If it is not configured we allow the request so
-    an existing deployment does not break, but we never trust the payload more
-    than we have to.
+    (setWebhook secret_token). Missing configuration fails closed: with no
+    secret set we reject, because an open webhook lets anyone forge an update
+    and park owner commands (/approve, /do). The caller must configure the
+    secret to use the webhook at all.
     """
     expected = os.environ.get('TELEGRAM_WEBHOOK_SECRET', '')
     if not expected:
-        return True
+        logger.warning(
+            "TELEGRAM_WEBHOOK_SECRET is unset; rejecting Telegram webhook and "
+            "queue requests (fail closed). Set it in the Space env and register "
+            "it with Telegram to enable the webhook."
+        )
+        return False
     supplied = request.headers.get('X-Telegram-Bot-Api-Secret-Token', '')
     import hmac
     return hmac.compare_digest(str(supplied), str(expected))
@@ -1922,13 +2002,17 @@ def _telegram_is_admin(sender):
     The shared secret proves an update came from Telegram, not that it came
     from the owner: anyone who can message the bot produces a valid update.
     The commands this endpoint parks (/approve, /reject, /do) merge and deploy
-    code, so the sender is checked here. With no admin ids configured we allow
-    the request so an existing deployment does not break, matching
-    ``_telegram_secret_ok``.
+    code, so the sender is checked here. Missing configuration fails closed:
+    with no admin ids configured we deny, because defaulting to "allow" would
+    let any Telegram user merge and deploy.
     """
     allowed = _telegram_admin_ids()
     if not allowed:
-        return True
+        logger.warning(
+            "No TELEGRAM_ADMIN_IDS/TELEGRAM_ADMIN_ID configured; denying owner "
+            "commands (fail closed). Set one to enable them."
+        )
+        return False
     if not isinstance(sender, dict):
         return False
     for key in ('id', 'user_id'):
@@ -2000,6 +2084,25 @@ def telegram_webhook():
     except Exception as e:
         print(f"Work-order routing error: {e}")
 
+    # Runtime, secret-free commands answered from the same source as
+    # /api/identity and /api/capabilities, so Telegram and web agree. Placed
+    # before the update-command parking below: a bare "/status" is GLUTEN's
+    # runtime status, not an update lookup ("/status <id>" still goes there).
+    # Read-only commands are open; /task and /task_status are owner-gated.
+    try:
+        from genesis_protocol.integrations.telegram_commands import (
+            handle_extra_command,
+            is_extra_command,
+        )
+        if is_extra_command(text):
+            answer = handle_extra_command(text, user_id=user.get('id', 0), is_owner=is_admin)
+            if answer:
+                _append_reply(chat_id, answer)
+                return jsonify({'ok': True, 'command': text.split()[0].lower()})
+            # None means "not mine" (e.g. "/status 3"): fall through.
+    except Exception as e:
+        print(f"Extra command error: {e}")
+
     # Owner update commands are parked for the self-improvement harness, which
     # is the only thing that may act on them. They get no immediate reply; the
     # harness replies after it merges or rejects.
@@ -2025,9 +2128,15 @@ def telegram_webhook():
 
     # Build reply text
     if text == '/start':
-        reply = "🤖 *Genesis Protocol* online!\n\nI'm your autonomous AI. Send me any message or question!\n\nCommands:\n/start - Welcome\n/status - Bot status\n/ask <question> - Ask AI\n/council <question> - Ask several models at once"
+        reply = "🤖 *Genesis Protocol* online!\n\nI'm your autonomous AI. Send me any message or question!\n\nCommands:\n/start - Welcome\n/status - Bot status\n/capabilities - Tools and permissions\n/github - GitHub connection\n/prs - Open pull requests\n/ask <question> - Ask AI\n/council <question> - Ask several models at once\n/help - All commands"
     elif text == '/status':
-        reply = "✅ GLUTEN bot running (webhook + relay mode)\n🚀 HF Space: LIVE\n🧠 AI: Groq-powered\n📡 Replies relayed via GitHub Actions"
+        # Runtime facts, not a hardcoded blurb: the old text claimed
+        # "Groq-powered" even when Gemini answered, which is a false claim.
+        try:
+            from genesis_protocol.integrations.telegram_commands import format_status
+            reply = format_status()
+        except Exception as e:
+            reply = f"Status: UNKNOWN ({str(e)[:100]})"
     elif text.startswith('/ask '):
         question = text[5:].strip()
         reply = None
@@ -2346,9 +2455,8 @@ def run_startup_checks():
     }
     for var, value in env_vars.items():
         if value:
-            # Mask the value for display
-            masked = value[:8] + '...' if len(value) > 8 else '***'
-            print(f"   ✅ {var}: {masked}")
+            # Report presence only; never print any part of a secret.
+            print(f"   ✅ {var}: Set")
         else:
             print(f"   ⚠️  {var}: Not Set")
     

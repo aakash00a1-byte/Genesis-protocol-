@@ -95,3 +95,37 @@ def test_creator_questions_name_the_creator() -> None:
         result = route_identity(query)
         assert result and result.get("is_identity"), query
         assert CREATOR in result["response"], query
+
+
+def test_github_status_questions_route_to_the_live_read_only_view() -> None:
+    """'is github connected' / 'how many prs open' must be answered from the
+    live read-only github_status module, not invented by the provider."""
+    from genesis_protocol.integrations.github_status import status
+
+    data = status()
+    for query in ("is github connected", "github status", "how many prs open",
+                  "open pull requests"):
+        result = route_identity(query)
+        assert result and result.get("is_identity"), f"not routed: {query!r}"
+        text = result["response"]
+        # It must reflect the real connection state, not a guess.
+        if data.get("connected"):
+            assert "CONNECTED" in text
+        else:
+            assert "NOT CONNECTED" in text
+        # And never leak the token.
+        assert "ghp_" not in text
+
+
+def test_generic_github_questions_still_reach_the_provider() -> None:
+    """A bare 'what is github' is general knowledge: it must NOT be swallowed
+    by the status handler."""
+    for query in ("what is github", "explain pull requests", "github kya hai"):
+        assert route_identity(query) is None, f"wrongly routed: {query!r}"
+
+
+def test_work_order_status_question_answers_from_the_queue() -> None:
+    result = route_identity("my work orders")
+    assert result and result.get("is_identity")
+    # No queue file in a clean test run means an honest "none", never a guess.
+    assert "work order" in result["response"].lower()
