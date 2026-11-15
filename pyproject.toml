@@ -79,6 +79,9 @@ build-backend = "hatchling.build"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# Quarantined legacy code (V7 P1) is not part of the production package and is
+# not maintained; keep it out of lint so it cannot gate or influence CI.
+exclude = ["quarantine"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4"]

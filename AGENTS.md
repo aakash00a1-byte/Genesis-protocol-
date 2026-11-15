@@ -238,6 +238,25 @@ spending limit / make the repo public so CI can actually run, or set
 `SELF_IMPROVE_REQUIRE_CHECKS=0` for the approval run. The gate never merges a
 head whose CI did not genuinely pass.
 
+## Quarantined legacy modules (V7 P1, 2026-11-10)
+
+Five legacy packages that the product never imported were moved out of the
+production package into `quarantine/genesis_protocol/` (V7 P1). They stay in
+git for history but are no longer importable or packaged:
+
+- `agent/` — unrestricted shell (`subprocess.run(..., shell=True)`, no sandbox)
+- `autonomy/` — direct `git push` to a branch; timed subprocess execution
+- `deploy/` — deploy script that writes plaintext API keys into a `.env`
+- `self_sustaining/` — crypto exchange keys, wallets, trading
+- `financial/` — accounts, transfers, withdrawals, exposed over chat
+
+Rules: do not import them, do not re-add them to `genesis_protocol/` or any
+`sys.path` entry, do not run their entry points. There is no compatibility shim,
+so the old paths raise `ModuleNotFoundError` on purpose. `tests/test_quarantine_isolation.py`
+holds the isolation contract; `pyproject.toml` excludes `quarantine/` from ruff.
+To restore one, `git mv quarantine/genesis_protocol/<name> genesis_protocol/<name>`
+and re-run `bash scripts/verify_all.sh`. See `quarantine/README.md`.
+
 ## Auto-deploy to the Space
 `.github/workflows/deploy-space.yml` mirrors the repo to the HF Space on every
 push to `main` (runs `scripts/hf_deploy.sh` with the `HF_TOKEN` repo secret),
