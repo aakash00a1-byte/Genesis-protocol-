@@ -969,6 +969,41 @@ does not support. `tests/test_guardian_selfdefence.py` holds the contract and th
 adversarial cases (simulated attacks, spoofing, malicious tool requests, secret
 leakage, false alerts, tamper detection, detection accuracy, FP budget).
 
+## Survival & disaster recovery (V7 P8B, 2026-11-10)
+
+P8B makes the system survivable: backups you can *prove* are restorable, and
+recovery you can audit. It adds `genesis_protocol/recovery/`, which composes the
+canonical `security.EncryptionService` (Fernet) and `guardian.events.SecurityEventLog`
+(hash-chained) and duplicates neither.
+
+- **`recovery/manifest.py`** - the self-describing backup manifest (`BackupManifest`,
+  `Entry`, `DatabaseReport`) and the integrity checks (`verify_payload`,
+  `verify_directory`, SHA-256 per entry, a stable manifest hash). The manifest
+  travels *inside* every backup, so a backup always explains itself.
+- **`recovery/vault.py`** - `BackupVault`: Fernet-encrypted, self-describing
+  containers with verify / restore / retention and a plaintext append-only index
+  (metadata only, never payload). `check_sqlite` runs SQLite's own
+  `PRAGMA integrity_check` over a captured database.
+- **`recovery/manager.py`** - `RecoveryManager`: capture files/databases (from
+  memory or disk), verified restore, **restoration tests** (`restore_test`,
+  `run_drill` - restore into a scratch dir, re-hash, remove the scratch),
+  best-effort **database recovery** (`recover_database` salvages readable tables
+  into a fresh, valid database and reports what was lost), the recovery
+  **audit trail** and a readiness `status`.
+- **Surface** (owner-only): `GET /api/recovery/status`, `GET /api/recovery/backups`,
+  `GET /api/recovery/audit`, `POST /api/recovery/drill`.
+
+Rules: **fail closed** - no durable key (`GENESIS_BACKUP_KEY`) means no backup is
+written, because a backup nobody can decrypt is worse than none. **Verify before
+restore** - a backup that does not re-hash to its manifest is refused. **Never
+destructive by default** - restore does not overwrite existing files unless told
+to; the only deletion is backup pruning under an explicit retention policy, which
+always keeps the newest backup. Every backup, verify, restore, drill and recovery
+is written to the tamper-evident log under source `recovery`.
+`tests/test_recovery.py` holds the contract (manifest/integrity, fail-closed key,
+encrypted containers, verification, non-clobbering restore, restoration tests,
+failure handling, database salvage, retention, audit trail, no-widening).
+
 ## Reasoning, planning & decision intelligence (V7 P4, 2026-11-10)
 
 P4 adds a **deterministic reasoning/planning/decision layer** on top of the
