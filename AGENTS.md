@@ -969,6 +969,56 @@ does not support. `tests/test_guardian_selfdefence.py` holds the contract and th
 adversarial cases (simulated attacks, spoofing, malicious tool requests, secret
 leakage, false alerts, tamper detection, detection accuracy, FP budget).
 
+## Controlled autonomous defence (V7 P6, 2026-11-10)
+
+P6 turns the read-only Guardian into a **bounded** defender. P5 stays read-only;
+P6 adds a separate engine (`genesis_protocol/guardian/defence.py`) that performs
+only low-risk, reversible, allow-listed actions, and only inside an ordered
+fail-closed gate. It composes the canonical systems and duplicates none.
+
+- **`guardian/severity.py`** - `SeverityClassifier` normalises severity and
+  attaches an **explained** confidence in `[0,1]` (threshold ratio, identity
+  verification, cross-detector corroboration, recognised secret pattern, unknown
+  detector). Severity and confidence are kept separate: a confirmed finding needs
+  confidence `>= 0.70` **and** severity above `info`.
+- **`guardian/correlation.py`** - `Correlator` union-finds findings that share an
+  entity (actor, identity, subject, session, tool) inside a time window, raising
+  aggregate confidence by detector count. `attribute_sessions` fills a session
+  from the audit log.
+- **`guardian/actions.py`** - the allow-list. `rate_limit_actor`, `throttle_source`
+  and `raise_alert` are `low` risk + reversible + `automatic_allowed`;
+  `require_owner_review` is medium; `suspend_identity`, `revoke_credential`,
+  `rotate_secret` are high and never automatic. `NEVER_ACTIONS` (delete_account,
+  delete_data, rotate_credential, modify_code, deploy, change_settings,
+  change_trust_root, change_permission_threshold, grant_permission,
+  change_own_authority, push_main, disable_safety, disable_audit) is refused by
+  `ActionCatalog.require`.
+- **`guardian/budget.py`** - `ActionBudget`: per-target cooldown, global window
+  cap and consecutive cap, so a flapping signal cannot repeat an action.
+- **`guardian/killswitch.py`** - persisted `KillSwitch`. **Fail closed**: an
+  unreadable state file reads as engaged. Anyone may engage; only owner approval
+  may disengage.
+- **`guardian/actionsink.py`** - `LocalActionSink`: reversible low-risk actions
+  (temporary cooldowns, notifications) against a bounded, expiring JSON ledger.
+  Every action returns a rollback token; `rollback` undoes it.
+- **`guardian/alerting.py`** - `AdminAlertBridge` to the canonical
+  `core.admin_alerts.AdminAlertManager`. Only the incident summary is sent.
+- **`guardian/defence.py`** - `DefenceEngine`. Ordered gates: kill switch,
+  severity+confidence, corroboration for high-impact actions, allow-list,
+  automatic-vs-owner, budget, execute+rollback. Every decision (allowed or
+  refused) is appended to the tamper-evident `SecurityEventLog` under the
+  `defence` category.
+- **Surface** (owner-only): `GET/POST /api/guardian/killswitch`,
+  `POST /api/guardian/defend`, `GET /api/guardian/actions`.
+
+Rules: only low-risk reversible allow-listed actions may run automatically, and
+only when the kill switch is off and the budget allows. The engine never deletes
+data, rotates a credential, edits code, deploys, changes a trust root or
+permission threshold, or changes its own authority, and exposes no method that
+grants a permission. `tests/test_guardian_defence.py` holds the contract
+(severity/confidence, correlation, allow-list, kill switch, budget, reversibility,
+owner-gating, alerts, false-positive protection, hard prohibitions).
+
 ## Reasoning, planning & decision intelligence (V7 P4, 2026-11-10)
 
 P4 adds a **deterministic reasoning/planning/decision layer** on top of the

@@ -1492,6 +1492,77 @@ def api_guardian_forensics():
     return jsonify(Guardian().incident_timeline(actor=actor))
 
 
+@app.route('/api/guardian/killswitch', methods=['GET'])
+@login_required
+def api_guardian_killswitch_status():
+    """Owner-only: current emergency kill-switch state."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.guardian import get_kill_switch
+
+    return jsonify(get_kill_switch().status())
+
+
+@app.route('/api/guardian/killswitch', methods=['POST'])
+@login_required
+def api_guardian_killswitch_set():
+    """Owner-only: engage or disengage the emergency kill switch.
+
+    Engaging stops all automatic defence. Disengaging resumes it and is an owner
+    action, so it is gated here and never automatic.
+    """
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.guardian import get_kill_switch
+
+    data = request.get_json(silent=True) or {}
+    engage = bool(data.get('engage', True))
+    switch = get_kill_switch()
+    if engage:
+        return jsonify(switch.engage(reason=data.get('reason') or 'owner request', actor=str(user_id)))
+    try:
+        return jsonify(switch.disengage(owner_approved=True, actor=str(user_id),
+                                        reason=data.get('reason') or 'owner resumed'))
+    except PermissionError:
+        return jsonify({'error': 'owner approval required'}), 403
+
+
+@app.route('/api/guardian/defend', methods=['POST'])
+@login_required
+def api_guardian_defend():
+    """Owner-only: run one bounded defence pass over supplied findings.
+
+    Performs only low-risk, reversible, allow-listed actions inside budget, when
+    the kill switch is off. Everything else is returned as a proposal. It never
+    deletes data, rotates a credential, deploys or changes policy.
+    """
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.guardian import DefenceEngine, LocalActionSink
+
+    data = request.get_json(silent=True) or {}
+    findings = data.get('findings') or []
+    if not isinstance(findings, list):
+        return jsonify({'error': 'findings must be a list'}), 400
+    engine = DefenceEngine(action_sink=LocalActionSink())
+    return jsonify(engine.defend(findings).to_dict())
+
+
+@app.route('/api/guardian/actions', methods=['GET'])
+@login_required
+def api_guardian_actions():
+    """Owner-only: the allow-list of permitted defensive actions."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.guardian import NEVER_ACTIONS, ActionCatalog
+
+    return jsonify({'allowed': ActionCatalog().all_specs(), 'never': sorted(NEVER_ACTIONS)})
+
+
 @app.route('/api/agents', methods=['GET'])
 @login_required
 def api_agents_list():
