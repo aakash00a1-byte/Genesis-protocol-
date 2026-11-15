@@ -36,13 +36,17 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(appmod, "TELEGRAM_REPLY_QUEUE", str(tmp_path / "replies.json"))
     monkeypatch.setattr(appmod, "TELEGRAM_COMMAND_QUEUE", str(tmp_path / "commands.json"))
     monkeypatch.setenv("TELEGRAM_ADMIN_IDS", str(OWNER))
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "test-webhook-secret")
     # Keep the durable task store inside the test's temp dir.
     monkeypatch.setenv("GLUTEN_TASK_DB", str(tmp_path / "agent_tasks.json"))
     import genesis_protocol.agentic.tasks as tasks
 
     monkeypatch.setattr(tasks, "_default", None)
     appmod.app.config["TESTING"] = True
-    return appmod.app.test_client()
+    c = appmod.app.test_client()
+    # The webhook fails closed without the shared secret.
+    c.environ_base = {"HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN": "test-webhook-secret"}
+    return c
 
 
 def _msg(text, uid=OWNER):
