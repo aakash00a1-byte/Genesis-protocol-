@@ -1067,6 +1067,44 @@ Only verified identities may put a message on the bus. Shared context is filtere
 by clearance and secret-redacted. `tests/test_coordination.py` holds the contract
 (manifests, messaging security, task dedup/delegation/conflicts, context privacy,
 provider tracking, cross-interface consistency, no-escalation).
+## Bounded cost-aware autonomy (V7 P8, 2026-11-10)
+
+P8 makes autonomy *bounded* in units a human can reason about. It adds
+`genesis_protocol/bounded/`, whose every component can only **refuse** work - none
+of them performs work or widens a limit. All autonomous paths (chat, tool calls,
+background tasks, provider calls) can be wrapped by the single gate.
+
+- **`bounded/budget.py`** - `Budget` / `BudgetLedger`. Hard limits per scope on
+  cost (USD), tokens, requests, tool calls and wall-clock time. Fail closed: an
+  unknown scope gets a conservative default, never an unlimited one; a `0` limit
+  means no allowance. `consume()` is atomic (`RLock`) and raises rather than
+  overrunning, so a refused action costs nothing.
+- **`bounded/ratelimit.py`** - `RateLimiter`, a per-key sliding window
+  (`check` does not consume; `allow` records a hit). `rate=0` denies everything.
+- **`bounded/runaway.py`** - `RunawayGuard` flags three loop shapes: **repetition**
+  (same step repeated), **cycling** (a repeated multi-step block) and
+  **no progress** (same progress marker). Pure functions of the recorded window.
+- **`bounded/failover.py`** - `FailoverChain`. Ordered candidates, per-candidate
+  failure counts, a health cooldown that expires, and an attempt cap, so failover
+  is bounded and never retries forever. Selection is deterministic.
+- **`bounded/governor.py`** - `ResourceGovernor`. Maps a resource reading
+  (CPU/memory/disk, from `survival.resource_monitor` or any callable) to
+  `normal`/`reduced`/`minimal`/`halted`. **Strictest breach wins**, and a failed
+  reading is treated as `reduced` (fail toward caution). `permits(mode, work)`
+  gates `essential`/`standard`/`optional` work.
+- **`bounded/autonomy.py`** - `BoundedAutonomy`, the gate. Ordered checks: kill
+  switch -> governor -> rate limit -> runaway guard -> budget, consuming the
+  rate hit and budget only when all pass. Records cost in the canonical
+  `survival.cost_tracker`. Provider recovery via `next_provider`/`report_provider`.
+- **Surface** (owner-only, read-only except the dry-run): `GET /api/autonomy/status`,
+  `POST /api/autonomy/authorize` (answers whether an action *would* be allowed).
+
+Rules: the gate exposes no method that grants, escalates or removes a limit; the
+emergency stop always wins. The canonical P6 `KillSwitch` is used when present;
+P8 otherwise falls back to an in-process, fail-closed `LocalKillSwitch` so the
+phase is independently mergeable. `tests/test_bounded_autonomy.py` holds
+the contract (budgets, atomicity, rate windows, loop detection, failover, degraded
+modes, refused-is-free, scope isolation, fail-closed defaults, no-widening).
 
 ## Reasoning, planning & decision intelligence (V7 P4, 2026-11-10)
 

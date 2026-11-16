@@ -1,136 +1,68 @@
-"""Resolve the P7 merge conflicts by unioning both sides' route blocks."""
-import re
+"""Union-resolve additive merge conflicts (keep both sides).
+
+Each V7 phase adds new route functions to web/app.py and new sections to
+AGENTS.md at the same anchor, so the correct resolution keeps BOTH sides.
+Git may split one such region into several hunks separated by shared lines;
+those shared lines belong to both sides' new blocks, so the union is
+``ours_full + theirs_full``, where each side's view keeps the shared lines.
+
+Usage: python3 scripts/_resolve_integration.py <file> [<file> ...]
+"""
 import sys
 
-APP = "web/app.py"
 
-text = open(APP).read()  # read fully before writing
-
-resolved_block = '''@app.route('/api/guardian/killswitch', methods=['GET'])
-@login_required
-def api_guardian_killswitch_status():
-    """Owner-only: current emergency kill-switch state."""
-    user_id = session['user_id']
-    if not _is_owner(user_id):
-        return jsonify({'error': 'owner access required'}), 403
-    from genesis_protocol.guardian import get_kill_switch
-
-    return jsonify(get_kill_switch().status())
-
-
-@app.route('/api/guardian/killswitch', methods=['POST'])
-@login_required
-def api_guardian_killswitch_set():
-    """Owner-only: engage or disengage the emergency kill switch.
-
-    Engaging stops all automatic defence. Disengaging resumes it and is an owner
-    action, so it is gated here and never automatic.
-    """
-    user_id = session['user_id']
-    if not _is_owner(user_id):
-        return jsonify({'error': 'owner access required'}), 403
-    from genesis_protocol.guardian import get_kill_switch
-
-    data = request.get_json(silent=True) or {}
-    engage = bool(data.get('engage', True))
-    switch = get_kill_switch()
-    if engage:
-        return jsonify(switch.engage(reason=data.get('reason') or 'owner request', actor=str(user_id)))
-    try:
-        return jsonify(switch.disengage(owner_approved=True, actor=str(user_id),
-                                        reason=data.get('reason') or 'owner resumed'))
-    except PermissionError:
-        return jsonify({'error': 'owner approval required'}), 403
-
-
-@app.route('/api/guardian/defend', methods=['POST'])
-@login_required
-def api_guardian_defend():
-    """Owner-only: run one bounded defence pass over supplied findings.
-
-    Performs only low-risk, reversible, allow-listed actions inside budget, when
-    the kill switch is off. Everything else is returned as a proposal. It never
-    deletes data, rotates a credential, deploys or changes policy.
-    """
-    user_id = session['user_id']
-    if not _is_owner(user_id):
-        return jsonify({'error': 'owner access required'}), 403
-    from genesis_protocol.guardian import DefenceEngine, LocalActionSink
-
-    data = request.get_json(silent=True) or {}
-    findings = data.get('findings') or []
-    if not isinstance(findings, list):
-        return jsonify({'error': 'findings must be a list'}), 400
-    engine = DefenceEngine(action_sink=LocalActionSink())
-    return jsonify(engine.defend(findings).to_dict())
+def union_resolve(text: str) -> str:
+    lines = text.split("\n")
+    out = []
+    i, n = 0, len(lines)
+    while i < n:
+        if not lines[i].startswith("<<<<<<< "):
+            out.append(lines[i])
+            i += 1
+            continue
+        ours_all, theirs_all = [], []
+        while True:
+            assert lines[i].startswith("<<<<<<< ")
+            i += 1
+            ours = []
+            while not lines[i].startswith("======="):
+                ours.append(lines[i])
+                i += 1
+            i += 1
+            theirs = []
+            while not lines[i].startswith(">>>>>>> "):
+                theirs.append(lines[i])
+                i += 1
+            i += 1
+            ours_all.extend(ours)
+            theirs_all.extend(theirs)
+            # Another hunk of the same region follows a run of shared lines
+            # (no intervening blank line); merge those shared lines into both.
+            if i < n and lines[i].strip() != "" and any(
+                lines[k].startswith("<<<<<<< ") for k in range(i, min(i + 80, n))
+            ):
+                while i < n and not lines[i].startswith("<<<<<<< "):
+                    ours_all.append(lines[i])
+                    theirs_all.append(lines[i])
+                    i += 1
+                continue
+            break
+        out.extend(ours_all)
+        out.extend(theirs_all)
+    return "\n".join(out)
 
 
-@app.route('/api/guardian/actions', methods=['GET'])
-@login_required
-def api_guardian_actions():
-    """Owner-only: the allow-list of permitted defensive actions."""
-    user_id = session['user_id']
-    if not _is_owner(user_id):
-        return jsonify({'error': 'owner access required'}), 403
-    from genesis_protocol.guardian import NEVER_ACTIONS, ActionCatalog
-
-    return jsonify({'allowed': ActionCatalog().all_specs(), 'never': sorted(NEVER_ACTIONS)})
-
-
-@app.route('/api/coordination/status', methods=['GET'])
-@login_required
-def api_coordination_status():
-    """Owner-only: coordination status (agents, tasks, messages, providers)."""
-    user_id = session['user_id']
-    if not _is_owner(user_id):
-        return jsonify({'error': 'owner access required'}), 403
-    from genesis_protocol.coordination import get_coordination_manager
-
-    return jsonify(get_coordination_manager().status())
+def main(paths):
+    for path in paths:
+        text = open(path).read()
+        if "<<<<<<< " not in text:
+            print(f"{path}: no conflicts")
+            continue
+        resolved = union_resolve(text)
+        assert "<<<<<<< " not in resolved and ">>>>>>> " not in resolved, path
+        open(path, "w").write(resolved)
+        print(f"{path}: resolved -> {len(resolved.splitlines())} lines")
 
 
-@app.route('/api/coordination/manifests', methods=['GET'])
-@login_required
-def api_coordination_manifests():
-    """Owner-only: capability manifests for every registered agent."""
-    user_id = session['user_id']
-    if not _is_owner(user_id):
-        return jsonify({'error': 'owner access required'}), 403
-    from genesis_protocol.coordination import get_coordination_manager
-
-    return jsonify({'manifests': get_coordination_manager().manifests()})
-
-
-@app.route('/api/coordination/authorize', methods=['POST'])
-@login_required
-def api_coordination_authorize():
-    """Owner-only: dry-run an authorization decision for an interface/principal.
-
-    Read-only: it answers whether a tool call would be allowed, without performing
-    it, so the same decision can be checked before wiring a new interface.
-    """
-    user_id = session['user_id']
-    if not _is_owner(user_id):
-        return jsonify({'error': 'owner access required'}), 403
-    from genesis_protocol.coordination import get_coordination_manager
-
-    data = request.get_json(silent=True) or {}
-    interface = data.get('interface') or 'web'
-    tool = data.get('tool')
-    if not tool:
-        return jsonify({'error': 'tool is required'}), 400
-    manager = get_coordination_manager()
-    return jsonify(manager.authorize(interface, data.get('principal', user_id), tool,
-                                     agent_id=data.get('agent_id'),
-                                     owner_approved=bool(data.get('owner_approved'))))'''
-
-# Replace the whole conflicted region (both hunks) with the union block. The
-# union block already contains the shared docstring/owner-check lines that sit
-# between git's two hunks, so replacing the full span is correct.
-start = text.index("<<<<<<< HEAD\n")
-end = text.rindex(">>>>>>> origin/feat/v7-p7-coordination\n") + len(
-    ">>>>>>> origin/feat/v7-p7-coordination\n"
-)
-text = text[:start] + resolved_block + "\n\n\n" + text[end:]
-open(APP, "w").write(text)
-print("web/app.py resolved, lines:", len(text.split(chr(10))))
+if __name__ == "__main__":
+    main(sys.argv[1:])
