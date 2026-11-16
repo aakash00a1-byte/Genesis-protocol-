@@ -3990,6 +3990,38 @@ def railway_status():
 
 
 # ---------------------------------------------------------------------------
+# Verified self-evolution (V7 P9). Read-only: this surface reports proposals
+# and their evidence. It cannot create, verify, apply, merge or deploy a change;
+# those remain owner actions outside the agent.
+# ---------------------------------------------------------------------------
+
+@app.route('/api/evolution/status', methods=['GET'])
+@login_required
+def api_evolution_status():
+    """Owner-only: report self-evolution proposals and their verification state."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.evolution import EvolutionEngine
+
+    return jsonify(EvolutionEngine().status())
+
+
+@app.route('/api/evolution/proposals', methods=['GET'])
+@login_required
+def api_evolution_proposals():
+    """Owner-only: list proposals with risk, evidence and verification state."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.evolution import EvolutionEngine
+
+    proposals = [p.to_dict() for p in EvolutionEngine().store.list()]
+    return jsonify({'count': len(proposals), 'proposals': proposals,
+                    'autonomy': 'propose-only'})
+
+
+# ---------------------------------------------------------------------------
 # Sidebar pages. Each links to a nav entry in base_v4.html; the data comes
 # from the API routes above, so the page never shows invented values.
 # ---------------------------------------------------------------------------
