@@ -7,7 +7,6 @@ which test each phase in isolation.
 """
 import os
 import sys
-import tempfile
 
 import pytest
 
@@ -20,13 +19,8 @@ from genesis_protocol.bounded.emergency import LocalKillSwitch, resolve_kill_swi
 from genesis_protocol.bounded.governor import ResourceGovernor as BoundedGovernor  # noqa: E402
 from genesis_protocol.bounded.governor import ResourceReading  # noqa: E402
 from genesis_protocol.bounded.ratelimit import RateLimiter  # noqa: E402
-from genesis_protocol.bounded.runaway import RunawayGuard  # noqa: E402
 from genesis_protocol.diagnostics import Diagnostics  # noqa: E402
 from genesis_protocol.diagnostics.checks import STATUS_OK  # noqa: E402
-from genesis_protocol.guardian.actionsink import LocalActionSink  # noqa: E402
-from genesis_protocol.guardian.budget import ActionBudget  # noqa: E402
-from genesis_protocol.guardian.defence import DefenceEngine  # noqa: E402
-from genesis_protocol.guardian.events import SecurityEventLog  # noqa: E402
 from genesis_protocol.guardian.killswitch import KillSwitch, get_kill_switch  # noqa: E402
 from genesis_protocol.mission.manager import MissionManager  # noqa: E402
 from genesis_protocol.mission.resources import ResourceBudget, ResourceGovernor  # noqa: E402
