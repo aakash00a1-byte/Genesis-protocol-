@@ -75,6 +75,37 @@ class TestDefaultBattery:
         phases = {c.phase for c in default_checks()}
         assert {"P1/P2", "P2", "P3", "P8B", "P9", "P10"}.issubset(phases)
 
+    def test_self_improve_gate_check_is_present_and_passes(self):
+        """The battery must prove the autonomous gate still protects itself.
+
+        Regression for the silent self-improvement outage: the battery verified
+        other controls but never checked that the gate refuses an agent patch to
+        its own harness. This check must exist and report ok on a healthy tree.
+        """
+        names = {c.name for c in default_checks()}
+        assert "self_improve_gate_protected" in names
+        result = next(
+            r for r in Diagnostics(observability=None, audit=None).run().results
+            if r.name == "self_improve_gate_protected"
+        )
+        assert result.status == STATUS_OK
+
+    def test_self_improve_gate_check_degrades_when_refusal_is_gone(self, monkeypatch):
+        """If the gate stops refusing harness self-modification, report degraded."""
+        import sys
+        import types
+
+        fake = types.ModuleType("patch_verification")
+        fake.check_path_policy = lambda paths: []  # refusal gone
+        monkeypatch.setitem(sys.modules, "patch_verification", fake)
+
+        probe = next(
+            c for c in default_checks() if c.name == "self_improve_gate_protected"
+        )
+        result = probe.run()
+        assert result.status == STATUS_DEGRADED
+        assert "self_improve" in result.detail
+
     def test_absent_phase_is_missing_not_error(self):
         # With P9/P10 unmerged this must be 'missing', never 'error'.
         report = Diagnostics(observability=None, audit=None).run()
