@@ -457,6 +457,17 @@ stays on old code, which is how the "hello" fix appeared not to work.
      stdlib-only; there is a regression test for this.
   Verify the runner path with `python3 scripts/self_improve.py --check-approvals`
   and `--approvals-only` (process pending commands, no OpenHands key needed).
+- **A rejected `OPENHANDS_API_KEY` used to stop the loop silently.** Every cycle
+  died at `POST /api/v1/app-conversations` with `HTTP 401
+  {"error":"NoCredentialsError"}` while the workflow still reported success, so
+  PR proposals stopped for days with nothing but a log line. The loop now
+  preflights `GET /api/v1/settings` (read-only) before a run starts: a missing or
+  rejected key stops the run with exit 1 and sends one Telegram alert naming the
+  secret to rotate. If the loop has gone quiet, check Telegram for that alert and
+  re-check the `OPENHANDS_API_KEY` repo secret before anything else. Confirm the
+  key by hand with
+  `curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $OPENHANDS_API_KEY" https://app.all-hands.dev/api/v1/settings`
+  (200 = good, 401 = rotate).
 - **Work orders (`/do`) are the owner's way to aim the agent.** `/do <instruction>`
   is parsed by `genesis_protocol/updates/work_orders.py` (stdlib-only) and parked
   on the Space's task queue (`/tmp/telegram_task_queue.json`, exposed at
