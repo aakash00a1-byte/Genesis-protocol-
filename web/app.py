@@ -4019,6 +4019,42 @@ def api_evolution_proposals():
     proposals = [p.to_dict() for p in EvolutionEngine().store.list()]
     return jsonify({'count': len(proposals), 'proposals': proposals,
                     'autonomy': 'propose-only'})
+# Mission-level autonomy (V7 P10). Read-only planning surface: it plans a goal
+# into a task DAG and reports mission state. It never runs a task - execution
+# requires an explicit owner approval and a runner supplied outside the agent.
+# ---------------------------------------------------------------------------
+
+@app.route('/api/mission/plan', methods=['POST'])
+@login_required
+def api_mission_plan():
+    """Owner-only: plan a goal into a validated task DAG without running it."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.mission import MissionManager
+
+    data = request.get_json(silent=True) or {}
+    goal = (data.get('goal') or '').strip()
+    if not goal:
+        return jsonify({'error': 'goal required'}), 400
+    try:
+        mission = MissionManager().create_mission(goal, owner_id=user_id,
+                                                  acceptance=data.get('acceptance', ''))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    return jsonify({'mission': mission.to_dict(), 'executed': False})
+
+
+@app.route('/api/mission/status', methods=['GET'])
+@login_required
+def api_mission_status():
+    """Owner-only: report mission-level autonomy state."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.mission import MissionManager
+
+    return jsonify(MissionManager().status())
 
 
 # ---------------------------------------------------------------------------

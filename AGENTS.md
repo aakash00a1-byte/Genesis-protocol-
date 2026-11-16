@@ -1575,3 +1575,31 @@ step recorded in the canonical `SecurityEventLog` under source `evolution`).
 
 Owner surface: `GET /api/evolution/status` and `GET /api/evolution/proposals`
 (both owner-only, read-only). Tests: `tests/test_self_evolution.py`.
+## Mission-level autonomy (V7 P10, 2026-11-16)
+
+Genesis can carry out a *mission* - a goal too large for one step - while every
+guard rail stays in place. P10 lives in `genesis_protocol/mission/`:
+
+- `planner.py` - plan a goal into a validated task DAG (`decompose`/`plan`);
+  sequential clauses chain, `after: t1, t2 - ...` names predecessors; unknown
+  dependencies and cycles are refused. Planning is side-effect free.
+- `delegation.py` - hand a task to a **verified** identity with a *narrowed*
+  tool grant, reusing `agentic.identity_registry`. A delegate's tools must be a
+  subset of the delegator's grant; an unknown/suspended agent is refused.
+- `resources.py` - check each step against a `ResourceBudget` (cost, tokens,
+  steps, cpu, memory), reusing the canonical survival layer. Unreadable
+  readings fail closed.
+- `tracking.py` - `progress` (with a `stalled` flag) and `Replanner`
+  (replace a failed task, rewire dependents, re-version the mission, record it).
+- `verification.py` - a task is done only when its result passes declarative
+  checks; unknown operations and missing fields fail closed.
+- `manager.py` - the loop. `run_mission` requires `owner_approved=True` and a
+  caller-supplied `runner`; each step is resource- and policy-checked, results
+  are verified before a task is marked done, and replanning is **bounded**
+  (`max_replans`) so a failing task cannot drive an unbounded retry loop.
+
+Invariants: **plan freely, run on approval**, **verify before done**, **delegate
+down never up**, **fail closed**, **auditable** (canonical `SecurityEventLog`,
+source `mission`), **no privileged work** (never merges, deploys or changes
+secrets). Owner surface: `GET /api/mission/status` and `POST /api/mission/plan`
+(both owner-only; planning never executes). Tests: `tests/test_mission_autonomy.py`.
