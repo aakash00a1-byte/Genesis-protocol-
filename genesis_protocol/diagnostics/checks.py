@@ -187,6 +187,44 @@ def default_checks() -> List[DiagnosticCheck]:
             return (None, "observability module absent")
         return (hasattr(mod, "get_observability"), "observability available")
 
+    def self_improve_gate_probe():
+        """The autonomous loop must still refuse to modify its own controls.
+
+        The self-improvement harness lands an agent patch only if the gate in
+        ``scripts/patch_verification.py`` accepts it, and the gate refuses any
+        patch that touches its own harness, the gate, CI config or the deploy
+        script. If that refusal ever weakens, an agent patch could rewrite the
+        gate that judges it - so this is checked here, read-only, and reported
+        ``degraded`` if the refusal is gone. Absent gate (this checkout has no
+        scripts/) is ``missing``, not an error.
+        """
+        import os
+        import sys
+
+        scripts_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            "scripts",
+        )
+        gate_path = os.path.join(scripts_dir, "patch_verification.py")
+        if not os.path.exists(gate_path):
+            return (None, "patch verification gate absent")
+        added = scripts_dir not in sys.path
+        if added:
+            sys.path.insert(0, scripts_dir)
+        try:
+            import importlib
+
+            gate = importlib.import_module("patch_verification")
+            if gate.check_path_policy(["scripts/self_improve.py"]):
+                return (True, "gate refuses self-modification of the harness")
+            return (False, "gate no longer protects scripts/self_improve.py")
+        finally:
+            if added:
+                try:
+                    sys.path.remove(scripts_dir)
+                except ValueError:
+                    pass
+
     return [
         DiagnosticCheck("policy_fails_closed", "P1/P2", policy_probe),
         DiagnosticCheck("identity_fails_closed", "P2", identity_probe),
@@ -197,4 +235,5 @@ def default_checks() -> List[DiagnosticCheck]:
         DiagnosticCheck("mission_no_privileged_path", "P10", mission_probe),
         DiagnosticCheck("resources_readable", "P8B", resource_probe),
         DiagnosticCheck("observability_available", "P4", observability_probe),
+        DiagnosticCheck("self_improve_gate_protected", "P1", self_improve_gate_probe),
     ]
