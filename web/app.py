@@ -1648,6 +1648,57 @@ def api_autonomy_authorize():
         tool_calls=int(data.get('tool_calls', 0) or 0),
     )
     return jsonify(decision.to_dict())
+@app.route('/api/recovery/status', methods=['GET'])
+@login_required
+def api_recovery_status():
+    """Owner-only: disaster-recovery readiness (backups, retention, audit)."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.recovery import RecoveryManager
+
+    return jsonify(RecoveryManager().status())
+
+
+@app.route('/api/recovery/backups', methods=['GET'])
+@login_required
+def api_recovery_backups():
+    """Owner-only: list recorded backups (metadata only, never payload)."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.recovery import RecoveryManager
+
+    return jsonify({'backups': RecoveryManager().vault.list_backups()})
+
+
+@app.route('/api/recovery/audit', methods=['GET'])
+@login_required
+def api_recovery_audit():
+    """Owner-only: the recovery audit trail, with the chain verified."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.recovery import RecoveryManager
+
+    manager = RecoveryManager()
+    return jsonify({'trail': manager.audit_trail(), 'audit': manager.audit_ok()})
+
+
+@app.route('/api/recovery/drill', methods=['POST'])
+@login_required
+def api_recovery_drill():
+    """Owner-only: run a restoration test on the newest backup.
+
+    This restores into a scratch directory and removes it; it never touches
+    production data. It is the only way to prove a backup is restorable.
+    """
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.recovery import RecoveryManager
+
+    return jsonify(RecoveryManager().run_drill())
 
 
 @app.route('/api/agents', methods=['GET'])
