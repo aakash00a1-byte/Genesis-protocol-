@@ -81,6 +81,9 @@ EVOLUTION_BACKLOG = os.environ.get(
 ).strip()
 POLL_SECONDS = 15
 POLL_TIMEOUT_SECONDS = 900
+# Set once the first credential rejection is reported, so a revoked key alerts
+# the owner a single time per run instead of once per cycle.
+_CREDENTIAL_ALERTED = False
 # Independent verification of every patch before it is landed (see
 # scripts/patch_verification.py). On by default; set to "0" only to fall back to
 # the old land-without-verifying behaviour. VERIFY_TEST_COMMAND is what the gate
@@ -160,6 +163,42 @@ def _api(method: str, path: str, payload: dict | None = None) -> object:
     return json.loads(body or b"{}")
 
 
+def check_openhands_credentials() -> tuple[bool, str]:
+    """Preflight the OpenHands key before a run starts.
+
+    A key that is set but rejected fails every cycle with HTTP 401
+    ``NoCredentialsError`` on ``POST /api/v1/app-conversations``. That is the
+    failure this guard exists for: the loop used to log it once per cycle and
+    run for hours producing nothing, so the outage was invisible. We probe a
+    read-only endpoint (``GET /api/v1/settings``) instead of starting a real
+    conversation, so the check costs nothing and has no side effects.
+
+    Returns ``(ok, reason)``. Never raises.
+    """
+    if not API_KEY:
+        return False, "OPENHANDS_API_KEY is not set"
+    req = urllib.request.Request(  # noqa: S310 - fixed OpenHands host
+        f"{BASE_URL}/api/v1/settings",
+        method="GET",
+        headers={"Authorization": f"Bearer {API_KEY}", "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+            resp.read()
+        return True, "ok"
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode(errors="replace")[:200]
+        if exc.code in (401, 403):
+            return False, (
+                "the OPENHANDS_API_KEY secret is set but rejected "
+                f"(HTTP {exc.code}: {detail}). Rotate the repo secret "
+                "OPENHANDS_API_KEY with a valid OpenHands Cloud API key."
+            )
+        return False, f"OpenHands credential check returned HTTP {exc.code}: {detail}"
+    except Exception as exc:  # noqa: BLE001 - a network blip must not crash the run
+        return False, f"could not reach OpenHands ({type(exc).__name__}: {str(exc)[:120]})"
+
+
 def _github(method: str, path: str, payload: dict | None = None) -> object:
     data = json.dumps(payload).encode() if payload is not None else None
     req = urllib.request.Request(  # noqa: S310 - fixed GitHub host
@@ -198,6 +237,29 @@ def _notify(text: str, reply_markup: dict | None = None) -> None:
         )
     except Exception as exc:  # noqa: BLE001 - a failed ping must not stop the loop
         _log(f"telegram notify failed: {type(exc).__name__}")
+
+
+def _credential_alert(reason: str) -> None:
+    """Tell the owner, in Telegram, that the loop cannot run.
+
+    The failure that stopped all PR proposals was silent: it lived only in a
+    workflow log nobody reads mid-run. A credential problem is actionable by the
+    owner alone, so it is pushed to the channel the owner actually watches.
+    Fired at most once per process, so a revoked key mid-run alerts once instead
+    of every cycle.
+    """
+    global _CREDENTIAL_ALERTED
+    _log(f"CREDENTIALS REJECTED: {reason}")
+    if _CREDENTIAL_ALERTED:
+        return
+    _CREDENTIAL_ALERTED = True
+    _notify(
+        "🚨 Genesis self-improvement STOPPED: OpenHands credentials are not usable.\n"
+        f"{reason[:400]}\n\n"
+        "No PRs can be proposed until this is fixed. Rotate the repo secret "
+        "OPENHANDS_API_KEY (Settings -> Secrets and variables -> Actions) with a "
+        "valid OpenHands Cloud API key, then re-run the workflow."
+    )
 
 
 def _approve_keyboard(pr_number: str) -> dict:
@@ -966,6 +1028,10 @@ def run_cycle(index: int) -> None:
         start = start_conversation(topic)
     except RuntimeError as exc:
         _log(f"could not start the conversation: {exc}")
+        if "NoCredentialsError" in str(exc) or "HTTP 401" in str(exc):
+            # The key was valid at startup but is rejected now: it was revoked
+            # mid-run. Alert once so the owner is not left guessing.
+            _credential_alert(str(exc))
         return
     app_id = poll_until_ready(start)
     if not app_id:
@@ -1043,6 +1109,12 @@ def main() -> int:
         return 0
     if not API_KEY:
         _log("OPENHANDS_API_KEY is not set")
+        return 1
+    ok, reason = check_openhands_credentials()
+    if not ok:
+        # Fail loudly and stop: running the loop with a rejected key burns hours
+        # and produces nothing, which is exactly how the outage went unnoticed.
+        _credential_alert(reason)
         return 1
     if "--once" in sys.argv:
         if _safe_process_work_orders() == 0:
