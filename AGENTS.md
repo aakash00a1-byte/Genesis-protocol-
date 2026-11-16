@@ -1373,3 +1373,34 @@ kept failing against the old hash. `init_db` now creates the admin with
 it on startup. The default is used only when `ADMIN_PASSWORD` is unset. Never
 log the password. To rotate: change the `ADMIN_PASSWORD` secret and restart the
 Space.
+
+## Verified self-evolution (V7 P9, 2026-11-16)
+
+Genesis may propose improvements to itself, but it may not land them. P9 lives
+in `genesis_protocol/evolution/` and makes the loop verifiable:
+
+- `experiment.py` — `Experiment` runs a candidate change in an isolated scratch
+  tree via the canonical sandbox (`agentic.sandbox.run_python`). The repository
+  is never written; a bad change cannot damage the tree it came from.
+- `proposals.py` — `EvolutionProposal` + `ProposalStore`; risk comes from the
+  canonical `improvement.risk_engine.RiskEngine`, and each proposal projects
+  into the canonical `proposal.ProposalManager` shape.
+- `regression.py` — generates a regression test and requires it to be **red
+  before / green after** (`verify_red_green`). A test that passes either way is
+  reported `not_discriminating`, not silently accepted.
+- `adversarial.py` — runs probes against the change and its baseline; a change
+  that turns a refused probe into a success is a `regression`. Static red flags
+  (`eval(`, `exec(`, `rm -rf`, `os.system(`, …) are refused outright.
+- `reversible.py` — `ReversibleChange` carries a full backup, applies atomically
+  (temp file + `os.replace`), refuses to clobber a concurrent edit, confines
+  paths to a declared root, and rolls back to exact prior bytes.
+- `engine.py` — `EvolutionEngine` ties the loop together and holds the gate: a
+  proposal becomes `ready` **for owner review** only when its test discriminates
+  and its adversarial evaluation is clean. It has no merge/deploy/approve path.
+
+Invariants: **propose-only** (never merges, deploys or self-approves), **evidence
+or nothing**, **isolated by construction**, **reversible**, **auditable** (every
+step recorded in the canonical `SecurityEventLog` under source `evolution`).
+
+Owner surface: `GET /api/evolution/status` and `GET /api/evolution/proposals`
+(both owner-only, read-only). Tests: `tests/test_self_evolution.py`.
