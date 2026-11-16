@@ -1373,3 +1373,22 @@ kept failing against the old hash. `init_db` now creates the admin with
 it on startup. The default is used only when `ADMIN_PASSWORD` is unset. Never
 log the password. To rotate: change the `ADMIN_PASSWORD` secret and restart the
 Space.
+
+## Cross-phase self-diagnostics (V7, 2026-11-16)
+
+`genesis_protocol/diagnostics/` reports the health of the systems built across
+V7 (policy, identity, memory, audit, recovery, evolution, mission, resources,
+observability) so a degraded subsystem is visible instead of failing silently.
+It is a capability, not a phase: it **observes** and never acts.
+
+- Each `DiagnosticCheck` returns `(ok, detail)`; `(None, detail)` means the
+  subsystem is absent (its phase is not deployed) and is reported `missing`,
+  not an error - so this package is mergeable on its own, before P9/P10 land.
+- A probe that raises is reported `error` (fail closed on real breakage).
+- Probes are read-only; they never run missions, land changes, or take defensive
+  action. Diagnosis and response are deliberately separate.
+- Findings are recorded in the canonical observability manager and, when
+  degraded/error, in `SecurityEventLog` (source `diagnostics`).
+- Owner surface: `GET /api/diagnostics/subsystems` (owner-only, read-only). This
+  is distinct from the pre-existing `/api/diagnostics` (provider/db/uptime),
+  whose shape is unchanged. Tests: `tests/test_diagnostics.py`.

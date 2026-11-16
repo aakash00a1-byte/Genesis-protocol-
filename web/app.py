@@ -3781,6 +3781,24 @@ def railway_status():
 
 
 # ---------------------------------------------------------------------------
+# Self-diagnostics (V7 cross-phase). Owner-only, read-only: it reports subsystem
+# health and never takes corrective action. Kept separate from the existing
+# /api/diagnostics (provider/db/uptime) so neither surface changes shape.
+# ---------------------------------------------------------------------------
+
+@app.route('/api/diagnostics/subsystems', methods=['GET'])
+@login_required
+def api_diagnostics_subsystems():
+    """Owner-only: run the cross-phase self-diagnostic battery and report it."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.diagnostics import Diagnostics
+
+    return jsonify(Diagnostics().run().to_dict())
+
+
+# ---------------------------------------------------------------------------
 # Sidebar pages. Each links to a nav entry in base_v4.html; the data comes
 # from the API routes above, so the page never shows invented values.
 # ---------------------------------------------------------------------------
