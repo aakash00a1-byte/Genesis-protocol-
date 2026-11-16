@@ -969,6 +969,177 @@ does not support. `tests/test_guardian_selfdefence.py` holds the contract and th
 adversarial cases (simulated attacks, spoofing, malicious tool requests, secret
 leakage, false alerts, tamper detection, detection accuracy, FP budget).
 
+## Controlled autonomous defence (V7 P6, 2026-11-10)
+
+P6 turns the read-only Guardian into a **bounded** defender. P5 stays read-only;
+P6 adds a separate engine (`genesis_protocol/guardian/defence.py`) that performs
+only low-risk, reversible, allow-listed actions, and only inside an ordered
+fail-closed gate. It composes the canonical systems and duplicates none.
+
+- **`guardian/severity.py`** - `SeverityClassifier` normalises severity and
+  attaches an **explained** confidence in `[0,1]` (threshold ratio, identity
+  verification, cross-detector corroboration, recognised secret pattern, unknown
+  detector). Severity and confidence are kept separate: a confirmed finding needs
+  confidence `>= 0.70` **and** severity above `info`.
+- **`guardian/correlation.py`** - `Correlator` union-finds findings that share an
+  entity (actor, identity, subject, session, tool) inside a time window, raising
+  aggregate confidence by detector count. `attribute_sessions` fills a session
+  from the audit log.
+- **`guardian/actions.py`** - the allow-list. `rate_limit_actor`, `throttle_source`
+  and `raise_alert` are `low` risk + reversible + `automatic_allowed`;
+  `require_owner_review` is medium; `suspend_identity`, `revoke_credential`,
+  `rotate_secret` are high and never automatic. `NEVER_ACTIONS` (delete_account,
+  delete_data, rotate_credential, modify_code, deploy, change_settings,
+  change_trust_root, change_permission_threshold, grant_permission,
+  change_own_authority, push_main, disable_safety, disable_audit) is refused by
+  `ActionCatalog.require`.
+- **`guardian/budget.py`** - `ActionBudget`: per-target cooldown, global window
+  cap and consecutive cap, so a flapping signal cannot repeat an action.
+- **`guardian/killswitch.py`** - persisted `KillSwitch`. **Fail closed**: an
+  unreadable state file reads as engaged. Anyone may engage; only owner approval
+  may disengage.
+- **`guardian/actionsink.py`** - `LocalActionSink`: reversible low-risk actions
+  (temporary cooldowns, notifications) against a bounded, expiring JSON ledger.
+  Every action returns a rollback token; `rollback` undoes it.
+- **`guardian/alerting.py`** - `AdminAlertBridge` to the canonical
+  `core.admin_alerts.AdminAlertManager`. Only the incident summary is sent.
+- **`guardian/defence.py`** - `DefenceEngine`. Ordered gates: kill switch,
+  severity+confidence, corroboration for high-impact actions, allow-list,
+  automatic-vs-owner, budget, execute+rollback. Every decision (allowed or
+  refused) is appended to the tamper-evident `SecurityEventLog` under the
+  `defence` category.
+- **Surface** (owner-only): `GET/POST /api/guardian/killswitch`,
+  `POST /api/guardian/defend`, `GET /api/guardian/actions`.
+
+Rules: only low-risk reversible allow-listed actions may run automatically, and
+only when the kill switch is off and the budget allows. The engine never deletes
+data, rotates a credential, edits code, deploys, changes a trust root or
+permission threshold, or changes its own authority, and exposes no method that
+grants a permission. `tests/test_guardian_defence.py` holds the contract
+(severity/confidence, correlation, allow-list, kill switch, budget, reversibility,
+owner-gating, alerts, false-positive protection, hard prohibitions).
+## Secure agent coordination (V7 P7, 2026-11-10)
+
+P7 adds `genesis_protocol/coordination/`, the layer that lets multiple Genesis
+agents work together **without any of them gaining authority**. Every capability
+is *derived* from the canonical systems (`agentic/identity_registry`,
+`agentic/policy`, `tools/tool_registry`) and can only ever narrow.
+
+- **`coordination/registry.py`** - `CapabilityRegistry`. `manifest(agent_id)`
+  derives a `CapabilityManifest` (role, status, tools, parent, depth,
+  `can_delegate`, provider/model) from the identity registry. The grant is
+  intersected with the canonical tool set, so a manifest never names a tool that
+  does not exist and never adds one. `can_use` requires *both* a grant and a
+  policy allow. `record_provider`/`provider_status` track provider/model use and
+  flag fallbacks.
+- **`coordination/messaging.py`** - `MessageBus` + `Envelope`. Messages are
+  signed with the sender's short-lived credential (HMAC-SHA256 over a canonical
+  body) and validated before they are read: shape (known type + required fields),
+  sender identity + credential (reused via `CredentialStore.verify(consume=False)`
+  - a message credential is a TTL-bounded signing key, not a one-time token),
+  signature (constant-time compare), freshness window and a seen-nonce set
+  (replay). `provenance(task_id)` is the ordered chain for a task.
+- **`coordination/tasks.py`** - `TaskCoordinator`. Single-owner tasks; `assign`
+  is idempotent on an idempotency key (a retry cannot duplicate a task);
+  conflicting claims record a resolution (earliest owner wins). `delegate` is
+  allowed only from the owner, only to an agent whose tools are a subset of the
+  delegator's, and only for a role whose manifest has `can_delegate`.
+- **`coordination/context.py`** - `SharedContext`. Field-tagged entries with
+  `public`/`internal`/`private` sensitivity; a role's clearance is a fixed map
+  (unknown role -> public, fail closed). `private` entries are visible only to
+  the owner/originator. **Secrets are redacted before sharing** using the same
+  patterns as `guardian/detection.py`, so a leaked key cannot propagate.
+- **`coordination/interfaces.py`** - `InterfaceAuthorizer`. Resolves a
+  Telegram/GitHub/web/Gluten principal to one canonical decision by delegating to
+  `AgentPolicy`/`CapabilityRegistry`; an unknown interface or unresolvable
+  principal is denied (fail closed), so the *same* request is allowed or denied
+  identically on every interface.
+- **`coordination/manager.py`** - `CoordinationManager`, a facade wiring the
+  above; `get_coordination_manager()` is the process-wide instance.
+- **Surface** (owner-only, read-only except the dry-run): `GET
+  /api/coordination/status`, `GET /api/coordination/manifests`, `POST
+  /api/coordination/authorize` (answers whether a call *would* be allowed).
+
+Rules: no agent may grant itself or another agent privileges - the registry
+stores no grants of its own and exposes no `grant`/`escalate` method. Child
+grants must be a subset of the parent's (enforced again at identity registration).
+Only verified identities may put a message on the bus. Shared context is filtered
+by clearance and secret-redacted. `tests/test_coordination.py` holds the contract
+(manifests, messaging security, task dedup/delegation/conflicts, context privacy,
+provider tracking, cross-interface consistency, no-escalation).
+## Bounded cost-aware autonomy (V7 P8, 2026-11-10)
+
+P8 makes autonomy *bounded* in units a human can reason about. It adds
+`genesis_protocol/bounded/`, whose every component can only **refuse** work - none
+of them performs work or widens a limit. All autonomous paths (chat, tool calls,
+background tasks, provider calls) can be wrapped by the single gate.
+
+- **`bounded/budget.py`** - `Budget` / `BudgetLedger`. Hard limits per scope on
+  cost (USD), tokens, requests, tool calls and wall-clock time. Fail closed: an
+  unknown scope gets a conservative default, never an unlimited one; a `0` limit
+  means no allowance. `consume()` is atomic (`RLock`) and raises rather than
+  overrunning, so a refused action costs nothing.
+- **`bounded/ratelimit.py`** - `RateLimiter`, a per-key sliding window
+  (`check` does not consume; `allow` records a hit). `rate=0` denies everything.
+- **`bounded/runaway.py`** - `RunawayGuard` flags three loop shapes: **repetition**
+  (same step repeated), **cycling** (a repeated multi-step block) and
+  **no progress** (same progress marker). Pure functions of the recorded window.
+- **`bounded/failover.py`** - `FailoverChain`. Ordered candidates, per-candidate
+  failure counts, a health cooldown that expires, and an attempt cap, so failover
+  is bounded and never retries forever. Selection is deterministic.
+- **`bounded/governor.py`** - `ResourceGovernor`. Maps a resource reading
+  (CPU/memory/disk, from `survival.resource_monitor` or any callable) to
+  `normal`/`reduced`/`minimal`/`halted`. **Strictest breach wins**, and a failed
+  reading is treated as `reduced` (fail toward caution). `permits(mode, work)`
+  gates `essential`/`standard`/`optional` work.
+- **`bounded/autonomy.py`** - `BoundedAutonomy`, the gate. Ordered checks: kill
+  switch -> governor -> rate limit -> runaway guard -> budget, consuming the
+  rate hit and budget only when all pass. Records cost in the canonical
+  `survival.cost_tracker`. Provider recovery via `next_provider`/`report_provider`.
+- **Surface** (owner-only, read-only except the dry-run): `GET /api/autonomy/status`,
+  `POST /api/autonomy/authorize` (answers whether an action *would* be allowed).
+
+Rules: the gate exposes no method that grants, escalates or removes a limit; the
+emergency stop always wins. The canonical P6 `KillSwitch` is used when present;
+P8 otherwise falls back to an in-process, fail-closed `LocalKillSwitch` so the
+phase is independently mergeable. `tests/test_bounded_autonomy.py` holds
+the contract (budgets, atomicity, rate windows, loop detection, failover, degraded
+modes, refused-is-free, scope isolation, fail-closed defaults, no-widening).
+## Survival & disaster recovery (V7 P8B, 2026-11-10)
+
+P8B makes the system survivable: backups you can *prove* are restorable, and
+recovery you can audit. It adds `genesis_protocol/recovery/`, which composes the
+canonical `security.EncryptionService` (Fernet) and `guardian.events.SecurityEventLog`
+(hash-chained) and duplicates neither.
+
+- **`recovery/manifest.py`** - the self-describing backup manifest (`BackupManifest`,
+  `Entry`, `DatabaseReport`) and the integrity checks (`verify_payload`,
+  `verify_directory`, SHA-256 per entry, a stable manifest hash). The manifest
+  travels *inside* every backup, so a backup always explains itself.
+- **`recovery/vault.py`** - `BackupVault`: Fernet-encrypted, self-describing
+  containers with verify / restore / retention and a plaintext append-only index
+  (metadata only, never payload). `check_sqlite` runs SQLite's own
+  `PRAGMA integrity_check` over a captured database.
+- **`recovery/manager.py`** - `RecoveryManager`: capture files/databases (from
+  memory or disk), verified restore, **restoration tests** (`restore_test`,
+  `run_drill` - restore into a scratch dir, re-hash, remove the scratch),
+  best-effort **database recovery** (`recover_database` salvages readable tables
+  into a fresh, valid database and reports what was lost), the recovery
+  **audit trail** and a readiness `status`.
+- **Surface** (owner-only): `GET /api/recovery/status`, `GET /api/recovery/backups`,
+  `GET /api/recovery/audit`, `POST /api/recovery/drill`.
+
+Rules: **fail closed** - no durable key (`GENESIS_BACKUP_KEY`) means no backup is
+written, because a backup nobody can decrypt is worse than none. **Verify before
+restore** - a backup that does not re-hash to its manifest is refused. **Never
+destructive by default** - restore does not overwrite existing files unless told
+to; the only deletion is backup pruning under an explicit retention policy, which
+always keeps the newest backup. Every backup, verify, restore, drill and recovery
+is written to the tamper-evident log under source `recovery`.
+`tests/test_recovery.py` holds the contract (manifest/integrity, fail-closed key,
+encrypted containers, verification, non-clobbering restore, restoration tests,
+failure handling, database salvage, retention, audit trail, no-widening).
+
 ## Reasoning, planning & decision intelligence (V7 P4, 2026-11-10)
 
 P4 adds a **deterministic reasoning/planning/decision layer** on top of the
@@ -1373,3 +1544,80 @@ kept failing against the old hash. `init_db` now creates the admin with
 it on startup. The default is used only when `ADMIN_PASSWORD` is unset. Never
 log the password. To rotate: change the `ADMIN_PASSWORD` secret and restart the
 Space.
+
+## Verified self-evolution (V7 P9, 2026-11-16)
+
+Genesis may propose improvements to itself, but it may not land them. P9 lives
+in `genesis_protocol/evolution/` and makes the loop verifiable:
+
+- `experiment.py` — `Experiment` runs a candidate change in an isolated scratch
+  tree via the canonical sandbox (`agentic.sandbox.run_python`). The repository
+  is never written; a bad change cannot damage the tree it came from.
+- `proposals.py` — `EvolutionProposal` + `ProposalStore`; risk comes from the
+  canonical `improvement.risk_engine.RiskEngine`, and each proposal projects
+  into the canonical `proposal.ProposalManager` shape.
+- `regression.py` — generates a regression test and requires it to be **red
+  before / green after** (`verify_red_green`). A test that passes either way is
+  reported `not_discriminating`, not silently accepted.
+- `adversarial.py` — runs probes against the change and its baseline; a change
+  that turns a refused probe into a success is a `regression`. Static red flags
+  (`eval(`, `exec(`, `rm -rf`, `os.system(`, …) are refused outright.
+- `reversible.py` — `ReversibleChange` carries a full backup, applies atomically
+  (temp file + `os.replace`), refuses to clobber a concurrent edit, confines
+  paths to a declared root, and rolls back to exact prior bytes.
+- `engine.py` — `EvolutionEngine` ties the loop together and holds the gate: a
+  proposal becomes `ready` **for owner review** only when its test discriminates
+  and its adversarial evaluation is clean. It has no merge/deploy/approve path.
+
+Invariants: **propose-only** (never merges, deploys or self-approves), **evidence
+or nothing**, **isolated by construction**, **reversible**, **auditable** (every
+step recorded in the canonical `SecurityEventLog` under source `evolution`).
+
+Owner surface: `GET /api/evolution/status` and `GET /api/evolution/proposals`
+(both owner-only, read-only). Tests: `tests/test_self_evolution.py`.
+## Mission-level autonomy (V7 P10, 2026-11-16)
+
+Genesis can carry out a *mission* - a goal too large for one step - while every
+guard rail stays in place. P10 lives in `genesis_protocol/mission/`:
+
+- `planner.py` - plan a goal into a validated task DAG (`decompose`/`plan`);
+  sequential clauses chain, `after: t1, t2 - ...` names predecessors; unknown
+  dependencies and cycles are refused. Planning is side-effect free.
+- `delegation.py` - hand a task to a **verified** identity with a *narrowed*
+  tool grant, reusing `agentic.identity_registry`. A delegate's tools must be a
+  subset of the delegator's grant; an unknown/suspended agent is refused.
+- `resources.py` - check each step against a `ResourceBudget` (cost, tokens,
+  steps, cpu, memory), reusing the canonical survival layer. Unreadable
+  readings fail closed.
+- `tracking.py` - `progress` (with a `stalled` flag) and `Replanner`
+  (replace a failed task, rewire dependents, re-version the mission, record it).
+- `verification.py` - a task is done only when its result passes declarative
+  checks; unknown operations and missing fields fail closed.
+- `manager.py` - the loop. `run_mission` requires `owner_approved=True` and a
+  caller-supplied `runner`; each step is resource- and policy-checked, results
+  are verified before a task is marked done, and replanning is **bounded**
+  (`max_replans`) so a failing task cannot drive an unbounded retry loop.
+
+Invariants: **plan freely, run on approval**, **verify before done**, **delegate
+down never up**, **fail closed**, **auditable** (canonical `SecurityEventLog`,
+source `mission`), **no privileged work** (never merges, deploys or changes
+secrets). Owner surface: `GET /api/mission/status` and `POST /api/mission/plan`
+(both owner-only; planning never executes). Tests: `tests/test_mission_autonomy.py`.
+## Cross-phase self-diagnostics (V7, 2026-11-16)
+
+`genesis_protocol/diagnostics/` reports the health of the systems built across
+V7 (policy, identity, memory, audit, recovery, evolution, mission, resources,
+observability) so a degraded subsystem is visible instead of failing silently.
+It is a capability, not a phase: it **observes** and never acts.
+
+- Each `DiagnosticCheck` returns `(ok, detail)`; `(None, detail)` means the
+  subsystem is absent (its phase is not deployed) and is reported `missing`,
+  not an error - so this package is mergeable on its own, before P9/P10 land.
+- A probe that raises is reported `error` (fail closed on real breakage).
+- Probes are read-only; they never run missions, land changes, or take defensive
+  action. Diagnosis and response are deliberately separate.
+- Findings are recorded in the canonical observability manager and, when
+  degraded/error, in `SecurityEventLog` (source `diagnostics`).
+- Owner surface: `GET /api/diagnostics/subsystems` (owner-only, read-only). This
+  is distinct from the pre-existing `/api/diagnostics` (provider/db/uptime),
+  whose shape is unchanged. Tests: `tests/test_diagnostics.py`.

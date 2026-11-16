@@ -47,6 +47,7 @@ CATEGORIES = (
     "health",
     "integrity",
     "response",
+    "defence",
     "anomaly",
 )
 
