@@ -2116,8 +2116,11 @@ def api_debug_telegram():
     try:
         result = subprocess.run(['pgrep', '-af', 'start_all_telegram'], capture_output=True, text=True, timeout=5)
         tg_procs = result.stdout.strip().split('\n') if result.stdout.strip() else []
-    except Exception:
+    except Exception as e:
+        # Report the failure instead of claiming "no telegram processes", which
+        # would read as a real finding in a diagnostics endpoint.
         tg_procs = []
+        env_status['telegram_process_probe'] = f'{type(e).__name__}: {e}'
     # Read telegram error logs if they exist
     logs = {}
     for logfile in ['/tmp/telegram.err.log', '/tmp/telegram.out.log']:
@@ -2530,7 +2533,10 @@ def telegram_webhook():
     try:
         from genesis_protocol.updates import parse_command
         is_command = parse_command(text) is not None
-    except Exception:
+    except Exception as e:
+        # A broken import here silently downgrades /approve and /do to plain
+        # chat, so the owner's command is never parked. Leave a trace.
+        logger.warning("update command parsing unavailable: %s: %s", type(e).__name__, e)
         is_command = False
     if is_command:
         if not is_admin:
