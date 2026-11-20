@@ -176,6 +176,74 @@ def test_patch_adding_a_secret_to_such_a_file_is_still_refused(repo) -> None:
     assert result.secret_findings == ["docs.md"]
 
 
+def test_ordinary_test_fixtures_are_not_treated_as_secrets(repo) -> None:
+    """A regression test that stubs a secret must be patchable.
+
+    Run #95 added ``tests/test_web_briefing.py`` and the gate refused it:
+    ``secret detected in: tests/test_web_briefing.py``. The cause was using the
+    log ``Redactor`` as a leak detector — it matches ``{"api_key": "test-key"}``,
+    ``Bearer test-token`` and ``?token=abc123`` by design, because over-matching
+    is correct when scrubbing logs. As a leak detector that over-match blocks
+    ordinary work.
+    """
+    _git("config", "user.email", "t@example.com", cwd=str(repo))
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / "tests" / "test_probe.py").write_text("def test_placeholder():\n    pass\n")
+    _git("add", "-A", cwd=str(repo))
+    _git("commit", "-qm", "seed test", cwd=str(repo))
+
+    body = (
+        '+    monkeypatch.setenv("WEB_SECRET_KEY", "test-secret")\n'
+        '+    payload = {"api_key": "test-key-123"}\n'
+        '+    headers = {"Authorization": "Bearer test-token-12345"}\n'
+        '+    url = "/webhook?token=abcdef123456"\n'
+    )
+    patch = (
+        "diff --git a/tests/test_probe.py b/tests/test_probe.py\n"
+        "--- a/tests/test_probe.py\n"
+        "+++ b/tests/test_probe.py\n"
+        "@@ -1,2 +1,6 @@\n"
+        " def test_placeholder():\n"
+        "     pass\n"
+        + body
+    )
+    result = verify_patch(
+        patch, repo_root=str(repo), base_ref="main", require_tests=False
+    )
+    assert result.accepted is True, result.reasons
+    assert result.secret_findings == []
+
+
+def test_real_credential_shapes_are_still_refused(repo) -> None:
+    """High precision must not become no detection."""
+    for literal in (
+        "ghp_" + "a" * 36,
+        "sk-oh-" + "Z" * 32,
+        "hf_" + "q" * 34,
+        "AKIA" + "Q" * 16,
+        "AIza" + "z" * 35,
+    ):
+        result = verify_patch(
+            _patch("genesis_protocol/leak.py", f'TOKEN = "{literal}"'),
+            repo_root=str(repo),
+            base_ref="main",
+            require_tests=False,
+        )
+        assert result.accepted is False, literal
+        assert result.secret_findings == ["genesis_protocol/leak.py"], literal
+
+
+def test_pem_private_key_is_refused(repo) -> None:
+    result = verify_patch(
+        _patch("genesis_protocol/key.pem", "-----BEGIN RSA PRIVATE KEY-----"),
+        repo_root=str(repo),
+        base_ref="main",
+        require_tests=False,
+    )
+    assert result.accepted is False
+    assert result.secret_findings == ["genesis_protocol/key.pem"]
+
+
 def test_required_tests_without_a_runner_is_refused(repo) -> None:
     result = verify_patch(
         _patch("genesis_protocol/ok.py"),
