@@ -624,6 +624,29 @@ stays on old code, which is how the "hello" fix appeared not to work.
   `start_all_telegram_bots.py` returns after the webhook call times out; the
   webhook is registered by GitHub Actions instead. Only `web` must reach RUNNING.
 
+## The acceptance gate rejects any patch touching a token-shaped file
+
+Verified 2026-11-20. `AcceptanceGate.evaluate()` (`genesis_v5/genesis/autonomy/acceptance.py`)
+used to redact each changed file's **entire post-patch content**. Any file that
+legitimately mentions a token-shaped string therefore became unpatchable —
+**134 of 1023 tracked files** on `main` already match the `Redactor`, including
+`AGENTS.md`, `README.md`, `scripts/self_improve.py`, `web/app.py`,
+`tests/conftest.py`, most of `tests/`, and 40+ provider modules.
+
+Every patch touching one of them was rejected with
+`secret detected in: <file>` **before the test runner ran**, so the loop could
+never land a docs or test change. This — not credentials — is why Run #94
+produced no PR: it picked topic 5 (`improve documentation in AGENTS.md or docs/`),
+did the work, and the gate killed it unconditionally.
+
+`scripts/patch_verification.py` now scans only the lines a patch **adds**
+(PR #74). Removed and context lines are excluded: a patch cannot leak a secret
+it deletes, and context lines are pre-existing text it did not author. The
+`Redactor` itself is untouched, so outbound message redaction still works. When
+diagnosing "the loop ran but produced nothing", check the gate reason first:
+`secret detected in:` means the file already matched, not that the agent leaked
+a key.
+
 ## Why the Actions-based relay cannot be fixed from an agent session
 
 Verified 2026-11-11. Every path to restoring the relay without the owner is
