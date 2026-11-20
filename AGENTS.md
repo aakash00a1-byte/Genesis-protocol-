@@ -1621,3 +1621,49 @@ It is a capability, not a phase: it **observes** and never acts.
 - Owner surface: `GET /api/diagnostics/subsystems` (owner-only, read-only). This
   is distinct from the pre-existing `/api/diagnostics` (provider/db/uptime),
   whose shape is unchanged. Tests: `tests/test_diagnostics.py`.
+
+## Unknown-intelligence & advanced-technology investigation (V7, 2026-11-16)
+
+`genesis_protocol/investigation/` is an evidence-driven investigation and
+reasoning framework for hard, speculative subjects: advanced human AI
+architectures, quantum/neural/emerging computing, extraterrestrial technology
+hypotheses, unknown-intelligence claims, centralised control and surveillance
+risk, and AI autonomy/self-improvement/coordination. Core principle:
+**investigate everything, assume nothing, verify everything.**
+
+- `evidence.py` classifies every finding as one of six levels, **derived from the
+  evidence alone** (so a reviewer can re-derive it): `verified` (reliable primary
+  source), `corroborated` (>=2 independent credible sources), `plausible`,
+  `speculative`, `false` (reliable contradiction), `unknown`. `promote()` takes
+  the *minimum* of the current and evidence-supported level, so speculation can
+  never be promoted to verified. A self-reported or anonymous source is never
+  primary.
+- `domains.py` defines the six research domains. A domain is a **frame, not a
+  conclusion**; it lists the questions and the evidence kinds that count.
+- `provenance.py` is append-only and hash-chained: entries are never updated or
+  deleted, each commits to the previous hash, and `verify_chain()` reports the
+  first broken link. Every entry carries provenance; an entry with no actor is
+  rejected.
+- `verification.py` runs independent checks and **reports, never rewrites**:
+  source manipulation (shared origin / self-reported), hallucination (unlocated
+  source), confirmation bias (no independent reviewer, or unanimous agreement),
+  contradictory evidence, and false-binary questions. A finding is trusted only
+  with enough independent reviewers and no high-severity issue.
+- `feedback.py` is the time-loop engine: record -> predict -> act (only if a
+  permission check allows it) -> compare -> detect error -> propose correction ->
+  test in isolation -> preserve history / rollback. It never fabricates an
+  outcome; an untested correction is treated as unsafe (fail closed).
+- `defence.py` probes influence channels (instruction injection, compromised
+  agent, malicious tool, unauthorised API, manipulated data) in the canonical
+  sandbox. It reports containment and **never claims a hidden actor** is
+  responsible.
+- `orchestrator.py` coordinates the above and exposes capability discovery,
+  multi-hypothesis ranking (by evidence strength, ties by id), caller-scored
+  scenario simulation, and **propose-only** evolution.
+
+Rules: no self-granted permission, no trust-root/approval-gate/audit change, no
+secret extraction, no destructive action, no claim of consciousness / unlimited
+intelligence / unrestricted autonomy (surfaced as explicit `NON_CLAIMS`). Owner
+surface: `GET /api/investigation/status`, `/api/investigation/domains`,
+`/api/investigation/defence` (all owner-only, read-only). Tests:
+`tests/test_investigation.py`.
