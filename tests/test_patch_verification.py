@@ -125,6 +125,57 @@ def test_patch_introducing_a_secret_is_refused(repo) -> None:
     assert result.secret_findings == ["genesis_protocol/leak.py"]
 
 
+def test_patch_editing_a_file_that_already_mentions_a_secret_is_allowed(repo) -> None:
+    """Only what a patch *adds* is scanned.
+
+    A file may legitimately document a token-shaped string (``HF_TOKEN=hf_...``).
+    Scanning the whole post-patch file made every such file unpatchedable: 134 of
+    1023 tracked files already matched the redactor, so no tests ever ran on a
+    patch touching one. This is the regression that stalled the loop.
+    """
+    _git("config", "user.email", "t@example.com", cwd=str(repo))
+    (repo / "docs.md").write_text("Deploy with `HF_TOKEN=hf_... bash x.sh`.\n")
+    _git("add", "-A", cwd=str(repo))
+    _git("commit", "-qm", "doc with token-shaped example", cwd=str(repo))
+
+    patch = (
+        "diff --git a/docs.md b/docs.md\n"
+        "--- a/docs.md\n"
+        "+++ b/docs.md\n"
+        "@@ -1 +1,2 @@\n"
+        " Deploy with `HF_TOKEN=hf_... bash x.sh`.\n"
+        "+See the runbook for details.\n"
+    )
+    result = verify_patch(
+        patch, repo_root=str(repo), base_ref="main", require_tests=False
+    )
+    assert result.accepted is True, result.reasons
+    assert result.secret_findings == []
+
+
+def test_patch_adding_a_secret_to_such_a_file_is_still_refused(repo) -> None:
+    """The added-lines rule must not weaken detection of a *new* secret."""
+    _git("config", "user.email", "t@example.com", cwd=str(repo))
+    (repo / "docs.md").write_text("Deploy with `HF_TOKEN=hf_... bash x.sh`.\n")
+    _git("add", "-A", cwd=str(repo))
+    _git("commit", "-qm", "doc with token-shaped example", cwd=str(repo))
+
+    secret = "ghp_" + "b" * 36
+    patch = (
+        "diff --git a/docs.md b/docs.md\n"
+        "--- a/docs.md\n"
+        "+++ b/docs.md\n"
+        "@@ -1 +1,2 @@\n"
+        " Deploy with `HF_TOKEN=hf_... bash x.sh`.\n"
+        f'+TOKEN = "{secret}"\n'
+    )
+    result = verify_patch(
+        patch, repo_root=str(repo), base_ref="main", require_tests=False
+    )
+    assert result.accepted is False
+    assert result.secret_findings == ["docs.md"]
+
+
 def test_required_tests_without_a_runner_is_refused(repo) -> None:
     result = verify_patch(
         _patch("genesis_protocol/ok.py"),

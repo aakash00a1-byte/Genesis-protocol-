@@ -200,6 +200,35 @@ def _changed_contents(worktree: str, changed_paths: list[str]) -> dict[str, str]
     return contents
 
 
+def _added_lines(patch: str) -> dict[str, str]:
+    """Only the lines a patch adds, per file.
+
+    The secret scan must judge what the patch *introduces*, not what the file
+    already contained. Scanning the whole post-patch file rejects every edit to
+    a file that legitimately mentions a token-shaped string (a doc showing
+    ``HF_TOKEN=hf_...``, a provider reading ``api_key = ...``). 134 of 1023
+    tracked files already match the redactor, so whole-file scanning made all of
+    them unpatchedable and no tests ever ran on such a patch.
+
+    Removed and context lines are excluded: a patch cannot leak a secret it is
+    deleting, and context lines are pre-existing text the patch did not author.
+    """
+    added: dict[str, str] = {}
+    current: str | None = None
+    for line in patch.splitlines():
+        if line.startswith("+++ "):
+            name = line[4:].strip()
+            current = None if name == "/dev/null" else name[2:] if name.startswith("b/") else name
+            if current:
+                added.setdefault(current, "")
+            continue
+        if current is None or line.startswith("--- "):
+            continue
+        if line.startswith("+"):
+            added[current] += line[1:] + "\n"
+    return {path: text for path, text in added.items() if text}
+
+
 def _run_in(worktree: str, command: str) -> tuple[bool, str]:
     """Run a test command inside the scratch worktree, not the real checkout."""
     proc = subprocess.run(
@@ -296,7 +325,10 @@ def verify_patch(
                 verifier = IndependentVerifier()
 
         # 4. Acceptance gate: secret scan + tests on the actual diff.
-        changes = _changed_contents(worktree, result.changed_paths)
+        # Scan only what the patch introduces. The file's pre-existing content is
+        # not the patch's responsibility, and whole-file scanning rejected every
+        # edit to a file that already mentions a token-shaped string.
+        changes = _added_lines(patch)
         report = gate.evaluate(changes)
         result.secret_findings = list(report.secret_findings)
         result.tests_run = report.tests_run
