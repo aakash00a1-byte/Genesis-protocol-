@@ -290,6 +290,7 @@ def json_body() -> Dict[str, Any]:
 
 
 MAX_FIELD_LENGTH = 254
+MAX_PAGE_SIZE = 100
 
 
 def _is_browser_form_post() -> bool:
@@ -1765,8 +1766,15 @@ def api_agent_verify(agent_id):
 def api_chat_history():
     """Get chat history - WEB CHANNEL ONLY."""
     user_id = session['user_id']
-    limit = request.args.get('limit', 50, type=int)
-    
+    try:
+        limit = int(request.args.get('limit', 50))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'limit must be an integer'}), 400
+    if not 1 <= limit <= MAX_PAGE_SIZE:
+        return jsonify({
+            'error': f'limit must be between 1 and {MAX_PAGE_SIZE}'
+        }), 400
+
     # Set channel isolation - WEB ONLY
     channel_isolation = get_channel_isolation()
     channel_isolation.set_channel(Channel.WEB)
@@ -1933,7 +1941,7 @@ def get_chat_history():
     page = int(request.args.get('page', 1))
     per_page = int(request.args.get('per_page', 20))
     offset = (page - 1) * per_page
-    
+
     conn = get_db()
     cursor = conn.cursor()
     
