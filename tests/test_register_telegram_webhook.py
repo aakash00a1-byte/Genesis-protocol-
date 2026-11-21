@@ -23,12 +23,12 @@ SCRIPT_PATH = (
 WEBHOOK_URL = "https://genesisno-genesis-automaton.hf.space/api/telegram/webhook"
 
 
-def _load(monkeypatch, **env):
+def _load(monkeypatch, *, hook=""):
     for key in ("TELEGRAM_BOT_TOKEN", "SPACE_URL", "TELEGRAM_WEBHOOK_SECRET"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
-    for key, value in env.items():
-        monkeypatch.setenv(key, value)
+    if hook:
+        monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", hook)
     spec = importlib.util.spec_from_file_location("register_webhook_test", SCRIPT_PATH)
     module = importlib.util.module_from_spec(spec)
     sys.modules["register_webhook_test"] = module
@@ -61,7 +61,7 @@ class _Recorder:
 
 def test_matching_url_with_error_is_reregistered(monkeypatch):
     """A matching URL plus last_error must not short-circuit as healthy."""
-    module = _load(monkeypatch, TELEGRAM_WEBHOOK_SECRET="s3cret")
+    module = _load(monkeypatch, hook="s3cret")
     recorder = _Recorder(
         {
             "url": WEBHOOK_URL,
@@ -78,7 +78,7 @@ def test_matching_url_with_error_is_reregistered(monkeypatch):
 
 def test_healthy_webhook_is_left_alone(monkeypatch):
     """No error and a matching URL -> no setWebhook call."""
-    module = _load(monkeypatch, TELEGRAM_WEBHOOK_SECRET="s3cret")
+    module = _load(monkeypatch, hook="s3cret")
     recorder = _Recorder(
         {
             "url": WEBHOOK_URL,
@@ -93,7 +93,7 @@ def test_healthy_webhook_is_left_alone(monkeypatch):
 
 def test_secret_is_sent_and_pending_updates_kept(monkeypatch):
     """The secret travels as secret_token; pending updates are never dropped."""
-    module = _load(monkeypatch, TELEGRAM_WEBHOOK_SECRET="s3cret")
+    module = _load(monkeypatch, hook="s3cret")
     recorder = _Recorder({"url": ""})
     monkeypatch.setattr(module, "_call", recorder)
 
@@ -118,7 +118,7 @@ def test_missing_secret_warns(monkeypatch, capsys):
 
 def test_persistent_error_after_set_fails(monkeypatch):
     """If Telegram still reports an error after setWebhook, exit non-zero."""
-    module = _load(monkeypatch, TELEGRAM_WEBHOOK_SECRET="s3cret")
+    module = _load(monkeypatch, hook="s3cret")
 
     class _StillBroken(_Recorder):
         def __call__(self, method, payload=None):
@@ -135,4 +135,81 @@ def test_persistent_error_after_set_fails(monkeypatch):
 
     recorder = _StillBroken({})
     monkeypatch.setattr(module, "_call", recorder)
+    assert module.main() == 1
+
+
+def test_no_token_exits_nonzero_without_calling_telegram(monkeypatch):
+    """Without a bot token the script must fail loudly, not call Telegram."""
+    module = _load(monkeypatch)
+    monkeypatch.setattr(module, "BOT_TOKEN", "")
+    calls: list = []
+    monkeypatch.setattr(module, "_call", lambda m, p=None: calls.append((m, p)) or {})
+
+    assert module.main() == 1
+    assert calls == []
+
+
+def test_missing_allowed_updates_is_treated_as_correct(monkeypatch):
+    """An empty allowed_updates means "all updates", so it is not a drift."""
+    module = _load(monkeypatch, hook="s3cret")
+    recorder = _Recorder({"url": WEBHOOK_URL, "allowed_updates": []})
+    monkeypatch.setattr(module, "_call", recorder)
+
+    assert module.main() == 0
+    assert [m for m, _ in recorder.calls] == ["getWebhookInfo"]
+
+
+def test_incomplete_allowed_updates_triggers_reregister(monkeypatch):
+    """A webhook missing a wanted update type must be re-registered."""
+    module = _load(monkeypatch, hook="s3cret")
+    recorder = _Recorder({"url": WEBHOOK_URL, "allowed_updates": ["message"]})
+    monkeypatch.setattr(module, "_call", recorder)
+
+    assert module.main() == 0
+    assert "setWebhook" in [m for m, _ in recorder.calls]
+
+
+def test_drifted_url_reregisters_with_secret(monkeypatch):
+    """A webhook pointing somewhere else is re-registered with the secret."""
+    module = _load(monkeypatch, hook="s3cret")
+    recorder = _Recorder({"url": "https://elsewhere.invalid/hook"})
+    monkeypatch.setattr(module, "_call", recorder)
+
+    assert module.main() == 0
+    payload = next(p for m, p in recorder.calls if m == "setWebhook")
+    assert payload["url"] == WEBHOOK_URL
+    assert payload["secret_token"] == "s3cret"
+
+
+def test_never_calls_delete_webhook(monkeypatch):
+    """deleteWebhook would drop the live relay; the script must never call it."""
+    module = _load(monkeypatch, hook="s3cret")
+    for info in (
+        {"url": ""},
+        {"url": WEBHOOK_URL, "allowed_updates": ["message", "callback_query"]},
+        {"url": WEBHOOK_URL, "last_error_message": "401 UNAUTHORIZED"},
+    ):
+        recorder = _Recorder(info)
+        monkeypatch.setattr(module, "_call", recorder)
+        module.main()
+        assert "deleteWebhook" not in [m for m, _ in recorder.calls]
+
+
+def test_rejected_setwebhook_exits_nonzero(monkeypatch):
+    """Telegram rejecting setWebhook must exit non-zero, never a false success."""
+    module = _load(monkeypatch, hook="s3cret")
+    recorder = _Recorder({"url": ""}, setwebhook_ok=False)
+    monkeypatch.setattr(module, "_call", recorder)
+
+    assert module.main() == 1
+
+
+def test_unreachable_telegram_exits_nonzero(monkeypatch):
+    """A network failure on getWebhookInfo must exit non-zero, not crash."""
+    module = _load(monkeypatch, hook="s3cret")
+
+    def _boom(method, payload=None):
+        raise OSError("network unreachable")
+
+    monkeypatch.setattr(module, "_call", _boom)
     assert module.main() == 1
