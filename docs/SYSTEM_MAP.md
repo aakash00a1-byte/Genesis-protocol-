@@ -1,5 +1,10 @@
 # Gluten OS - System Map v1.3
 
+The architecture and module tree below describe the v1.3 layer, which is still
+accurate for those packages. Packages added by later phases are listed under
+[V7 phases](#v7-phases), and the endpoint table is a selected subset, not the
+full route list.
+
 ## Architecture Overview
 
 ```
@@ -98,9 +103,11 @@ genesis_protocol/
 - `health_warning`, `health_ok`
 - `module_loaded`, `module_error`
 
-## API Endpoints (v1.3)
+## API Endpoints (selected)
 
-Verified against the routes defined in `web/app.py`.
+A small, stable subset of the routes defined in `web/app.py` (141 routes at the
+time of writing). `web/app.py` is the single source of truth for the full list,
+and every route is defined above its `if __name__ == '__main__':` block.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -138,14 +145,33 @@ Key names come from `GlutenEntity.get_state()` in
 3. **Conversation Tracker** - Every 30 minutes
 4. **Reflection Trigger** - Every 10 conversations
 
-## Evolution Roadmap
+## V7 phases
+
+The v1.x roadmap below was completed and superseded. The repository now ships a
+series of V7 phases, each a package under `genesis_protocol/` with its own tests
+in `tests/` and its invariants documented in `AGENTS.md`:
+
+| Phase | Package | What it adds |
+|-------|---------|--------------|
+| P1 | `quarantine/genesis_protocol/` | Legacy modules moved out of the package (not importable) |
+| P2 | `agentic/identity_registry.py`, `credentials.py`, `boundaries.py`, `trust.py` | Verifiable agent identity, short-lived credentials, least-privilege gate |
+| P3 | `agentic/memory.py`, `memory_safety.py`, `retrieval.py`, `reflection.py` | Durable memory with provenance, retrieval and reflection |
+| P4 | `agentic/reasoning.py`, `planning.py`, `decision.py` | Deterministic reasoning, planning and decision records |
+| P5 | `guardian/` (read-only) | Security monitoring, threat intel, tamper-evident event log |
+| P6 | `guardian/defence.py` | Bounded autonomous defence: low-risk, reversible, owner-gated |
+| P7 | `coordination/` | Multi-agent manifests, signed messaging, shared context |
+| P8 | `bounded/`, `recovery/` | Cost-aware autonomy limits; encrypted, restorable backups |
+| P9 | `evolution/` | Propose-only self-improvement with red/green regression tests |
+| P10 | `mission/` | Mission planning into a task DAG, run only on owner approval |
+
+`diagnostics/` observes all of the above and reports a missing subsystem as
+`missing`, not an error.
+
+## Evolution Roadmap (v1.x, completed)
 
 ```
 v1.0 ✅ Core AI
 v1.1 ✅ Capabilities (Voice, Vision, Tasks, Memory)
 v1.2 ✅ Integration (Commands, Modules)
 v1.3 ✅ Autonomous Behavior 🔥
-v1.4 🔜 Voice + Vision Interaction
-v1.5 🔜 Multi-agent Tools
-v2.0 🔜 GLUTEN Entity - Persistent personality
 ```
