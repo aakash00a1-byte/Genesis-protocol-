@@ -193,6 +193,51 @@ def test_relay_batch_cap_does_not_starve_new_replies(monkeypatch, tmp_path) -> N
     assert sent == ["fresh"]
 
 
+def test_relay_derives_a_process_stable_id_when_missing(monkeypatch, tmp_path) -> None:
+    """An id-less reply must get the same derived id in a later relay process.
+
+    ``hash()`` is salted per process, so the old derivation produced a different
+    id on the next run and the persisted id never matched -> the reply was
+    re-sent after a failed queue clear.
+    """
+    import subprocess
+
+    relay = _load(monkeypatch, RELAY_STATE_FILE=str(tmp_path / "state.json"))
+    entry = {"chat_id": "1", "text": "same content"}
+    local = relay._valid_reply(entry)
+    assert local is not None
+    script = (
+        "import importlib.util,sys;"
+        f"spec=importlib.util.spec_from_file_location('r',{str(RELAY_PATH)!r});"
+        "m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);"
+        f"print(m._valid_reply({entry!r})[0])"
+    )
+    other = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={"PYTHONHASHSEED": "12345", "PATH": "/usr/bin:/bin"},
+    ).stdout.strip()
+    assert other == local[0]
+
+
+def test_relay_seen_state_trims_oldest_not_arbitrary(monkeypatch, tmp_path) -> None:
+    """Bounded state keeps the *newest* ids, so an old reply cannot be re-sent."""
+    state_file = tmp_path / "state.json"
+    relay = _load(
+        monkeypatch,
+        RELAY_STATE_FILE=str(state_file),
+        TELEGRAM_BOT_TOKEN="tok",
+    )
+    monkeypatch.setattr(relay, "MAX_SEEN_IDS", 10)
+    seen = dict.fromkeys(f"id-{i}" for i in range(50))
+    relay._save_seen(seen)
+    kept = json.loads(state_file.read_text(encoding="utf-8"))["sent_ids"]
+    assert kept == [f"id-{i}" for i in range(40, 50)]
+    assert list(relay._load_seen()) == kept
+
+
 def test_relay_log_redacts_token(monkeypatch, tmp_path, capsys) -> None:
     relay = _load(
         monkeypatch,
