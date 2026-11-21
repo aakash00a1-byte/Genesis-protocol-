@@ -5,6 +5,8 @@ evidence must never be reported as success.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from genesis_protocol.evolution.ci_health import (
@@ -337,4 +339,172 @@ def test_cli_reports_clear_when_nothing_is_open(monkeypatch, capsys):
     monkeypatch.setattr(ci_health, "_fetch_health", lambda repo, token: [])
     assert ci_health.main(["--repo", "o/r"]) == 0
     assert "No open agent PRs" in capsys.readouterr().out
+
+
+# -- review 1: a green run with zero check-runs is NOT ready -----------------
+
+
+def test_successful_run_with_zero_check_runs_is_not_ready():
+    """A run conclusion proves the workflow finished, not that a test ran.
+
+    This is the regression the reviewer found: a run reporting success while no
+    check-run exists used to classify as READY_FOR_REVIEW.
+    """
+    health = _classify(check_runs=[], runs=[{"id": 11, "conclusion": "success"}])
+    assert health.state == NO_CHECKS
+    assert not health.mergeable
+    assert not health.is_green
+    assert "no check-run exists" in " ".join(health.reasons)
+
+
+def test_zero_check_runs_never_ready_whatever_the_run_says():
+    for conclusion in ("success", "neutral", "skipped"):
+        health = _classify(check_runs=[], runs=[{"id": 12, "conclusion": conclusion}])
+        assert health.state != READY_FOR_REVIEW, conclusion
+        assert not health.mergeable, conclusion
+
+
+def test_ready_requires_at_least_one_real_check_run():
+    """The only path to READY is at least one green check-run and no runs."""
+    assert _classify().state == READY_FOR_REVIEW
+    assert _classify(check_runs=[], runs=[]) .state != READY_FOR_REVIEW
+    assert _classify(check_runs=[], runs=[{"id": 1, "conclusion": "success"}]).state != (
+        READY_FOR_REVIEW
+    )
+
+
+# -- review 2: failing PRs are explicitly bucketed ---------------------------
+
+
+def _failed(number):
+    return _classify(
+        number=number,
+        check_runs=[{"name": "test", "conclusion": "failure"}],
+        runs=[{"id": number, "conclusion": "failure"}],
+    )
+
+
+def test_failing_pr_lands_in_its_own_bucket():
+    """A failing PR must not vanish from capacity accounting."""
+    cap = plan_capacity([_failed(50)], max_in_flight=5)
+    assert cap.failing == (50,)
+    assert cap.in_flight == ()
+    assert cap.owner_blocked == ()
+
+
+def test_failing_pr_is_capped_and_blocks_starting_more():
+    cap = plan_capacity([_failed(n) for n in (50, 51, 52)], max_failing=3)
+    assert len(cap.failing) == 3
+    assert not cap.may_start
+    assert "failing CI" in cap.blocked_by
+
+
+def test_failing_pr_does_not_consume_an_in_flight_slot():
+    cap = plan_capacity([_failed(50), _health(79, "ready")], max_in_flight=5, max_failing=3)
+    assert cap.in_flight == (79,)
+    assert cap.failing == (50,)
+    assert cap.may_start
+
+
+def test_every_state_is_accounted_for_in_exactly_one_bucket():
+    """No state may be silently unaccounted for, now or when one is added."""
+    from genesis_protocol.evolution import ci_health as m
+
+    assert set(m.ALL_STATES) == set(m.BUCKETED_STATES), (
+        set(m.ALL_STATES) ^ set(m.BUCKETED_STATES)
+    )
+    buckets = [m.IN_FLIGHT_STATES, m.FAILING_STATES, m.OWNER_BLOCKED_STATES]
+    for i, a in enumerate(buckets):
+        for b in buckets[i + 1 :]:
+            assert not (a & b), a & b
+
+
+def test_all_eight_states_reachable_and_bucketed():
+    """Exercise every state through the real classifier, not a stub."""
+    from genesis_protocol.evolution import ci_health as m
+
+    produced = {
+        _classify().state,
+        _classify(check_runs=[{"name": "t", "status": "in_progress", "conclusion": None}]),
+        _failed(1).state,
+        _classify(check_runs=[], runs=[{"id": 1, "conclusion": "action_required"}]).state,
+        _classify(check_runs=[], runs=[]).state,
+        _classify(main_sha="a" * 40).state,
+        _classify(head_sha="9" * 40).state,
+    }
+    produced = {s if isinstance(s, str) else s.state for s in produced}
+    assert produced <= set(m.ALL_STATES)
+    assert len(produced) >= 7
+
+
+# -- review 4: bot identities are not blanket-blocked -----------------------
+
+
+def test_workflow_token_identity_is_refused_with_evidence():
+    pre = preflight_identity("github-actions[bot]")
+    assert not pre.ok
+    assert pre.is_bot
+    assert "action_required" in " ".join(pre.reasons)
+
+
+def test_github_app_bot_identity_is_not_blanket_blocked():
+    """A GitHub App token is also [bot]; it must not be refused without evidence.
+
+    The reviewer is right: only the workflow token has evidence against it.
+    Blocking every bot would rule out the preferred credential strategy.
+    """
+    pre = preflight_identity("my-genesis-app[bot]")
+    assert pre.ok
+    assert pre.is_bot
+    assert pre.needs_validation
+    assert "no CI evidence yet" in " ".join(pre.reasons)
+
+
+def test_app_bot_with_green_evidence_is_fully_trusted():
+    pre = preflight_identity("my-genesis-app[bot]", actor_ci_evidence="green")
+    assert pre.ok
+    assert not pre.needs_validation
+    assert pre.reasons == ()
+
+
+def test_app_bot_with_held_evidence_is_refused():
+    pre = preflight_identity("my-genesis-app[bot]", actor_ci_evidence="held")
+    assert not pre.ok
+    assert "parked at action_required" in " ".join(pre.reasons)
+
+
+def test_human_identity_needs_no_validation():
+    pre = preflight_identity("aakash00a1-byte", actor_ci_evidence="green")
+    assert pre.ok
+    assert not pre.needs_validation
+    assert not pre.is_bot
+
+
+# -- review 3: the integration target is genesis_protocol -------------------
+
+
+def test_self_improve_imports_genesis_protocol_not_genesis_v5():
+    """The runtime target must be proven, not assumed.
+
+    self_improve.py puts the repo root on sys.path and imports
+    genesis_protocol.updates; genesis_v5 is only the kernel behind
+    patch_verification and the backlog JSONL path.
+    """
+    from pathlib import Path
+
+    source = Path("scripts/self_improve.py").read_text(encoding="utf-8")
+    assert "from genesis_protocol.updates" in source
+    assert "import genesis_v5" not in source
+    assert "from genesis_v5" not in source
+
+
+def test_ci_health_imports_from_the_repository_root():
+    import genesis_protocol.evolution.ci_health as module
+
+    assert Path(module.__file__).parts[-3:] == (
+        "genesis_protocol",
+        "evolution",
+        "ci_health.py",
+    )
+
 

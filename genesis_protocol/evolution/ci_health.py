@@ -31,6 +31,10 @@ PENDING_STATES = frozenset({"queued", "in_progress", "waiting", "pending", "requ
 # job is created. It is not a failure and emphatically not a success.
 ACTION_REQUIRED = "action_required"
 
+# The identity a push made with the workflow's own token is attributed to. This
+# is the one actor observed to be held at action_required in this repository.
+ACTIONS_BOT_ACTOR = "github-actions[bot]"
+
 READY_FOR_REVIEW = "READY_FOR_REVIEW"
 CI_RUNNING = "CI_RUNNING"
 CI_FAILED = "CI_FAILED"
@@ -53,10 +57,18 @@ ALL_STATES = (
 
 # States where the PR is genuinely in flight and should consume a capacity slot.
 IN_FLIGHT_STATES = frozenset({READY_FOR_REVIEW, CI_RUNNING})
+# A failing PR is still the agent's own work: it can be fixed and re-verified,
+# so it is neither "in flight" nor owner-only. It gets its own bounded bucket so
+# it can never silently vanish from capacity accounting, and can never pile up
+# without limit either.
+FAILING_STATES = frozenset({CI_FAILED})
 # States the loop cannot fix by itself; the owner has to intervene.
 OWNER_BLOCKED_STATES = frozenset(
     {ACTION_REQUIRED_STATE, NO_CHECKS, STALE_BASE, SECURITY_BLOCKED, OWNER_ACTION_REQUIRED}
 )
+# Every state must appear in exactly one bucket. This tuple exists so a test can
+# prove that no state is silently unaccounted for.
+BUCKETED_STATES = IN_FLIGHT_STATES | FAILING_STATES | OWNER_BLOCKED_STATES
 
 # The harness records the verified commit in the PR body as
 # "landed commit: `sha`". Evidence for any other commit is stale by definition.
@@ -65,11 +77,18 @@ EVIDENCE_SHA = re.compile(r"landed commit:\s*`([0-9a-fA-F]{7,40})`")
 
 @dataclass(frozen=True)
 class Preflight:
-    """Whether an authenticated identity may open an agent PR."""
+    """Whether an authenticated identity may open an agent PR.
+
+    ``ok`` is the hard verdict. ``needs_validation`` is a softer signal for an
+    identity that is not known to be held but has not been proven to trigger CI
+    either; the caller may proceed, but should confirm with one controlled PR.
+    """
 
     ok: bool
     actor: str
     reasons: tuple[str, ...] = ()
+    needs_validation: bool = False
+    is_bot: bool = False
 
     def __bool__(self) -> bool:  # pragma: no cover - trivial
         return self.ok
@@ -99,6 +118,10 @@ class PrHealth:
     @property
     def consumes_capacity(self) -> bool:
         return self.state in IN_FLIGHT_STATES
+
+    @property
+    def is_failing(self) -> bool:
+        return self.state in FAILING_STATES
 
     @property
     def is_green(self) -> bool:
@@ -223,7 +246,17 @@ def classify_pr(
         reasons.append("non-green checks: " + ", ".join(sorted(set(unknown))))
         return result(CI_FAILED)
 
-    # 7. Green, but built on a base that has since moved.
+    # 7. A workflow run that reported success but produced no check-run is not
+    #    proof of anything. The run says the workflow finished; it does not say
+    #    a single test executed. Zero checks can never be READY.
+    if not conclusions:
+        reasons.append(
+            "workflow runs reported a conclusion but no check-run exists: "
+            "no job result was recorded, so the code is unverified"
+        )
+        return result(NO_CHECKS)
+
+    # 8. Green, but built on a base that has since moved.
     if main_sha and base_sha and base_sha != main_sha:
         reasons.append(f"base {base_sha[:12]} is behind main {main_sha[:12]}")
         return result(STALE_BASE)
@@ -238,24 +271,41 @@ def preflight_identity(
     expected_repo: str | None = None,
     permissions: dict[str, bool] | None = None,
     required_permissions: tuple[str, ...] = (),
+    actor_ci_evidence: str = "unknown",
 ) -> Preflight:
     """Check that the authenticated identity can open an agent PR with live CI.
 
     A push made with the workflow's own ``GITHUB_TOKEN`` is attributed to
     ``github-actions[bot]``. GitHub then holds the resulting ``pull_request``
-    run for approval, so the PR can never show green CI. Opening a PR with that
-    identity is therefore refused up front, with the reason spelled out, rather
-    than producing another permanently blocked PR.
+    run for approval, so the PR can never show green CI. That is the one
+    identity known to be blocked, and opening a PR with it is refused.
+
+    Every other bot identity (a GitHub App installation token is also ``[bot]``)
+    is *not* assumed to be blocked. The evidence so far covers one bot identity
+    only, and blanket-blocking the rest would rule out the preferred credential
+    strategy without cause. Such an identity is returned with
+    ``needs_validation`` set so the caller confirms it with one controlled PR
+    before trusting it at scale.
+
+    ``actor_ci_evidence`` records what has actually been observed for this
+    actor: ``"held"`` (a run was parked at ``action_required``),
+    ``"green"`` (CI ran and passed) or ``"unknown"``.
     """
     reasons: list[str] = []
     name = (actor or "").strip()
+    is_bot = name.endswith("[bot]")
 
     if not name:
         reasons.append("no authenticated actor could be determined")
-    elif name.endswith("[bot]"):
+    elif is_bot and name == ACTIONS_BOT_ACTOR:
         reasons.append(
-            f"actor '{name}' is a bot identity: GitHub parks its pull_request runs "
-            "at action_required with 0 jobs, so the PR's CI can never run"
+            f"actor '{name}' is the workflow token: GitHub parks its "
+            "pull_request runs at action_required with 0 jobs, so the PR's CI "
+            "can never run (observed on runs #405, #408, #409)"
+        )
+    elif is_bot and actor_ci_evidence == "held":
+        reasons.append(
+            f"actor '{name}' has a run parked at action_required with 0 jobs"
         )
 
     if expected_repo and repo and repo != expected_repo:
@@ -265,7 +315,22 @@ def preflight_identity(
         if not (permissions or {}).get(permission):
             reasons.append(f"token lacks required permission: {permission}")
 
-    return Preflight(ok=not reasons, actor=name, reasons=tuple(reasons))
+    # A bot identity that is not known to be held still has to prove itself:
+    # the only CI evidence in this repository is for a human identity.
+    needs_validation = is_bot and actor_ci_evidence != "green" and not reasons
+    if needs_validation:
+        reasons.append(
+            f"actor '{name}' has no CI evidence yet; open one controlled PR and "
+            "confirm a run actually produces jobs before relying on it"
+        )
+
+    return Preflight(
+        ok=not [r for r in reasons if "has no CI evidence yet" not in r],
+        actor=name,
+        reasons=tuple(reasons),
+        needs_validation=needs_validation,
+        is_bot=is_bot,
+    )
 
 
 @dataclass(frozen=True)
@@ -276,13 +341,16 @@ class Capacity:
     owner_blocked: tuple[int, ...]
     max_in_flight: int
     max_owner_blocked: int
+    failing: tuple[int, ...] = ()
+    max_failing: int = 3
 
     @property
     def may_start(self) -> bool:
-        """True only when neither bucket is full."""
+        """True only when no bucket is full."""
         return (
             len(self.in_flight) < self.max_in_flight
             and len(self.owner_blocked) < self.max_owner_blocked
+            and len(self.failing) < self.max_failing
         )
 
     @property
@@ -294,6 +362,11 @@ class Capacity:
                 f"{len(self.owner_blocked)} PRs need owner action "
                 f"(limit {self.max_owner_blocked})"
             )
+        if len(self.failing) >= self.max_failing:
+            return (
+                f"{len(self.failing)} PRs have failing CI "
+                f"(limit {self.max_failing}) — fix or close them before starting more"
+            )
         return ""
 
 
@@ -302,21 +375,28 @@ def plan_capacity(
     *,
     max_in_flight: int = 5,
     max_owner_blocked: int = 5,
+    max_failing: int = 3,
 ) -> Capacity:
-    """Split open PRs into in-flight and owner-blocked buckets.
+    """Split open PRs into in-flight, failing and owner-blocked buckets.
 
     Counting every open PR equally is what deadlocked the loop: four PRs that
     can never merge held all five slots forever. Separating the buckets lets a
-    genuinely broken PR stop consuming capacity, while a second cap keeps the
-    loop from quietly piling up unbounded blocked work.
+    genuinely broken PR stop consuming capacity, while per-bucket caps keep the
+    loop from quietly piling up unbounded work.
+
+    A failing PR is neither dropped nor unbounded: it lands in its own capped
+    bucket, because the agent can still fix and re-verify it.
     """
     in_flight = tuple(sorted(h.number for h in healths if h.consumes_capacity))
     owner_blocked = tuple(sorted(h.number for h in healths if h.needs_owner))
+    failing = tuple(sorted(h.number for h in healths if h.is_failing))
     return Capacity(
         in_flight=in_flight,
         owner_blocked=owner_blocked,
         max_in_flight=max_in_flight,
         max_owner_blocked=max_owner_blocked,
+        failing=failing,
+        max_failing=max_failing,
     )
 
 
@@ -336,7 +416,8 @@ def recovery_plan(health: PrHealth) -> tuple[str, ...]:
         return (
             "Confirm ci.yml still triggers on pull_request and that the branch "
             "touches a path the workflow watches.",
-            "Re-push a new commit to re-trigger CI; an empty job list is not green.",
+            "A run conclusion without a check-run is not proof that any test ran; "
+            "re-push a new commit to produce real check-runs.",
         )
     if health.state == CI_FAILED:
         return (
@@ -444,6 +525,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo", required=True, help="owner/name")
     parser.add_argument("--max-in-flight", type=int, default=5)
     parser.add_argument("--max-owner-blocked", type=int, default=5)
+    parser.add_argument("--max-failing", type=int, default=3)
     args = parser.parse_args(argv)
 
     token = os.environ.get("GITHUB_TOKEN", "").strip()
@@ -465,8 +547,10 @@ def main(argv: list[str] | None = None) -> int:
         healths,
         max_in_flight=args.max_in_flight,
         max_owner_blocked=args.max_owner_blocked,
+        max_failing=args.max_failing,
     )
     print(f"in flight     : {capacity.in_flight}")
+    print(f"failing       : {capacity.failing}")
     print(f"owner blocked : {capacity.owner_blocked}")
     print(f"may start     : {capacity.may_start} ({capacity.blocked_by or 'clear'})")
     return 0 if capacity.may_start else 1
