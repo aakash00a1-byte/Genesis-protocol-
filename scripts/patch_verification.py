@@ -200,6 +200,67 @@ def _changed_contents(worktree: str, changed_paths: list[str]) -> dict[str, str]
     return contents
 
 
+def _secret_patterns() -> list[re.Pattern[str]]:
+    """High-precision patterns for credentials a patch must not introduce.
+
+    Deliberately *not* the ``Redactor``: that is a log-scrubbing tool, tuned to
+    over-match so nothing sensitive is echoed. Used as a leak detector it rejects
+    ordinary test fixtures — ``{"api_key": "test-key"}``, ``Bearer test-token``,
+    ``?token=abc123`` — which is why Run #95's regression test was refused.
+
+    A leak detector needs the opposite trade-off: match credential *shapes* that
+    no honest patch contains, and ignore placeholders.
+    """
+    return [
+        # Provider tokens with a distinctive prefix.
+        re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}"),
+        re.compile(r"\bgithub_pat_[A-Za-z0-9_]{40,}"),
+        re.compile(r"\bsk-(?:oh-|orca-|proj-|ant-)?[A-Za-z0-9_\-]{24,}"),
+        re.compile(r"\bxox[abpsr]-[A-Za-z0-9\-]{10,}"),
+        re.compile(r"\bhf_[A-Za-z0-9]{30,}"),
+        re.compile(r"\bAIza[0-9A-Za-z_\-]{35}"),
+        re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+        re.compile(r"\b\d{9,10}:AA[0-9A-Za-z_\-]{33}"),  # Telegram bot token
+        re.compile(r"\bcfat_[A-Za-z0-9_\-]{20,}"),
+        # A PEM private key block.
+        re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----"),
+        # A long, high-entropy literal. Placeholders (test-, example, xxxx,
+        # changeme) are excluded by requiring no such substring.
+        re.compile(
+            r"[\"'](?![^\"']*(?:test|example|dummy|fake|sample|placeholder|changeme|xxxx))"
+            r"[A-Za-z0-9+/_\-]{32,}[\"']",
+            re.IGNORECASE,
+        ),
+    ]
+
+
+def _scan_for_secrets(patch: str) -> list[str]:
+    """Files whose *added* lines introduce something that looks like a credential."""
+    patterns = _secret_patterns()
+    findings: list[str] = []
+    for path, text in _added_lines(patch).items():
+        if any(p.search(text) for p in patterns):
+            findings.append(path)
+    return findings
+
+
+class _LeakDetector:
+    """``Redactor``-shaped shim backed by the high-precision patterns.
+
+    ``AcceptanceGate`` asks a redactor whether a file changed under redaction.
+    Giving it the log ``Redactor`` conflated scrubbing with leak detection, so
+    ordinary test fixtures were refused. This shim keeps the gate's contract and
+    changes only the pattern set.
+    """
+
+    def redact(self, text: str) -> str:
+        if not text:
+            return text
+        if any(p.search(text) for p in _secret_patterns()):
+            return "[REDACTED]"
+        return text
+
+
 def _added_lines(patch: str) -> dict[str, str]:
     """Only the lines a patch adds, per file.
 
@@ -319,7 +380,9 @@ def verify_patch(
             if gate is None:
                 runner = (lambda: test_result) if test_result is not None else None
                 gate = AcceptanceGate(
-                    test_runner=runner, require_tests=require_tests
+                    test_runner=runner,
+                    require_tests=require_tests,
+                    redactor=_LeakDetector(),
                 )
             if verifier is None:
                 verifier = IndependentVerifier()
