@@ -471,3 +471,93 @@ def test_land_pr_puts_evidence_in_the_pr_body(monkeypatch) -> None:
     assert "Independent verification" in posted["body"]
     assert verdict.landed_sha == "cafebabe1234"
 
+
+# ----------------------------------------------------------------------
+# The shipped evolution backlog (genesis_v5/data/evolution/backlog.jsonl)
+#
+# The backlog is what lets the loop pick its own highest-priority work
+# instead of rotating a fixed list. These tests assert the shipped file is a
+# real EvolutionReport the agent could have written, and that it actually
+# steers the loop. The schema is taken from the dataclasses themselves, so a
+# field rename fails here instead of silently shipping a stale file.
+# ----------------------------------------------------------------------
+def _backlog_records():
+    import json
+
+    path = ROOT / "genesis_v5" / "data" / "evolution" / "backlog.jsonl"
+    assert path.exists(), f"the evolution backlog is missing: {path}"
+    lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert lines, "the backlog must carry at least one cycle"
+    return [json.loads(ln) for ln in lines]
+
+
+def _evolution_schema():
+    """The exact keys EvolutionReport/Proposal.to_dict() emit."""
+    sys.path.insert(0, str(ROOT / "genesis_v5"))
+    from genesis.agents.base import AgentTask
+    from genesis.evolution.evolution import EvolutionAgent, EvolutionConfig
+
+    agent = EvolutionAgent(config=EvolutionConfig(enabled=True, persist=False))
+    task = AgentTask(
+        agent="evolution",
+        instruction="observe",
+        metadata={"signals": [{"kind": "weakness", "component": "c", "what": "w"}]},
+    )
+    report = agent.run(task).output
+    return set(report), set(report["proposals"][0])
+
+
+def test_shipped_backlog_matches_the_real_evolution_report_schema() -> None:
+    report_keys, proposal_keys = _evolution_schema()
+    for record in _backlog_records():
+        assert set(record) == report_keys, set(record) ^ report_keys
+        for proposal in record["proposals"]:
+            assert set(proposal) == proposal_keys, set(proposal) ^ proposal_keys
+
+
+def test_shipped_backlog_is_review_gated_and_never_bypassable() -> None:
+    """A proposal is text; it may never opt out of review or the authority layer."""
+    for record in _backlog_records():
+        assert record["requires_review"] is True
+        assert record["bypass_available"] is False
+        for proposal in record["proposals"]:
+            assert proposal["requires_review"] is True
+            assert proposal["requires_authority"] is True
+            assert proposal["status"] == "proposed"
+
+
+def test_shipped_backlog_proposals_are_well_formed() -> None:
+    for record in _backlog_records():
+        for proposal in record["proposals"]:
+            assert proposal["title"].strip()
+            assert proposal["area"].strip()
+            assert proposal["kind"] in {"fix", "investigate", "improve"}
+            assert 0.0 <= proposal["priority"] <= 1.0
+            assert proposal["severity"] in {"low", "medium", "high", "critical"}
+            assert isinstance(proposal["evidence"], list) and proposal["evidence"]
+
+
+def test_shipped_backlog_steers_the_loop(monkeypatch) -> None:
+    """The loop's default path must resolve to the shipped proposals."""
+    module = _load()
+    monkeypatch.setattr(
+        module, "EVOLUTION_BACKLOG",
+        str(ROOT / "genesis_v5" / "data" / "evolution" / "backlog.jsonl"),
+    )
+    titles = module.evolution_topics()
+    assert titles, "evolution_topics() must read the shipped backlog"
+    # Highest priority first, and the top focus is what the loop would take.
+    assert module.choose_topic(0) == titles[0]
+    records = _backlog_records()
+    top = max(
+        (p for r in records for p in r["proposals"]),
+        key=lambda p: p["priority"],
+    )
+    assert titles[0] == top["title"]
+
+
+def test_shipped_backlog_proposals_are_unique() -> None:
+    """Duplicate focuses would make the loop pick the same work twice."""
+    titles = [p["title"] for r in _backlog_records() for p in r["proposals"]]
+    assert len(titles) == len(set(titles))
+
