@@ -554,4 +554,42 @@ def test_require_evidence_false_skips_the_check_entirely():
     assert health.state == READY_FOR_REVIEW
 
 
+def test_a_recovered_pr_is_not_held_by_its_old_run():
+    """Found on real data: PR #80 was recovered with workflow_dispatch and had
+    two green check-runs, but the superseded action_required run still sat in
+    the run list and kept it blocked. A recovery would never take effect."""
+    health = _classify(
+        check_runs=[
+            {"name": "test", "conclusion": "success"},
+            {"name": "lint", "conclusion": "success"},
+        ],
+        runs=[
+            {"id": 1, "conclusion": "action_required"},
+            {"id": 2, "conclusion": "success"},
+        ],
+    )
+    assert health.state == READY_FOR_REVIEW
+    assert health.mergeable
+
+
+def test_held_run_still_blocks_when_it_is_the_only_evidence():
+    health = _classify(check_runs=[], runs=[{"id": 1, "conclusion": "action_required"}])
+    assert health.state == ACTION_REQUIRED_STATE
+    assert not health.mergeable
+
+
+def test_recovered_run_that_fails_reports_ci_failed():
+    """Recovery is not a bypass: if the re-run fails, that is the verdict."""
+    health = _classify(
+        check_runs=[{"name": "test", "conclusion": "failure"}],
+        runs=[
+            {"id": 1, "conclusion": "action_required"},
+            {"id": 2, "conclusion": "failure"},
+        ],
+    )
+    assert health.state == CI_FAILED
+    assert not health.mergeable
+
+
+
 

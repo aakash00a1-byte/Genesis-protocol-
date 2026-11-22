@@ -211,10 +211,11 @@ def classify_pr(
             evidence_problem = "PR body carries no verification evidence"
         reasons.append(evidence_problem)
 
-    # 2. A run parked for human approval never executed a single job. This
-    #    outranks the evidence problem: no job ran, so there is nothing the
-    #    evidence could have been recorded against.
-    if ACTION_REQUIRED in run_conclusions:
+    # 2. A run parked for human approval never executed a single job. This is
+    #    only a blocker while no check-run exists: once a later run produces
+    #    real job results, the held run is stale history and must not keep the
+    #    PR blocked forever. Evidence of an actual job result beats it.
+    if ACTION_REQUIRED in run_conclusions and not conclusions:
         reasons.append(
             "GitHub held the run for approval (action_required): 0 jobs ran, "
             "so no check-run exists and CI cannot be green"
