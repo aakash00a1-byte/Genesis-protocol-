@@ -838,6 +838,36 @@ def land_pr(patch: str, topic: str, app_id: str, verification=None) -> str | Non
         "`.github/workflows/deploy-space.yml`, which mirrors `main` to the live HF Space.\n\n"
         "---\n_This pull request was created by an AI agent (OpenHands) on behalf of the repository owner._"
     )
+    # Refuse to open a PR that cannot ever show green CI. A push made with the
+    # workflow's own token is attributed to github-actions[bot], and GitHub
+    # parks that actor's pull_request runs at action_required with 0 jobs.
+    try:
+        from genesis_protocol.evolution.ci_health import preflight_identity
+    except Exception as exc:  # noqa: BLE001
+        _log(f"identity preflight unavailable: {type(exc).__name__}")
+        preflight_identity = None
+    if preflight_identity is not None:
+        try:
+            actor = _github("GET", "/user")
+            actor_login = actor.get("login", "") if isinstance(actor, dict) else ""
+        except Exception as exc:  # noqa: BLE001
+            # No evidence about the identity: warn and continue. Only a
+            # positively identified held identity blocks.
+            _log(f"could not read the authenticated actor: {type(exc).__name__}")
+            actor_login = ""
+        pre = preflight_identity(actor_login, repo=REPO, expected_repo=REPO) if actor_login else None
+    if pre is not None:
+        if not pre.ok:
+            _log(f"refusing to open PR as '{actor_login}': {'; '.join(pre.reasons)}")
+            _notify(
+                "🔒 Genesis agent: not opening a PR that cannot get CI.\n"
+                + "\n".join(pre.reasons)
+                + "\nSet AGENT_GH_TOKEN to a token whose runs are not held."
+            )
+            return None
+        if pre.needs_validation:
+            _log(f"identity '{actor_login}' is unproven: {'; '.join(pre.reasons)}")
+
     pr = None
     try:
         pr = _github(
@@ -861,9 +891,66 @@ def land_pr(patch: str, topic: str, app_id: str, verification=None) -> str | Non
     return None
 
 
+def _pr_health(waiting: list[dict]) -> list:
+    """Classify each open agent PR by real CI state.
+
+    Absent the model (older checkout), returns [] and the caller falls back to
+    counting PRs, which is the previous behaviour — degraded, never crashing.
+    """
+    try:
+        from genesis_protocol.evolution.ci_health import classify_pr
+    except Exception as exc:  # noqa: BLE001
+        _log(f"ci_health unavailable: {type(exc).__name__}: {str(exc)[:160]}")
+        return []
+    try:
+        main = _github("GET", f"/repos/{REPO}/git/ref/heads/{BRANCH}")
+        main_sha = main.get("object", {}).get("sha") if isinstance(main, dict) else None
+    except Exception as exc:  # noqa: BLE001 - a bad read must not stop the cycle
+        _log(f"could not read {BRANCH} head: {type(exc).__name__}")
+        main_sha = None
+    healths = []
+    for pr in waiting:
+        number = pr.get("number")
+        sha = pr.get("head", {}).get("sha", "")
+        if not number or not sha:
+            continue
+        try:
+            checks = _github("GET", f"/repos/{REPO}/commits/{sha}/check-runs")
+            runs = _github("GET", f"/repos/{REPO}/actions/runs?head_sha={sha}&per_page=100")
+        except RuntimeError as exc:
+            # Unreadable CI is not green: let the model see nothing and block.
+            _log(f"could not read CI for PR #{number}: {exc}")
+            checks, runs = {}, {}
+        healths.append(
+            classify_pr(
+                number=int(number),
+                branch=str(pr.get("head", {}).get("ref", "")),
+                head_sha=sha,
+                base_sha=str(pr.get("base", {}).get("sha", "")),
+                main_sha=main_sha,
+                body=pr.get("body"),
+                check_runs=(checks or {}).get("check_runs", []),
+                runs=(runs or {}).get("workflow_runs", []),
+            )
+        )
+    return healths
+
+
 def run_cycle(index: int) -> None:
     waiting = open_agent_prs()
-    if len(waiting) >= MAX_OPEN_PRS:
+    healths = _pr_health(waiting)
+    if healths:
+        from genesis_protocol.evolution.ci_health import notification, plan_capacity
+        capacity = plan_capacity(healths)
+        if not capacity.may_start:
+            _log(f"capacity full: {capacity.blocked_by}; skipping this cycle")
+            _notify(f"🧠 Genesis agent paused: {capacity.blocked_by}.")
+            return
+        for health in healths:
+            if health.needs_owner:
+                # Truthful per-PR status, not a blanket "N PRs await review".
+                _notify(notification(health, repo=REPO))
+    elif len(waiting) >= MAX_OPEN_PRS:
         _log(f"{len(waiting)} agent PRs already await review; skipping this cycle")
         _notify(f"🧠 Genesis agent: {len(waiting)} PRs await review, pausing new work.")
         return
