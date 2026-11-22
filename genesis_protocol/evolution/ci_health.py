@@ -196,16 +196,24 @@ def classify_pr(
             check_names=tuple(names),
         )
 
-    # 1. Evidence bound to the wrong commit invalidates the verification.
+    # 1. Evidence bound to the wrong commit invalidates the verification, but it
+    #    is recorded rather than returned at once: a held run or a missing job
+    #    is the more actionable blocker, and short-circuiting here would hide
+    #    it. Every evidence problem still forces SECURITY_BLOCKED at the end.
+    evidence_problem: str | None = None
     if require_evidence and not evidence_matches(head_sha, body):
         recorded = evidence_sha(body)
         if recorded:
-            reasons.append(f"evidence bound to {recorded[:12]}, head is {head_sha[:12]}")
+            evidence_problem = (
+                f"evidence bound to {recorded[:12]}, head is {head_sha[:12]}"
+            )
         else:
-            reasons.append("PR body carries no verification evidence")
-        return result(SECURITY_BLOCKED)
+            evidence_problem = "PR body carries no verification evidence"
+        reasons.append(evidence_problem)
 
-    # 2. A run parked for human approval never executed a single job.
+    # 2. A run parked for human approval never executed a single job. This
+    #    outranks the evidence problem: no job ran, so there is nothing the
+    #    evidence could have been recorded against.
     if ACTION_REQUIRED in run_conclusions:
         reasons.append(
             "GitHub held the run for approval (action_required): 0 jobs ran, "
@@ -232,7 +240,10 @@ def classify_pr(
         if conclusion in FAILED_CONCLUSIONS
     ]
     if failed or any(c in FAILED_CONCLUSIONS for c in run_conclusions):
-        reasons.append("failing checks: " + ", ".join(sorted(set(failed))) if failed else "workflow run failed")
+        if failed:
+            reasons.append("failing checks: " + ", ".join(sorted(set(failed))))
+        else:
+            reasons.append("workflow run failed")
         return result(CI_FAILED)
 
     # 6. An unknown conclusion is not green. This is the catch-all that keeps a
@@ -256,7 +267,11 @@ def classify_pr(
         )
         return result(NO_CHECKS)
 
-    # 8. Green, but built on a base that has since moved.
+    # 8. Green, but the verification does not name this commit.
+    if evidence_problem:
+        return result(SECURITY_BLOCKED)
+
+    # 9. Green, but built on a base that has since moved.
     if main_sha and base_sha and base_sha != main_sha:
         reasons.append(f"base {base_sha[:12]} is behind main {main_sha[:12]}")
         return result(STALE_BASE)

@@ -508,3 +508,50 @@ def test_ci_health_imports_from_the_repository_root():
     )
 
 
+# -- self-review: precedence must not mask the actionable blocker -----------
+
+
+def test_held_run_outranks_stale_evidence():
+    """A held run is the actionable blocker; it must not be hidden as a
+    security problem. Both reasons are reported, state is ACTION_REQUIRED."""
+    health = classify_pr(
+        number=90,
+        branch="agent/x",
+        head_sha="a" * 12,
+        base_sha=BASE,
+        main_sha=BASE,
+        body="landed commit: `deadbeef1234`",
+        check_runs=[],
+        runs=[{"id": 1, "conclusion": "action_required"}],
+    )
+    assert health.state == ACTION_REQUIRED_STATE
+    joined = " ".join(health.reasons)
+    assert "action_required" in joined
+    assert "evidence bound to" in joined
+
+
+def test_stale_evidence_still_blocks_a_green_pr():
+    """Collecting the problem must not weaken it: green CI + wrong evidence
+    still cannot merge."""
+    health = _classify(head_sha="9" * 12, body="landed commit: `deadbeef1234`")
+    assert health.state == SECURITY_BLOCKED
+    assert not health.mergeable
+
+
+def test_evidence_problem_survives_a_pending_run():
+    health = _classify(
+        head_sha="9" * 12,
+        body="landed commit: `deadbeef1234`",
+        check_runs=[{"name": "t", "status": "in_progress", "conclusion": None}],
+        runs=[{"id": 1, "status": "in_progress"}],
+    )
+    assert health.state == CI_RUNNING
+    assert "evidence bound to" in " ".join(health.reasons)
+
+
+def test_require_evidence_false_skips_the_check_entirely():
+    health = _classify(body="no evidence at all", require_evidence=False)
+    assert health.state == READY_FOR_REVIEW
+
+
+
