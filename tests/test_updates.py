@@ -554,3 +554,29 @@ def test_every_required_job_green_can_merge() -> None:
     )
     assert "Approved & merged" in reply
     assert merged
+
+
+def test_required_checks_stay_enforced_when_the_shared_model_is_missing() -> None:
+    """The gate must not soften just because the shared model cannot be imported.
+
+    On a branch without ``ci_health`` the import fails; a literal fallback keeps
+    the rule instead of silently skipping it.
+    """
+    import builtins
+
+    from genesis_protocol.updates import github_prs
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "genesis_protocol.evolution.ci_health":
+            raise ImportError("simulated: model not on this branch")
+        return real_import(name, *args, **kwargs)
+
+    builtins.__import__ = fake_import
+    try:
+        required = github_prs._required_checks()
+    finally:
+        builtins.__import__ = real_import
+
+    assert required == frozenset({"lint", "test"})
