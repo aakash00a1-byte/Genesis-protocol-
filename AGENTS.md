@@ -641,6 +641,21 @@ blocked, and each blocker is *permissions*, not code:
   `x-oauth-scopes`); it is `admin: true` on the repo yet still cannot change
   visibility. `AGENT_GH_TOKEN` and `OH_GIT_CREDENTIAL_ACCESS_TOKEN_GITHUB` both
   return `Bad credentials` here.
+- **`AGENT_GH_TOKEN` was rotated on 2026-11-23 and is now a fine-grained PAT
+  with no repository grants.** Verified from inside Actions (probe run
+  `45105352221`, since repo secrets are unreadable here and the sandbox copy of
+  the variable is the dead old value). Identity is correct — `GET /user` 200 as
+  `aakash00a1-byte`, id `291248335` — but every write is refused:
+  `PUT /contents` 403 (`x-accepted-github-permissions: contents=write`) and
+  `POST /pulls` 403 (`pull_requests=write`). Only `checks: read` works
+  (`GET /commits/{sha}/check-runs` 200). The token is therefore **not usable for
+  push, PR or merge** until Contents:write and Pull requests:write are granted
+  on the repository. A fine-grained PAT must also list the repository under
+  "Repository access"; a token with no repository selected returns exactly this
+  403. The important secondary result: with this identity a pushed commit is
+  **not** held — its `github-actions` check-suite came back
+  `completed/success`, not `action_required` — so the original held-run problem
+  is an artifact of the old dead token, not of the workflow.
 - **Writing the `TELEGRAM_WEBHOOK_SECRET` repo secret needs a classic PAT.**
   The App token gets `403` on both `/actions/secrets` and
   `/actions/secrets/public-key`, so `gh secret set` fails at the public-key step.
