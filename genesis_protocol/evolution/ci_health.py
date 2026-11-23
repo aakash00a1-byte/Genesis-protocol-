@@ -21,11 +21,20 @@ from dataclasses import dataclass, field
 
 # Check-run conclusions that count as green. Anything else, including a
 # missing conclusion on an unfinished run, is not green.
-GREEN_CONCLUSIONS = frozenset({"success", "neutral", "skipped"})
+#
+# ``skipped`` is deliberately absent. A skipped job did not verify anything, and
+# accepting it would let a single skipped check carry a PR to READY on its own —
+# exactly the "absent evidence is success" failure this module exists to stop.
+# ``neutral`` is likewise not evidence that a test ran.
+GREEN_CONCLUSIONS = frozenset({"success"})
 # Conclusions that mean the work is finished and failed.
 FAILED_CONCLUSIONS = frozenset({"failure", "timed_out", "cancelled", "startup_failure"})
 # Run/check states that mean work is still pending.
 PENDING_STATES = frozenset({"queued", "in_progress", "waiting", "pending", "requested"})
+# Conclusions that are explicitly not proof of anything: no work ran. They block
+# a PR from being READY on their own, but they also must not be reported as a
+# failure, because nothing failed.
+NON_EVIDENCE_CONCLUSIONS = frozenset({"skipped", "neutral"})
 
 # GitHub parks a run in this conclusion when a human must approve it before any
 # job is created. It is not a failure and emphatically not a success.
@@ -34,6 +43,11 @@ ACTION_REQUIRED = "action_required"
 # The identity a push made with the workflow's own token is attributed to. This
 # is the one actor observed to be held at action_required in this repository.
 ACTIONS_BOT_ACTOR = "github-actions[bot]"
+
+# Jobs that must be present and green before a PR may be called ready. A PR that
+# ran only the linter has not had its tests executed, so it is unverified. This
+# is the repository's own required set from ``.github/workflows/ci.yml``.
+REQUIRED_CHECKS = frozenset({"lint", "test"})
 
 READY_FOR_REVIEW = "READY_FOR_REVIEW"
 CI_RUNNING = "CI_RUNNING"
@@ -160,6 +174,25 @@ def _check_conclusions(check_runs: list[dict] | None) -> tuple[list[str], list[s
     return names, conclusions
 
 
+def _held_suites(suites: list[dict] | None, check_runs: list[dict] | None) -> list[dict]:
+    """Check-suites still parked at ``action_required`` that produced no jobs.
+
+    A suite in this state has no check-runs of its own, so it cannot be seen by
+    looking at check-runs alone. It has to be read from the suite list. Suites
+    belonging to a check-run that did report are excluded, because those are the
+    live, superseding suites.
+    """
+    reported = {str(run.get("check_suite", {}).get("id")) for run in check_runs or []}
+    held: list[dict] = []
+    for suite in suites or []:
+        conclusion = str(suite.get("conclusion") or "").lower()
+        suite_id = str(suite.get("id"))
+        if conclusion == ACTION_REQUIRED and int(suite.get("latest_check_runs_count") or 0) == 0:
+            if suite_id not in reported:
+                held.append(suite)
+    return held
+
+
 def classify_pr(
     *,
     number: int,
@@ -170,6 +203,7 @@ def classify_pr(
     body: str | None = None,
     check_runs: list[dict] | None = None,
     runs: list[dict] | None = None,
+    suites: list[dict] | None = None,
     require_evidence: bool = True,
 ) -> PrHealth:
     """Classify one agent PR into exactly one state.
@@ -182,6 +216,7 @@ def classify_pr(
     run_list = runs or []
     run_conclusions = [str(r.get("conclusion") or r.get("status") or "").lower() for r in run_list]
     run_ids = tuple(int(r["id"]) for r in run_list if str(r.get("id", "")).isdigit())
+    superseded_held_suite = bool(_held_suites(suites, check_runs))
     reasons: list[str] = []
 
     def result(state: str, *why: str) -> PrHealth:
@@ -247,7 +282,22 @@ def classify_pr(
             reasons.append("workflow run failed")
         return result(CI_FAILED)
 
-    # 6. An unknown conclusion is not green. This is the catch-all that keeps a
+    # 6. A conclusion that is neither green nor a failure means no work ran.
+    #    That is not green: a skipped or neutral check verified nothing. It is
+    #    also not a failure, so it gets its own explicit block.
+    non_evidence = [
+        name
+        for name, conclusion in zip(names, conclusions, strict=False)
+        if conclusion in NON_EVIDENCE_CONCLUSIONS
+    ]
+    if non_evidence:
+        reasons.append(
+            "checks that verified nothing: " + ", ".join(sorted(set(non_evidence)))
+            + " (skipped/neutral is not proof the tests ran)"
+        )
+        return result(NO_CHECKS)
+
+    # 7. An unknown conclusion is not green. This is the catch-all that keeps a
     #    new GitHub conclusion from silently passing the gate.
     unknown = [
         name
@@ -258,7 +308,7 @@ def classify_pr(
         reasons.append("non-green checks: " + ", ".join(sorted(set(unknown))))
         return result(CI_FAILED)
 
-    # 7. A workflow run that reported success but produced no check-run is not
+    # 8. A workflow run that reported success but produced no check-run is not
     #    proof of anything. The run says the workflow finished; it does not say
     #    a single test executed. Zero checks can never be READY.
     if not conclusions:
@@ -268,14 +318,35 @@ def classify_pr(
         )
         return result(NO_CHECKS)
 
-    # 8. Green, but the verification does not name this commit.
+    # 9. Every required job must have actually reported. A PR that ran only the
+    #    linter has not executed the tests, so a green subset is not a green PR.
+    missing = REQUIRED_CHECKS - set(names)
+    if missing:
+        reasons.append(
+            "required checks never reported: " + ", ".join(sorted(missing))
+            + " (a green subset is not a verified PR)"
+        )
+        return result(NO_CHECKS)
+
+    # 10. Green, but the verification does not name this commit.
     if evidence_problem:
         return result(SECURITY_BLOCKED)
 
-    # 9. Green, but built on a base that has since moved.
+    # 11. Green, but built on a base that has since moved.
     if main_sha and base_sha and base_sha != main_sha:
         reasons.append(f"base {base_sha[:12]} is behind main {main_sha[:12]}")
         return result(STALE_BASE)
+
+    # 12. Green, but GitHub still counts a superseded held check-suite against
+    #     this head. The required jobs are green, yet the commit is not clean:
+    #     a green re-run does not erase the held suite, so claiming READY would
+    #     contradict what GitHub itself reports for this commit.
+    if superseded_held_suite:
+        reasons.append(
+            "a superseded check-suite is still parked at action_required on this "
+            "head; the green re-run did not clear it, so the commit is not clean"
+        )
+        return result(ACTION_REQUIRED_STATE)
 
     return result(READY_FOR_REVIEW)
 
@@ -514,6 +585,7 @@ def _fetch_health(repo: str, token: str) -> list[PrHealth]:
         sha = pull["head"]["sha"]
         checks = api(f"/commits/{sha}/check-runs").get("check_runs", [])
         runs = api(f"/actions/runs?head_sha={sha}&per_page=100").get("workflow_runs", [])
+        suites = api(f"/commits/{sha}/check-suites").get("check_suites", [])
         healths.append(
             classify_pr(
                 number=int(pull["number"]),
@@ -524,6 +596,7 @@ def _fetch_health(repo: str, token: str) -> list[PrHealth]:
                 body=pull.get("body"),
                 check_runs=checks,
                 runs=runs,
+                suites=suites,
             )
         )
     return healths

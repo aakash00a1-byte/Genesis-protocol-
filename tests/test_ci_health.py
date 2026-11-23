@@ -593,3 +593,86 @@ def test_recovered_run_that_fails_reports_ci_failed():
 
 
 
+
+
+# -- review 3: fail-closed holes found on live data --------------------------
+
+
+def test_a_skipped_check_is_not_ready_on_its_own():
+    """A skipped job verified nothing. Accepting it let a PR reach READY with no
+    test having run at all, which is the failure mode this module exists to
+    prevent."""
+    health = _classify(check_runs=[{"name": "test", "conclusion": "skipped"}])
+    assert health.state == NO_CHECKS
+    assert not health.mergeable
+
+
+def test_a_neutral_check_is_not_ready_on_its_own():
+    health = _classify(check_runs=[{"name": "test", "conclusion": "neutral"}])
+    assert health.state == NO_CHECKS
+    assert not health.mergeable
+
+
+def test_one_skipped_required_job_blocks_an_otherwise_green_pr():
+    health = _classify(
+        check_runs=[
+            {"name": "lint", "conclusion": "skipped"},
+            {"name": "test", "conclusion": "success"},
+        ]
+    )
+    assert health.state == NO_CHECKS
+    assert not health.mergeable
+    assert "verified nothing" in " ".join(health.reasons)
+
+
+def test_a_green_subset_with_a_missing_required_job_is_not_ready():
+    """Only the linter ran; the tests never executed. A green subset is not a
+    verified PR."""
+    health = _classify(check_runs=[{"name": "lint", "conclusion": "success"}])
+    assert health.state == NO_CHECKS
+    assert not health.mergeable
+    assert "required checks never reported: test" in " ".join(health.reasons)
+
+
+def test_all_required_jobs_green_is_ready():
+    assert _classify().state == READY_FOR_REVIEW
+
+
+def test_a_superseded_held_suite_keeps_the_pr_blocked():
+    """Measured on #80/#81: the required jobs were green, yet GitHub still
+    reported mergeable_state=unstable because the original action_required
+    check-suite remained on the head with 0 jobs. READY would contradict
+    GitHub's own verdict for that commit."""
+    health = _classify(
+        suites=[
+            {"id": 111, "conclusion": "action_required", "latest_check_runs_count": 0},
+            {"id": 222, "conclusion": "success", "latest_check_runs_count": 2},
+        ],
+        check_runs=[
+            {"name": "lint", "conclusion": "success", "check_suite": {"id": 222}},
+            {"name": "test", "conclusion": "success", "check_suite": {"id": 222}},
+        ],
+    )
+    assert health.state == ACTION_REQUIRED_STATE
+    assert not health.mergeable
+    assert "superseded check-suite" in " ".join(health.reasons)
+
+
+def test_a_clean_suite_list_still_reaches_ready():
+    health = _classify(
+        suites=[
+            {"id": 222, "conclusion": "success", "latest_check_runs_count": 2}
+        ],
+        check_runs=[
+            {"name": "lint", "conclusion": "success", "check_suite": {"id": 222}},
+            {"name": "test", "conclusion": "success", "check_suite": {"id": 222}},
+        ],
+    )
+    assert health.state == READY_FOR_REVIEW
+
+
+def test_absent_suite_data_does_not_block():
+    """The suite list is optional: an older payload without it must not turn a
+    genuinely green PR into a blocked one."""
+    assert _classify(suites=None).state == READY_FOR_REVIEW
+    assert _classify(suites=[]).state == READY_FOR_REVIEW
