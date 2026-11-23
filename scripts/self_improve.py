@@ -917,10 +917,11 @@ def _pr_health(waiting: list[dict]) -> list:
         try:
             checks = _github("GET", f"/repos/{REPO}/commits/{sha}/check-runs")
             runs = _github("GET", f"/repos/{REPO}/actions/runs?head_sha={sha}&per_page=100")
+            suites = _github("GET", f"/repos/{REPO}/commits/{sha}/check-suites")
         except RuntimeError as exc:
             # Unreadable CI is not green: let the model see nothing and block.
             _log(f"could not read CI for PR #{number}: {exc}")
-            checks, runs = {}, {}
+            checks, runs, suites = {}, {}, {}
         healths.append(
             classify_pr(
                 number=int(number),
@@ -931,6 +932,7 @@ def _pr_health(waiting: list[dict]) -> list:
                 body=pr.get("body"),
                 check_runs=(checks or {}).get("check_runs", []),
                 runs=(runs or {}).get("workflow_runs", []),
+                suites=(suites or {}).get("check_suites", []),
             )
         )
     return healths
