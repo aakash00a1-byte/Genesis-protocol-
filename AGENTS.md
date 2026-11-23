@@ -655,7 +655,10 @@ blocked, and each blocker is *permissions*, not code:
   403. The important secondary result: with this identity a pushed commit is
   **not** held — its `github-actions` check-suite came back
   `completed/success`, not `action_required` — so the original held-run problem
-  is an artifact of the old dead token, not of the workflow.
+  is an artifact of the old dead token, not of the workflow. Caveat: that probe
+  commit was pushed by the validation harness, not by `AGENT_GH_TOKEN` itself
+  (which cannot push), so it shows the workflow is not inherently holding runs —
+  it does not prove what a future PAT-driven push will do.
 - **Writing the `TELEGRAM_WEBHOOK_SECRET` repo secret needs a classic PAT.**
   The App token gets `403` on both `/actions/secrets` and
   `/actions/secrets/public-key`, so `gh secret set` fails at the public-key step.
