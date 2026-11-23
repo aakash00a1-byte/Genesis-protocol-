@@ -31,7 +31,13 @@ def _pr(number, sha=HEAD):
     }
 
 
-def _install(monkeypatch, module, *, checks, runs, main_sha=BASE):
+GREEN = [
+    {"name": "lint", "conclusion": "success"},
+    {"name": "test", "conclusion": "success"},
+]
+
+
+def _install(monkeypatch, module, *, checks, runs, suites=(), main_sha=BASE):
     """Route the harness's GitHub reads to fixed payloads, no network."""
 
     def fake_github(method, path, data=None):
@@ -39,6 +45,8 @@ def _install(monkeypatch, module, *, checks, runs, main_sha=BASE):
             return {"object": {"sha": main_sha}}
         if path.endswith("/check-runs"):
             return {"check_runs": checks}
+        if path.endswith("/check-suites"):
+            return {"check_suites": list(suites)}
         if "/actions/runs" in path:
             return {"workflow_runs": runs}
         return {}
@@ -51,7 +59,7 @@ def test_health_reads_real_ci_state(monkeypatch):
     _install(
         monkeypatch,
         module,
-        checks=[{"name": "test", "conclusion": "success"}],
+        checks=GREEN,
         runs=[{"id": 1, "conclusion": "success"}],
     )
     healths = module._pr_health([_pr(90)])
@@ -178,3 +186,36 @@ def test_run_cycle_starts_work_when_blocked_prs_do_not_fill_capacity(monkeypatch
     monkeypatch.setattr(module, "poll_until_ready", lambda start: None)
     module.run_cycle(1)
     assert started, "blocked PRs must not consume every slot"
+
+
+def test_held_suite_blocks_the_loop_even_when_checks_are_green(monkeypatch):
+    """Measured on #80/#81: green check-runs plus a still-held suite. The loop
+    must not call that READY, because GitHub reports the commit unstable."""
+    module = _load()
+    _install(
+        monkeypatch,
+        module,
+        checks=GREEN,
+        runs=[{"id": 1, "conclusion": "action_required"}],
+        suites=[
+            {"id": 111, "conclusion": "action_required", "latest_check_runs_count": 0},
+            {"id": 222, "conclusion": "success", "latest_check_runs_count": 2},
+        ],
+    )
+    healths = module._pr_health([_pr(80)])
+    assert healths[0].state == "ACTION_REQUIRED"
+    assert healths[0].needs_owner
+
+
+def test_loop_does_not_claim_ready_for_a_green_subset(monkeypatch):
+    """Only the linter reported; the tests never ran."""
+    module = _load()
+    _install(
+        monkeypatch,
+        module,
+        checks=[{"name": "lint", "conclusion": "success"}],
+        runs=[{"id": 1, "conclusion": "success"}],
+    )
+    healths = module._pr_health([_pr(91)])
+    assert healths[0].state == "NO_CHECKS"
+    assert not healths[0].mergeable
