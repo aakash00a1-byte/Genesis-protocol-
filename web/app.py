@@ -2947,17 +2947,13 @@ def run_startup_checks():
         print(f"   ❌ SQLite Error: {e}")
         all_passed = False
     
-    # 2. Check Groq Provider
-    print("\n[2/4] Checking Groq Provider...")
+    # 2. Check AI providers
+    print("\n[2/4] Checking AI providers...")
     try:
-        from genesis_protocol.ai.provider_chain import get_provider_chain
-        chain = get_provider_chain()
-        if chain.is_provider_available('groq'):
-            print("   ✅ Groq Provider Available")
-        else:
-            print("   ⚠️  Groq Provider Not Configured (check GROQ_API_KEY)")
+        from genesis_protocol.ai.startup_checks import provider_line
+        print(provider_line())
     except Exception as e:
-        print(f"   ⚠️  Groq Check Error: {e}")
+        print(f"   ⚠️  Provider check error: {e}")
     
     # 3. Check Environment Variables
     print("\n[3/4] Checking Environment Variables...")
