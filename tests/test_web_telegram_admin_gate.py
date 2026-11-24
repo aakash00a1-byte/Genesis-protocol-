@@ -77,7 +77,11 @@ def test_stranger_cannot_list_work_orders(client, tmp_path, monkeypatch):
     _as_owner(monkeypatch)
     resp = client.post("/api/telegram/webhook", json=_msg("/tasks", sender=STRANGER))
     assert resp.status_code == 200
-    assert _read(tmp_path / "replies.json") == []
+    # The refusal is spoken, so the stranger learns nothing about the queue.
+    replies = _read(tmp_path / "replies.json")
+    assert len(replies) == 1
+    assert "owner" in replies[0]["text"].lower()
+    assert "task" not in replies[0]["text"].lower()
 
 
 def test_stranger_button_tap_is_ignored(client, tmp_path, monkeypatch):

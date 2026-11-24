@@ -24,7 +24,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(appmod, "TELEGRAM_COMMAND_QUEUE", str(tmp_path / "commands.json"))
     monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "test-webhook-secret")
     # Owner commands (/do, /tasks, /cancel) are admin-gated and fail closed.
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "1863492058")
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", str(OWNER_ID))
     appmod.app.config["TESTING"] = True
     c = appmod.app.test_client()
     # The webhook fails closed without the shared secret.
@@ -32,7 +32,10 @@ def client(tmp_path, monkeypatch):
     return c
 
 
-def _msg(text, chat_id=1863492058):
+OWNER_ID = 1863492058
+
+
+def _msg(text, chat_id=OWNER_ID):
     return {"message": {"text": text, "from": {"id": chat_id}, "chat": {"id": chat_id}}}
 
 
@@ -82,6 +85,13 @@ def test_cancel_marks_order_cancelled(client, tmp_path):
 def test_do_is_not_treated_as_an_approval_command(client, tmp_path):
     client.post("/api/telegram/webhook", json=_msg("/do improve docs"))
     # Nothing should have been parked on the approval command queue.
+    assert _read(tmp_path / "commands.json") == []
+
+
+def test_stranger_cannot_place_a_work_order(client, tmp_path):
+    resp = client.post("/api/telegram/webhook", json=_msg("/do wipe prod", chat_id=999999))
+    assert resp.get_json()["denied"] == "not-owner"
+    assert _read(tmp_path / "tasks.json") == []
     assert _read(tmp_path / "commands.json") == []
 
 

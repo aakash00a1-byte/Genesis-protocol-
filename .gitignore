@@ -85,6 +85,17 @@ data/
 *.sqlite3
 *.log
 
+# The evolution backlog is a review-gated, evidence-backed record that the
+# self-improvement loop reads (SELF_IMPROVE_EVOLUTION_BACKLOG). It is source,
+# not scratch data, so it is tracked despite the `data/` rule above. Git will
+# not descend into an excluded directory, so each level is re-included
+# explicitly and only the backlog file is un-ignored.
+!genesis_v5/data/
+genesis_v5/data/*
+!genesis_v5/data/evolution/
+genesis_v5/data/evolution/*
+!genesis_v5/data/evolution/backlog.jsonl
+
 # ChromaDB
 chromadb/
 
