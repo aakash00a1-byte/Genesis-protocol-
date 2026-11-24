@@ -87,3 +87,19 @@ def test_auth_rejects_overlong_username(client, endpoint):
     })
     assert r.status_code == 400
     assert 'error' in r.get_json()
+
+
+# -- chat history limit is bounded ------------------------------------------
+
+
+def _logged_in(client):
+    with client.session_transaction() as sess:
+        sess['user_id'] = 1
+
+
+@pytest.mark.parametrize("limit", ["0", "-1", "100000", "abc", ""])
+def test_chat_history_rejects_unbounded_limit(client, limit):
+    _logged_in(client)
+    r = client.get(f'/api/chat/history?limit={limit}')
+    assert r.status_code == 400
+    assert 'error' in r.get_json()
