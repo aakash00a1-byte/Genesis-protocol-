@@ -7,6 +7,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Least privilege: this workflow only lints and tests, so the token needs to read
+# the code and nothing else. Without an explicit block the token inherits the
+# repository default, which may be read-write.
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest

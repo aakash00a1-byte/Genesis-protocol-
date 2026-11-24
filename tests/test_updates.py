@@ -175,8 +175,13 @@ def _pr(number, title, branch="agent/self-improve-x", url=None, sha="abc1234def"
 
 
 def _green_checks(method, url, payload):
-    """Fake check-runs endpoint: one successful run for any commit."""
-    return {"check_runs": [{"name": "CI/CD", "conclusion": "success"}]}
+    """Fake check-runs endpoint: every required job green for any commit."""
+    return {
+        "check_runs": [
+            {"name": "lint", "conclusion": "success"},
+            {"name": "test", "conclusion": "success"},
+        ]
+    }
 
 
 def test_transport_lists_only_agent_branches() -> None:
@@ -334,7 +339,12 @@ def test_approve_falls_back_to_actions_runs() -> None:
         if "/check-runs" in url:
             raise RuntimeError("GET .../check-runs -> HTTP 403: not accessible")
         if "/actions/runs" in url:
-            return {"workflow_runs": [{"name": "CI/CD", "conclusion": "success"}]}
+            return {
+                "workflow_runs": [
+                    {"name": "lint", "conclusion": "success"},
+                    {"name": "test", "conclusion": "success"},
+                ]
+            }
         if method == "GET":
             return [_pr(5, "improve docs")]
         return {"merged": True, "sha": "abc123"}
@@ -490,3 +500,83 @@ def test_work_order_import_stays_stdlib_only() -> None:
     )
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() == "('do', 'x')"
+
+
+# ------------------------------------------------------------------
+# Merge gate: fail-closed on non-evidence (review 3)
+# ------------------------------------------------------------------
+def _approve_with(checks):
+    """Run /approve against a fixed check-run payload, return the reply."""
+    merged = []
+
+    def http(method, url, payload):
+        if "/check-runs" in url:
+            return {"check_runs": checks}
+        if "/actions/runs" in url:
+            return {"workflow_runs": []}
+        if "/merge" in url:
+            merged.append(True)
+            return {"merged": True, "sha": "abc123"}
+        return [_pr(5, "improve docs")]
+
+    reply = GitHubPRTransport("o/r", "tok", http=http).approve("5")
+    return reply, bool(merged)
+
+
+def test_a_single_skipped_check_cannot_merge() -> None:
+    """A skipped job verified nothing. Merging on it would push untested code
+    to main, and the merge is the deploy."""
+    reply, merged = _approve_with([{"name": "test", "conclusion": "skipped"}])
+    assert "merge blocked" in reply
+    assert not merged
+
+
+def test_a_single_neutral_check_cannot_merge() -> None:
+    reply, merged = _approve_with([{"name": "test", "conclusion": "neutral"}])
+    assert "merge blocked" in reply
+    assert not merged
+
+
+def test_a_green_subset_cannot_merge_when_a_required_job_is_missing() -> None:
+    """Only the linter reported; the tests never ran."""
+    reply, merged = _approve_with([{"name": "lint", "conclusion": "success"}])
+    assert "merge blocked" in reply and "required checks never reported" in reply
+    assert "test" in reply
+    assert not merged
+
+
+def test_every_required_job_green_can_merge() -> None:
+    reply, merged = _approve_with(
+        [
+            {"name": "lint", "conclusion": "success"},
+            {"name": "test", "conclusion": "success"},
+        ]
+    )
+    assert "Approved & merged" in reply
+    assert merged
+
+
+def test_required_checks_stay_enforced_when_the_shared_model_is_missing() -> None:
+    """The gate must not soften just because the shared model cannot be imported.
+
+    On a branch without ``ci_health`` the import fails; a literal fallback keeps
+    the rule instead of silently skipping it.
+    """
+    import builtins
+
+    from genesis_protocol.updates import github_prs
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "genesis_protocol.evolution.ci_health":
+            raise ImportError("simulated: model not on this branch")
+        return real_import(name, *args, **kwargs)
+
+    builtins.__import__ = fake_import
+    try:
+        required = github_prs._required_checks()
+    finally:
+        builtins.__import__ = real_import
+
+    assert required == frozenset({"lint", "test"})

@@ -29,10 +29,29 @@ AGENT_BRANCH_PREFIX = "agent/"
 
 # A check-run with one of these conclusions does not block a merge. Anything
 # else (failure, cancelled, timed_out, action_required, ...) does.
-_CHECK_RUN_OK = {"success", "neutral", "skipped"}
+#
+# ``skipped`` and ``neutral`` are deliberately absent. They were here before and
+# made this gate fail open: a single skipped check — or a PR that ran only the
+# linter — was enough to merge, because no test had to pass. A merge is the push
+# to main, so the gate has to be at least as strict as the read-only model in
+# ``genesis_protocol.evolution.ci_health``.
+_CHECK_RUN_OK = {"success"}
 
 # The evidence SHA the harness recorded in the PR body ("landed commit: `sha`").
 _EVIDENCE_SHA = re.compile(r"landed commit:\s*`([0-9a-fA-F]{7,40})`")
+
+
+def _required_checks() -> frozenset[str]:
+    """Job names that must report before a merge. Sourced from the shared model.
+
+    If the model cannot be imported the gate must still be strict, so it falls
+    back to the repository's own required set rather than skipping the rule.
+    """
+    try:
+        from genesis_protocol.evolution.ci_health import REQUIRED_CHECKS
+    except Exception:  # noqa: BLE001 - a gate must not depend on an import
+        return frozenset({"lint", "test"})
+    return frozenset(REQUIRED_CHECKS)
 
 HttpFn = Callable[[str, str, dict | None], Any]
 
@@ -213,6 +232,15 @@ class GitHubPRTransport:
             if bad:
                 names = ", ".join(sorted({str(r.get("name", "?")) for r in bad}))
                 blockers.append(f"check-runs not green: {names}")
+            # A green subset is not a verified PR. Merging on the strength of the
+            # linter alone would push untested code to main, so every required
+            # job must have reported. The set comes from ci.yml via the shared
+            # model, not from a second hardcoded copy.
+            missing = _required_checks() - {str(r.get("name", "")) for r in runs}
+            if missing:
+                blockers.append(
+                    "required checks never reported: " + ", ".join(sorted(missing))
+                )
         return blockers
 
     # -- decisions ------------------------------------------------------

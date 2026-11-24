@@ -62,3 +62,44 @@ def test_relay_script_present_and_heartbeat_mode() -> None:
     text = script.read_text(encoding="utf-8")
     assert '"heartbeat"' in text or "'heartbeat'" in text
     assert "TELEGRAM_ADMIN_ID" in text
+
+
+# -- every workflow runs with least privilege --------------------------------
+ALL_WORKFLOWS = sorted(WORKFLOWS.glob("*.yml"))
+
+
+def test_every_workflow_declares_a_permissions_block() -> None:
+    """An absent block inherits the repository default, which may be read-write.
+
+    Every workflow here only reads code, builds or tests, so the token must not
+    silently carry write access.
+    """
+    missing = [
+        path.name
+        for path in ALL_WORKFLOWS
+        if not re.search(r"(?m)^permissions:", path.read_text(encoding="utf-8"))
+    ]
+    assert not missing, f"workflows without a permissions block: {missing}"
+
+
+def test_no_workflow_grants_write_all() -> None:
+    offenders = [
+        path.name
+        for path in ALL_WORKFLOWS
+        if re.search(r"(?m)^\s+[a-z-]+:\s*write-all\s*$", path.read_text(encoding="utf-8"))
+    ]
+    assert not offenders, f"workflows granting write-all: {offenders}"
+
+
+def test_no_workflow_uses_a_dangerous_trigger() -> None:
+    """``pull_request_target`` and ``workflow_run`` run with a write token and
+    access to secrets, so a fork's code must never be built by them."""
+    offenders = [
+        path.name
+        for path in ALL_WORKFLOWS
+        if re.search(
+            r"(?m)^\s*(pull_request_target|workflow_run)\s*:",
+            path.read_text(encoding="utf-8"),
+        )
+    ]
+    assert not offenders, f"workflows with a dangerous trigger: {offenders}"
