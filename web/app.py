@@ -1066,6 +1066,12 @@ def _is_owner(user_id):
     return get_agent_policy().is_owner(user_id)
 
 
+def _self_preservation():
+    from genesis_protocol.gluten_os import get_self_preservation
+
+    return get_self_preservation()
+
+
 @app.route('/api/identity', methods=['GET'])
 def api_identity():
     """Report the real provider/model and available capabilities.
@@ -3458,8 +3464,7 @@ def api_simulation():
 def api_preservation_status():
     """Get self-preservation status."""
     try:
-        from genesis_protocol.gluten_os import get_self_preservation
-        sp = get_self_preservation()
+        sp = _self_preservation()
         return jsonify(sp.get_status())
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -3469,8 +3474,7 @@ def api_preservation_status():
 def api_preservation_health():
     """Get system health."""
     try:
-        from genesis_protocol.gluten_os import get_self_preservation
-        sp = get_self_preservation()
+        sp = _self_preservation()
         return jsonify(sp.health_check())
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -3480,8 +3484,7 @@ def api_preservation_health():
 def api_preservation_run():
     """Run full preservation cycle."""
     try:
-        from genesis_protocol.gluten_os import get_self_preservation
-        sp = get_self_preservation()
+        sp = _self_preservation()
         results = sp.run_full_preservation()
         return jsonify(results)
     except Exception as e:
@@ -3492,8 +3495,7 @@ def api_preservation_run():
 def api_preservation_identity():
     """Preserve identity specifically."""
     try:
-        from genesis_protocol.gluten_os import get_self_preservation
-        sp = get_self_preservation()
+        sp = _self_preservation()
         success = sp.preserve_identity()
         return jsonify({'status': 'preserved' if success else 'failed'})
     except Exception as e:
@@ -3504,8 +3506,7 @@ def api_preservation_identity():
 def api_preservation_memories():
     """Preserve memories specifically."""
     try:
-        from genesis_protocol.gluten_os import get_self_preservation
-        sp = get_self_preservation()
+        sp = _self_preservation()
         success = sp.preserve_memories()
         return jsonify({'status': 'preserved' if success else 'failed'})
     except Exception as e:
@@ -3516,8 +3517,7 @@ def api_preservation_memories():
 def api_preservation_evidence():
     """Get evidence log."""
     try:
-        from genesis_protocol.gluten_os import get_self_preservation
-        sp = get_self_preservation()
+        sp = _self_preservation()
         limit = request.args.get('limit', 50, type=int)
         return jsonify({'log': sp.evidence_logger.get_log(limit)})
     except Exception as e:
@@ -3528,8 +3528,7 @@ def api_preservation_evidence():
 def api_preservation_lessons():
     """Get lessons learned."""
     try:
-        from genesis_protocol.gluten_os import get_self_preservation
-        sp = get_self_preservation()
+        sp = _self_preservation()
         lessons = sp.evidence_logger.get_lessons()
         return jsonify({'lessons': lessons, 'count': len(lessons)})
     except Exception as e:
@@ -3540,8 +3539,7 @@ def api_preservation_lessons():
 def api_preservation_backup():
     """Run automatic backup."""
     try:
-        from genesis_protocol.gluten_os import get_self_preservation
-        sp = get_self_preservation()
+        sp = _self_preservation()
         success = sp.auto_backup()
         return jsonify({'status': 'completed' if success else 'failed'})
     except Exception as e:
