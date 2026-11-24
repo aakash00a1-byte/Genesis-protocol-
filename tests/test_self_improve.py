@@ -560,4 +560,94 @@ def test_shipped_backlog_proposals_are_unique() -> None:
     """Duplicate focuses would make the loop pick the same work twice."""
     titles = [p["title"] for r in _backlog_records() for p in r["proposals"]]
     assert len(titles) == len(set(titles))
+# --------------------------------------------------------------------------
+# Credential preflight. Regression: a set-but-rejected OPENHANDS_API_KEY made
+# every cycle fail with 401 NoCredentialsError while the scheduler stayed green,
+# so the outage was invisible and PR proposals silently stopped.
+# --------------------------------------------------------------------------
+class _FakeResponse:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self):
+        return b'{"language":"en"}'
+
+
+def test_preflight_ok_when_key_is_accepted(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setattr(module, "API_KEY", "sk-oh-good")
+    monkeypatch.setattr(module.urllib.request, "urlopen", lambda req, timeout=0: _FakeResponse())
+    ok, reason = module.check_openhands_credentials()
+    assert ok is True and reason == "ok"
+
+
+def test_preflight_rejects_a_set_but_unauthorized_key(monkeypatch) -> None:
+    """The exact production failure: key present, API answers 401."""
+    module = _load()
+    monkeypatch.setattr(module, "API_KEY", "sk-oh-stale")
+
+    def _raise(req, timeout=0):
+        raise module.urllib.error.HTTPError(
+            req.full_url, 401, "Unauthorized", {}, None  # type: ignore[arg-type]
+        )
+
+    monkeypatch.setattr(module.urllib.request, "urlopen", _raise)
+    ok, reason = module.check_openhands_credentials()
+    assert ok is False
+    assert "rejected" in reason and "OPENHANDS_API_KEY" in reason
+
+
+def test_preflight_flags_missing_key(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setattr(module, "API_KEY", "")
+    ok, reason = module.check_openhands_credentials()
+    assert ok is False and "not set" in reason
+
+
+def test_main_stops_and_alerts_when_credentials_are_rejected(monkeypatch, capsys) -> None:
+    """A rejected key must stop the run with a non-zero exit and one alert."""
+    module = _load()
+    monkeypatch.setattr(module, "API_KEY", "sk-oh-stale")
+    monkeypatch.setattr(module, "check_openhands_credentials", lambda: (False, "rejected: 401"))
+    alerted: list[str] = []
+    monkeypatch.setattr(module, "_credential_alert", lambda reason: alerted.append(reason))
+    monkeypatch.setattr(module, "run_cycle", lambda index: (_ for _ in ()).throw(AssertionError("must not run")))
+    monkeypatch.setattr(module.sys, "argv", ["self_improve.py", "--once"])
+
+    rc = module.main()
+
+    assert rc == 1
+    assert alerted == ["rejected: 401"]
+
+
+def test_credential_alert_fires_once_per_process(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setattr(module, "_CREDENTIAL_ALERTED", False)
+    sent: list[str] = []
+    monkeypatch.setattr(module, "_notify", lambda text, **kw: sent.append(text))
+    module._credential_alert("boom")
+    module._credential_alert("boom again")
+    assert len(sent) == 1
+
+
+def test_run_cycle_alerts_on_midrun_credential_revocation(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setattr(module, "MAX_OPEN_PRS", 99)
+    monkeypatch.setattr(module, "open_agent_prs", lambda: [])
+    monkeypatch.setattr(module, "choose_topic", lambda i, taken: "topic")
+
+    def _revoked(topic):
+        raise RuntimeError('POST /api/v1/app-conversations -> HTTP 401: {"error":"NoCredentialsError"}')
+
+    monkeypatch.setattr(module, "start_conversation", _revoked)
+    alerts: list[str] = []
+    monkeypatch.setattr(module, "_credential_alert", lambda reason: alerts.append(reason))
+
+    module.run_cycle(0)
+
+    assert len(alerts) == 1 and "NoCredentialsError" in alerts[0]
+
 
