@@ -32,6 +32,7 @@ never printed.
 
 from __future__ import annotations
 
+import hashlib
 import html
 import json
 import os
@@ -41,7 +42,7 @@ import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 
 HF_SPACE_URL = os.environ.get(
@@ -270,22 +271,25 @@ def keep_awake() -> bool:
     return _get(f"{HF_SPACE_URL}/", timeout=60) is not None
 
 
-def _load_seen() -> set[str]:
+def _load_seen() -> dict[str, None]:
+    """Sent ids, oldest first. A dict is used as an insertion-ordered set."""
     if not STATE_FILE:
-        return set()
+        return {}
     try:
         with open(STATE_FILE, encoding="utf-8") as handle:
             data = json.load(handle)
         ids = data.get("sent_ids", [])
-        return {str(i) for i in ids} if isinstance(ids, list) else set()
+        return dict.fromkeys(str(i) for i in ids) if isinstance(ids, list) else {}
     except Exception:  # noqa: BLE001 - a missing/corrupt state file is not fatal
-        return set()
+        return {}
 
 
-def _save_seen(seen: set[str]) -> None:
+def _save_seen(seen: Iterable[str]) -> None:
     if not STATE_FILE:
         return
-    # Keep only the most recent ids so the file stays bounded.
+    # Keep only the most recent ids so the file stays bounded. Insertion order
+    # is preserved, so the oldest ids are the ones dropped; trimming a set
+    # would drop arbitrary entries and let an old reply be re-sent.
     trimmed = list(seen)[-MAX_SEEN_IDS:]
     try:
         with open(STATE_FILE, "w", encoding="utf-8") as handle:
@@ -307,8 +311,11 @@ def _valid_reply(reply: object) -> tuple[str, str, str] | None:
     reply_id = reply.get("id")
     if not isinstance(reply_id, (str, int)) or not str(reply_id).strip():
         # Entries without an id cannot be deduplicated; derive a stable one from
-        # the content so a repeated payload is still only sent once per run.
-        reply_id = f"{chat_id}:{abs(hash(text))}"
+        # the content so a repeated payload is still only sent once per run and
+        # across runs. ``hash()`` is salted per process, so it would not match
+        # the persisted id on the next run.
+        digest = hashlib.sha256(f"{chat_id}:{text}".encode()).hexdigest()[:16]
+        reply_id = f"{chat_id}:{digest}"
     return str(reply_id), str(chat_id).strip(), text[:MAX_REPLY_CHARS]
 
 
@@ -405,7 +412,7 @@ def relay_once() -> int:
             break
         attempted += 1
         if _telegram_send(chat_id, text):
-            seen.add(reply_id)
+            seen[reply_id] = None
             sent += 1
 
     if sent:
