@@ -1719,3 +1719,31 @@ intelligence / unrestricted autonomy (surfaced as explicit `NON_CLAIMS`). Owner
 surface: `GET /api/investigation/status`, `/api/investigation/domains`,
 `/api/investigation/defence` (all owner-only, read-only). Tests:
 `tests/test_investigation.py`.
+
+## PR triage and deploy (2026-11-24)
+
+The four long-open PRs were resolved in one pass, verified before landing:
+
+- **#69** (V7 investigation framework) — merged. Additive, 53 new tests, routes
+  above the `app.run` block, no subprocess/eval in the package.
+- **#37** (durable Telegram queues, news mode, CI dispatch for agent PRs) —
+  merged. 175 focused tests; the `_write_queue`/`_QUEUE_LOCK` rewrite is the fix
+  for the measured 3-of-40 concurrent-append loss.
+- **#54** (runtime commands + GitHub status) — **closed, already landed**: every
+  file is identical on `main` except an AGENTS.md wording block and 5 lines of
+  `tests/test_telegram_github_commands.py`. Do not re-merge it; it now conflicts
+  add/add on that test file.
+- **#27** (webhook secret/liveness tests, health-check fixes, top-story news) —
+  **closed, superseded by #37**, which extracts its useful parts. Merging it
+  as-is would have reverted the `MAX_QUEUE_ITEMS` batch cap, deleted the
+  `_send_report` helper (a runtime `NameError`), and removed a security
+  regression test. Its one unique fix (the kernel test hardcoding
+  `/workspace/project/README.md`) was ported to `main` instead, so
+  `genesis_v5/tests/unit/test_tools.py` now passes in any checkout layout.
+
+Verification before deploy: simulated merges, full suite **2160 passed, 0
+failed** (the kernel path failure is gone), CI-equivalent lint clean, ruff F811
+clean. Push `2e47de57` deployed via `deploy-space.yml`; the Space repo reports
+`deploy: sync from GitHub main (2e47de5)`, `/api/health` is `healthy`, and the
+three `/api/investigation/*` routes answer 401 (registered, login-gated) rather
+than 404.
