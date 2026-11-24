@@ -4085,6 +4085,54 @@ def api_diagnostics_subsystems():
 
 
 # ---------------------------------------------------------------------------
+# Investigation framework (V7). Owner-only, read-only: it reports domains,
+# classifications and the unknown-system defence probe results, and never acts
+# on the system, grants permission or claims a hidden actor. The full
+# investigation surface lives in genesis_protocol.investigation.
+# ---------------------------------------------------------------------------
+
+@app.route('/api/investigation/status', methods=['GET'])
+@login_required
+def api_investigation_status():
+    """Owner-only: investigation capability inventory + explicit non-claims."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.investigation import get_orchestrator
+
+    return jsonify(get_orchestrator().status())
+
+
+@app.route('/api/investigation/domains', methods=['GET'])
+@login_required
+def api_investigation_domains():
+    """Owner-only: the six research domains and their admissible evidence."""
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.investigation import all_domains
+
+    return jsonify({'domains': [d.to_dict() for d in all_domains()]})
+
+
+@app.route('/api/investigation/defence', methods=['GET'])
+@login_required
+def api_investigation_defence():
+    """Owner-only: run the isolated unknown-system defence probes.
+
+    Read-only and side-effect free: each probe runs in the canonical sandbox and
+    reports whether an influence channel was contained. It never concludes that
+    a hidden actor is responsible.
+    """
+    user_id = session['user_id']
+    if not _is_owner(user_id):
+        return jsonify({'error': 'owner access required'}), 403
+    from genesis_protocol.investigation import UnknownSystemDefence
+
+    return jsonify(UnknownSystemDefence().status())
+
+
+# ---------------------------------------------------------------------------
 # Sidebar pages. Each links to a nav entry in base_v4.html; the data comes
 # from the API routes above, so the page never shows invented values.
 # ---------------------------------------------------------------------------
