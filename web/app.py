@@ -2437,18 +2437,13 @@ def _handle_callback_query(callback):
     allowed = {'approve', 'reject', 'list', 'updates', 'pending', 'status', 'help'}
     if verb not in allowed:
         return jsonify({'ok': True})
-    # A button tap parks the same owner commands as typed text, so it is gated
-    # on the sender exactly like the message path.
-    if not _telegram_is_admin(callback.get('from')):
-        return jsonify({'ok': True})
-    command = f'/{verb}' + (f' {arg}' if arg else '')
     message = callback.get('message') or {}
     chat = message.get('chat') or {}
     chat_id = chat.get('id') if isinstance(chat, dict) else None
     if not isinstance(chat_id, (int, str)) or not str(chat_id).strip():
         return jsonify({'ok': True})
     # A button tap is a privileged approval: only a configured owner may use it.
-    if not _is_owner_sender(callback):
+    if not _telegram_is_admin(callback.get('from')):
         return jsonify({'ok': True, 'denied': 'not-owner'})
     command = f'/{verb}' + (f' {arg}' if arg else '')
     try:
@@ -2488,7 +2483,10 @@ def _telegram_admin_ids():
     relay and self-improvement workflows use that name.
     """
     raw = f"{os.environ.get('TELEGRAM_ADMIN_IDS', '')},{os.environ.get('TELEGRAM_ADMIN_ID', '')}"
-    return {part.strip() for part in raw.replace(' ', ',').split(',') if part.strip()}
+    # Semicolons are accepted too: TELEGRAM_ADMIN_IDS is hand-edited in the
+    # Space env, where a ';' separator is an easy typo to make.
+    normalised = raw.replace(';', ',').replace(' ', ',')
+    return {part.strip() for part in normalised.split(',') if part.strip()}
 
 
 def _telegram_is_admin(sender):

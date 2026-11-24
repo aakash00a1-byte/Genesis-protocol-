@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 OWNER_ID = 1863492058
 STRANGER_ID = 999999
+_SECRET = "test-webhook-secret"
 
 
 @pytest.fixture
@@ -37,11 +38,13 @@ def client(tmp_path, monkeypatch):
     }
     for name, path in paths.items():
         monkeypatch.setattr(appmod, name, str(path))
-    # Webhook secret unset so these tests exercise routing/authorisation alone;
-    # the secret contract has its own file (test_web_webhook_secret.py).
-    monkeypatch.delenv("TELEGRAM_WEBHOOK_SECRET", raising=False)
+    # The webhook fails closed without the shared secret, so these routing
+    # tests present a valid one; the secret contract itself has its own file
+    # (test_web_webhook_secret.py).
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", _SECRET)
     appmod.app.config["TESTING"] = True
     client = appmod.app.test_client()
+    client.environ_base = {"HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN": _SECRET}
     client.paths = paths
     return client
 
@@ -64,7 +67,10 @@ def _msg(text, sender=OWNER_ID):
 
 
 def _post(client, update):
-    resp = client.post("/api/telegram/webhook", json=update)
+    resp = client.post(
+        "/api/telegram/webhook", json=update,
+        headers={"X-Telegram-Bot-Api-Secret-Token": _SECRET},
+    )
     assert resp.status_code == 200, resp.data
     return resp.get_json()
 
@@ -79,7 +85,8 @@ def test_status_is_answered_not_queued(client, monkeypatch):
     assert _read(client, "TELEGRAM_COMMAND_QUEUE") == []
     replies = _read(client, "TELEGRAM_REPLY_QUEUE")
     assert len(replies) == 1
-    assert "Genesis bot running" in replies[0]["text"]
+    # The reply reports live runtime facts, not a hardcoded blurb.
+    assert "GLUTEN status:" in replies[0]["text"]
 
 
 def test_help_is_answered_not_queued(client, monkeypatch):
