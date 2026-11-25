@@ -1747,3 +1747,35 @@ clean. Push `2e47de57` deployed via `deploy-space.yml`; the Space repo reports
 `deploy: sync from GitHub main (2e47de5)`, `/api/health` is `healthy`, and the
 three `/api/investigation/*` routes answer 401 (registered, login-gated) rather
 than 404.
+
+## V7 security recovery: what was learned the hard way (2026-11-25)
+
+- **`pull_request` already blocks a direct push; `update` is the rule that
+  breaks merges.** GitHub's docs: `update` = "only users with bypass permissions
+  can push"; `pull_request` = "all changes must be associated with a pull
+  request". A merge is a push by the merging user, so `update` +
+  `bypass_actors: []` blocks every merge (that was PR #86's `blocked`). Do not
+  restore `update`; the live ruleset (`Gen`, 26347102) is already correct.
+- **`py/polynomial-redos` is not cleared by narrowing `\s*` to `[ \t]*`.** A
+  mechanical rewrite still reported 13 new alerts in CI. The query wants the
+  ambiguity gone: match only the fixed prefix and slice the rest, or scan the
+  string by hand (`_fenced_body`, `_valid_email`, `_after_marker`,
+  `_strip_list_marker`, the `x`-multiplier loop in `autonomous_mode`).
+- **`py/clear-text-logging-sensitive-data` on a `print` of harness-owned text
+  is not cleared by a redaction wrapper** - CodeQL follows the value into the
+  call. #6/#8 in `scripts/` are therefore tracked residuals, not fixed.
+- **GitHub's PR "CodeQL" check only fails on new alerts in changed lines.**
+  Editing a line that already carries an alert reports it as *new*; leaving the
+  file untouched does not. That is why reverting the two scripts kept the gate
+  green while their alerts stay open on `main`.
+- **`EncryptionService` now derives its key with PBKDF2 (200k, fixed salt).**
+  Pre-v7 ciphertext is not readable: migrate recovery-vault entries with the
+  previous release before deploying. A legacy fallback was rejected because it
+  keeps `sha256(password)` in the decrypt path, which is the flagged construct.
+- **The merge gate now checks signatures on every PR commit**
+  (`GitHubPRTransport.require_signatures`), not just the head, because a squash
+  merge lands them all. `require_checks=False` disables the whole gate.
+- **State after the recovery PR:** #87 `security/v7-recovery`, three signed
+  commits, `mergeable_state: clean`, 0 new alerts, 2176 tests passing. It is
+  **not** merged - the owner approves. The ruleset probe
+  (`scripts/probe_pr_only_ruleset.py`) needs owner approval to run.
