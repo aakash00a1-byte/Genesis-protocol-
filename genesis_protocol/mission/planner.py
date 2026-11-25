@@ -129,21 +129,25 @@ def _after_marker(clause: str) -> Optional[tuple[List[str], str]]:
     """Parse a leading ``after: t1, t2 - goal`` marker.
 
     Hand-rolled rather than a regex: ``([^,]+(?:,[^,]+)*)`` is the kind of nested
-    quantifier that backtracks polynomially. Returns ``(depends, goal)`` or
-    ``None`` when the clause has no usable marker.
+    quantifier that backtracks polynomially.
+
+    The separator is the *last* ``-``/``:`` after the last comma, which is what
+    the old pattern matched: its first group could not contain a comma and the
+    engine backtracked to the final separator. Splitting at the first separator
+    instead broke dependency ids that contain a hyphen -- ``after: task-1 - goal``
+    parsed as ``task`` + ``1 - goal``.
     """
     if not clause.lower().startswith("after:"):
         return None
     rest = clause[len("after:"):]
-    for position, char in enumerate(rest):
-        if char in "-:":
-            if position == 0:
-                return None
-            names = [name.strip() for name in rest[:position].split(",") if name.strip()]
-            goal = rest[position + 1:].strip()
-            if names and goal:
-                return names, goal
-            return None
+    after_last_comma = rest.rfind(",") + 1
+    cut = max(rest.rfind("-"), rest.rfind(":"))
+    if cut < 0 or cut < after_last_comma:
+        return None
+    names = [name.strip() for name in rest[:cut].split(",") if name.strip()]
+    goal = rest[cut + 1:].strip()
+    if names and goal:
+        return names, goal
     return None
 
 

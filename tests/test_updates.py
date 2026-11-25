@@ -10,6 +10,8 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from genesis_protocol.updates import (
@@ -416,6 +418,7 @@ def test_approve_fallback_blocks_a_run_still_in_progress() -> None:
 
 
 def test_approve_with_gate_disabled_merges() -> None:
+    """The opt-out is test-only: it needs the explicit ``allow_unverified`` hook."""
     calls = []
 
     def http(method, url, payload):
@@ -424,10 +427,17 @@ def test_approve_with_gate_disabled_merges() -> None:
             return [_pr(5, "improve docs")]
         return {"merged": True, "sha": "abc123"}
 
-    transport = GitHubPRTransport("o/r", "tok", http=_signed_http(http), require_checks=False)
+    transport = GitHubPRTransport(
+        "o/r", "tok", http=_signed_http(http), require_checks=False, allow_unverified=True
+    )
     assert "Approved & merged" in transport.approve("5")
     # With the gate off, check-runs are never queried.
     assert not any("/check-runs" in url for _, url in calls)
+
+
+def test_gate_flag_without_the_test_hook_is_refused() -> None:
+    with pytest.raises(ValueError, match="cannot be disabled"):
+        GitHubPRTransport("o/r", "tok", http=_green_checks, require_checks=False)
 
 
 def test_transport_reject_closes_pr() -> None:

@@ -204,9 +204,10 @@ this adds no dependency. `sys.path` gets `genesis_v5/` for the import only.
 - Fail-closed everywhere: a missing gate, an empty patch, a protected path, a
   secret, a failing test, or a verifier rejection all mean **no PR**.
 - Config: `SELF_IMPROVE_VERIFY` (default 1), `SELF_IMPROVE_VERIFY_TESTS`
-  (default `bash scripts/verify_all.sh`), `SELF_IMPROVE_VERIFY_REQUIRE_TESTS`,
-  `SELF_IMPROVE_REQUIRE_CHECKS`. Set `SELF_IMPROVE_VERIFY=0` only to fall back
-  to landing without verifying.
+  (default `bash scripts/verify_all.sh`), `SELF_IMPROVE_VERIFY_REQUIRE_TESTS`.
+  Set `SELF_IMPROVE_VERIFY=0` only to fall back to landing without verifying.
+  There is deliberately **no** environment variable for the merge gate itself
+  (see "The merge gate" below).
 - The self-improve job installs `requirements.txt` + `pytest`, because the gate
   re-runs the suite inside the worktree.
 
@@ -233,10 +234,52 @@ refuse, the gate reports `checks could not be read` and still blocks.
 When the private repo's Actions minutes are exhausted (see "Auto-deploy to the
 Space" below — every run fails in ~4s with zero steps), the head's check-runs
 report `failure`, so the merge gate blocks every `/approve`. That is the gate
-working as designed, not a bug. To merge in that state, either raise the
-spending limit / make the repo public so CI can actually run, or set
-`SELF_IMPROVE_REQUIRE_CHECKS=0` for the approval run. The gate never merges a
-head whose CI did not genuinely pass.
+working as designed, not a bug. The gate never merges a head whose CI did not
+genuinely pass, and there is no longer any switch to make it: `require_checks`
+is not a usable flag (`require_checks=False` raises unless an isolated test also
+passes `allow_unverified=True`), and `SELF_IMPROVE_REQUIRE_CHECKS` is gone from
+both the code and `self-improve.yml`. To merge while minutes are out, fix the
+billing — do not look for a bypass, because there is none.
+
+**Every commit, every page.** `_commit_shas` reads `/pulls/{n}/commits` page by
+page (100 per page) and fails closed on an unreadable page, a non-list payload,
+an entry without a sha, or more than 5,000 commits. A single-request version
+existed briefly and silently left commit 101 onward unchecked; the regression
+tests are in `tests/test_gate_hardening.py` (`test_gate_checks_commit_101`,
+`test_gate_checks_an_unsigned_commit_buried_on_page_three`).
+
+## Vault key derivation: 600k PBKDF2, and how old ciphertext is recovered
+
+`genesis_protocol/security/encryption.py` derives the Fernet key with
+PBKDF2-HMAC-SHA256 at **600,000** iterations (OWASP's figure for that
+construction; it was a single SHA-256 before PR #87, then 200,000). The salt is
+still the fixed constant `genesis-protocol/encryption/v2`, because the key has
+to be reproducible from the password alone.
+
+- **Do not put a legacy derivation back in `decrypt`.** A `sha256(password)`
+  fallback keeps a weak KDF in the runtime path and is exactly what CodeQL alert
+  #99 flagged. `decrypt` raises `LegacyCiphertextError` with an actionable
+  message instead.
+- **Recovery is `scripts/migrate_backup_vault.py`**: it takes the old key as 64
+  hex characters (`--legacy-key-hex` / `LEGACY_BACKUP_KEY_HEX`), opens each
+  container, re-checks it against its own manifest, re-seals it with the current
+  key, verifies, and keeps `<id>.gbk.pre-migration`. Dry run is the default;
+  `--apply` writes. It is idempotent.
+- **The derivation recipes live in the docs, not the code**
+  (`docs/security/V7_SECURITY_RECOVERY.md`, "Backup migration"). The repo has no
+  weak-hash call on a password at all.
+- **`GENESIS_BACKUP_KEY` is fail-closed**, so a deployment that never set it has
+  no containers to migrate. Check `ls data/backups/*.gbk` before worrying.
+- **A per-install random salt is designed but NOT implemented** (same doc,
+  "Per-install salt"): it needs a versioned ciphertext format plus a
+  reader-accepts-old/writer-emits-new window. Do not change the format without
+  that migration, or existing containers become unreadable.
+- **`hash_password`/`verify_password` stay at 100,000** on purpose: their
+  iteration count is baked into every stored hash, so changing it silently
+  invalidates existing passwords. A raise there needs rehash-on-login.
+
+Tests: `tests/test_gate_hardening.py` (600k, legacy error, CLI migration,
+wrong-key refusal, kept original, idempotency, corrupt container).
 
 ## Quarantined legacy modules (V7 P1, 2026-11-10)
 

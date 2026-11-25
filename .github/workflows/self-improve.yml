@@ -110,7 +110,6 @@ jobs:
           # /workspace/project and runs BOTH suites — not just tests/.
           SELF_IMPROVE_VERIFY_TESTS: "bash scripts/verify_all.sh"
           SELF_IMPROVE_VERIFY_REQUIRE_TESTS: "1"
-          SELF_IMPROVE_REQUIRE_CHECKS: "1"
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ADMIN_ID: ${{ secrets.TELEGRAM_ADMIN_ID }}
         run: |

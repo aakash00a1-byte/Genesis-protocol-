@@ -39,7 +39,11 @@ from genesis_protocol.recovery.manifest import (
     utcnow,
     verify_payload,
 )
-from genesis_protocol.security.encryption import EncryptionService
+from genesis_protocol.security.encryption import (
+    EncryptionService,
+    LegacyCiphertextError,
+    decrypt_with_raw_key,
+)
 
 FORMAT = "genesis-backup/1"
 CONTAINER_SUFFIX = ".gbk"
@@ -271,7 +275,7 @@ class BackupVault:
         path = self.container_path(backup_id)
         if not path.is_file():
             raise BackupError(f"backup '{backup_id}' not found")
-        body = self.encryption.decrypt(path.read_text(encoding="utf-8"))
+        body = self.encryption.decrypt(_read_container_text(path, backup_id))
         try:
             container = json.loads(body)
         except json.JSONDecodeError as exc:
@@ -283,6 +287,79 @@ class BackupVault:
             raise BackupError(f"backup '{backup_id}' manifest hash does not match its content")
         files = {k: base64.b64decode(v) for k, v in container.get("files", {}).items()}
         return manifest, files
+
+    def migrate_container(
+        self,
+        backup_id: str,
+        legacy_key: bytes,
+        keep_original: bool = True,
+    ) -> Dict[str, Any]:
+        """Re-encrypt a container that was sealed by an older key derivation.
+
+        The key derivation changed twice (single SHA-256, then PBKDF2 with
+        200,000 iterations), so ciphertext from an older release cannot be
+        opened by the current service. Rather than dropping it, the container is
+        decrypted with the caller-supplied legacy key, verified against its own
+        manifest, and re-sealed with the current key.
+
+        Safety: the manifest and every payload hash are verified *before* the
+        file is replaced, the re-sealed blob is proved to decrypt back to the
+        identical body, and the original is kept alongside as
+        ``<id>.gbk.pre-migration`` unless ``keep_original=False``.
+        """
+        path = self.container_path(backup_id)
+        if not path.is_file():
+            raise BackupError(f"backup '{backup_id}' not found")
+
+        sealed = _read_container_text(path, backup_id)
+        try:
+            body = decrypt_with_raw_key(sealed, legacy_key)
+        except LegacyCiphertextError as exc:
+            raise BackupError(
+                f"backup '{backup_id}' was not sealed with the supplied legacy key"
+            ) from exc
+        except Exception as exc:  # noqa: BLE001 - a migration must not guess
+            raise BackupError(
+                f"backup '{backup_id}' could not be opened: {type(exc).__name__}"
+            ) from exc
+
+        try:
+            container = json.loads(body)
+        except json.JSONDecodeError as exc:
+            raise BackupError(f"backup '{backup_id}' is not a valid container: {exc}") from exc
+        if container.get("format") != FORMAT:
+            raise BackupError(f"backup '{backup_id}' has an unknown format")
+        manifest = BackupManifest.from_dict(container["manifest"])
+        if container.get("manifest_hash") != manifest.manifest_hash():
+            raise BackupError(
+                f"backup '{backup_id}' manifest hash does not match its content"
+            )
+        files = {k: base64.b64decode(v) for k, v in container.get("files", {}).items()}
+        integrity = verify_payload(files, manifest.entries)
+        if not integrity.ok:
+            raise BackupError(
+                f"backup '{backup_id}' failed its own integrity check: {integrity.detail}"
+            )
+
+        resealed = self.encryption.encrypt(body)
+        if self.encryption.decrypt(resealed) != body:
+            raise BackupError(
+                f"backup '{backup_id}' re-encryption did not round-trip; nothing written"
+            )
+
+        original = path.with_name(path.name + ".pre-migration")
+        if keep_original:
+            self._atomic_write(original, sealed.encode("utf-8"))
+        self._atomic_write(path, resealed.encode("utf-8"))
+        self._record("backup_migrated", severity="info", backup_id=backup_id,
+                     entries=len(files), original_kept=bool(keep_original))
+        return {
+            "backup_id": backup_id,
+            "migrated": True,
+            "entries": len(files),
+            "original_kept": bool(keep_original),
+            "original_path": str(original) if keep_original else None,
+        }
 
     # -- verify / restore -----------------------------------------------------
 
@@ -470,3 +547,18 @@ def _age_days(created_at: str, reference) -> float:
         return (reference - created).total_seconds() / 86400.0
     except TypeError:
         return 0.0
+
+
+def _read_container_text(path: Path, backup_id: str) -> str:
+    """Container bytes as text, or a BackupError that says what is wrong.
+
+    A truncated or foreign file used to surface as ``UnicodeDecodeError`` from
+    ``read_text``, which read like a bug rather than the corruption it is.
+    """
+    try:
+        return path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise BackupError(
+            f"backup '{backup_id}' is corrupt: the container is not the expected "
+            "encrypted text (truncated file, wrong format, or a different key)"
+        ) from exc

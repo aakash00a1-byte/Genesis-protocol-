@@ -75,7 +75,13 @@ def read_signature(repo: str, sha: str, http: HttpFn) -> CommitSignature:
         return CommitSignature(sha=sha, verified=False, reason="unreadable: no verdict")
 
     verified = verification.get("verified") is True
-    reason = str(verification.get("reason") or ("valid" if verified else "unknown"))
+    # The reason is only meaningful when GitHub actually returned a boolean.
+    # A truthy string ("true") or 1 used to reach the refusal message as
+    # "not signed (reason: valid)", which reads like a contradiction.
+    raw_verdict = verification.get("verified")
+    reason = str(verification.get("reason") or "unknown")
+    if not verified and raw_verdict is not False:
+        reason = f"verdict was {raw_verdict!r}, not a boolean true"
     signature_type = verification.get("signature_type")
 
     author = payload.get("author")

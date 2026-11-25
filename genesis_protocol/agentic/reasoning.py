@@ -159,7 +159,7 @@ def _strip_list_marker(line: str) -> str:
     """Body of a ``1.`` / ``2)`` list line, or "" when the line is not numbered."""
     stripped = line.strip()
     digits = 0
-    while digits < len(stripped) and digits < 3 and stripped[digits].isdigit():
+    while digits < len(stripped) and stripped[digits].isdigit():
         digits += 1
     if not digits or digits >= len(stripped) or stripped[digits] not in ".)":
         return ""
@@ -199,8 +199,15 @@ class StructuredReasoning:
     @staticmethod
     def _split_subproblems(goal: str) -> List[str]:
         text = goal or ""
-        numbered = [item for item in (_strip_list_marker(line) for line in text.split("\n"))
-                    if item]
+        numbered: List[str] = []
+        for line in text.split("\n"):
+            body = _strip_list_marker(line)
+            if body:
+                numbered.append(body)
+            elif line.strip() and numbered:
+                # Pre-refactor behaviour: prose between or after list items
+                # belonged to the item above it, not to a new sub-problem.
+                numbered[-1] = f"{numbered[-1]} {line.strip()}"
         if len(numbered) > 1:
             return numbered
         for marker in (" and then ", " then ", ";", "->", "\u2192", "\n"):

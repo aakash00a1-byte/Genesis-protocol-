@@ -149,23 +149,93 @@ live vulnerability. No alert is dismissed or suppressed in the CodeQL UI.
 | #2 `py/clear-text-storage-sensitive-data` | `quarantine/genesis_protocol/deploy/genesis_deploy_agent.py` | quarantined legacy module: not importable, not packaged, not run (see `quarantine/README.md`). Fixing it would imply it is supported. |
 | #6, #8 `py/clear-text-logging-sensitive-data` | `scripts/patch_verification.py`, `scripts/self_improve.py` | these print harness-owned status text. Wrapping the value in a redaction helper was tried and **did not clear the query** — CodeQL follows the value into the `print`. The only way to clear it is to stop printing, which would hide exactly the failures these scripts exist to report. Left as tracked residual, not suppressed. |
 
-### Migration note from the encryption change
+### Backup migration (the KDF moved again: 200,000 -> 600,000 iterations)
 
-The key derivation changed, so ciphertext written by an older release cannot be
-decrypted by this one. Before deploying:
+The derivation has now changed twice, so there are three possible ciphertexts:
 
-1. decrypt any recovery-vault entry you need to keep, using the previous
-   release (or a copy of the old `EncryptionService`), and re-encrypt it after
-   the upgrade;
-2. `GENESIS_BACKUP_KEY` is fail-closed, so a deployment without it never wrote
-   a backup and needs no migration.
+| Written by | Derivation | Readable by this PR |
+| --- | --- | --- |
+| pre-v7 release | `sha256(password)` | no |
+| PR #87 first pass (never merged) | PBKDF2-HMAC-SHA256, 200,000, salt `genesis-protocol/encryption/v2` | no |
+| this PR | PBKDF2-HMAC-SHA256, **600,000**, salt `genesis-protocol/encryption/v2` | yes |
 
-A legacy-key fallback was written first and then removed: it kept
-`sha256(password)` alive in the decrypt path, which CodeQL correctly flags, and
-carrying a weak KDF forever to read hypothetical ciphertext is worse than a
-documented one-time migration.
+Nothing is dropped: `EncryptionService.decrypt` raises `LegacyCiphertextError`
+instead of a bare `InvalidToken`, and that error names the migration tool. The
+tool is `scripts/migrate_backup_vault.py`; it opens each container with the old
+key, re-checks it against its own manifest, re-seals it with the current key, and
+verifies the result.
 
----
+**Does anything actually need migrating?** `GENESIS_BACKUP_KEY` is fail-closed,
+so a deployment that never set it never wrote a backup. Check before doing
+anything:
+
+```bash
+ls -la data/backups/*.gbk 2>/dev/null || echo "no vault containers"
+```
+
+If that prints nothing, there is nothing to migrate and no data to lose.
+
+**Derive the legacy key** (run this where the old key is known; the repository
+deliberately contains no weak-hash call, so the derivation lives here):
+
+```bash
+# pre-v7 containers (single SHA-256 of the password)
+LEGACY_BACKUP_KEY_HEX=$(python3 -c \
+  'import hashlib,os; print(hashlib.sha256(os.environ["GENESIS_BACKUP_KEY"].encode()).hexdigest())')
+
+# containers written by the 200,000-iteration build
+LEGACY_BACKUP_KEY_HEX=$(python3 -c \
+  'import hashlib,os; print(hashlib.pbkdf2_hmac("sha256", os.environ["GENESIS_BACKUP_KEY"].encode(), b"genesis-protocol/encryption/v2", 200000, dklen=32).hex())')
+```
+
+**Migrate** (dry run first; nothing is written without `--apply`):
+
+```bash
+export GENESIS_BACKUP_KEY='...'          # the current key, unchanged
+python3 scripts/migrate_backup_vault.py --vault-dir data/backups            # report only
+python3 scripts/migrate_backup_vault.py --vault-dir data/backups --apply    # re-encrypt + verify
+```
+
+Each migrated container is verified before the run reports success, and the
+original is kept beside it as `<id>.gbk.pre-migration` unless `--drop-original`
+is passed. A second run prints `nothing to migrate`. A wrong legacy key is
+refused and the file is left byte-identical.
+
+**Tests that pin this**: `tests/test_gate_hardening.py` covers 600,000
+iterations, the actionable error, a real legacy container migrated through the
+CLI and restored, a refused wrong key, the kept original, idempotency and a
+corrupt container.
+
+**Why the legacy derivation is not in the runtime path.** An earlier attempt put
+a `sha256(password)` fallback in `decrypt`, which keeps a weak KDF alive forever
+and is exactly what CodeQL alert #99 flagged. The migration tool takes the old
+key as 64 hex characters instead, so the repository never hashes a password
+weakly and old ciphertext is still recoverable.
+
+### Per-install salt (designed, not implemented)
+
+The derivation salt is the fixed constant `genesis-protocol/encryption/v2`
+because the key must be reproducible from the password alone: a random salt has
+to be stored next to the ciphertext, which changes the on-disk format.
+
+Design, for the next format change:
+
+1. `encrypt()` emits `v3$<salt_b64>$<fernet_token>`; `decrypt()` reads the
+   prefix. Unprefixed blobs are the current format.
+2. New installs get a 16-byte random salt at first use, persisted in the vault
+   root (`kdf.json`, mode 600) - not in the container, so one salt per install
+   rather than per backup, which keeps `migrate_backup_vault.py` simple.
+3. Migration plan (must land *before* the writer switches):
+   * reader accepts v3, current and legacy;
+   * `migrate_backup_vault.py --to-v3` re-encrypts, verifying each container;
+   * only then does the writer emit v3;
+   * the legacy reader is removed one release later.
+4. Cost: one extra field, no data loss, and the old reader keeps working during
+   the transition.
+
+This is **not** implemented now: changing the format without that reader/writer
+split would strand every existing container, which is the failure mode this
+whole section exists to prevent.
 
 ## 4. `require_code_owner_review` and `require_extra_approval_for_unattributed_changes` (item 5)
 
@@ -250,8 +320,11 @@ commit list, explicit opt-out.
 1. **The gate runs only where `/approve` runs.** A human merging through the
    GitHub UI bypasses `_merge_blockers()` entirely; `required_signatures` and
    `required_status_checks` are the only controls there.
-2. **`require_checks=False` disables the whole gate**, signatures included. It
-   exists for tests; a production caller that sets it would merge anything.
+2. **The gate's own switches are now non-bypassable, but the code can still be
+   edited.** `require_checks=False` raises unless an isolated test passes
+   `allow_unverified=True`, and no environment variable reaches it. Anyone who
+   can change the source can still change the gate; that is why the approval
+   path is owner-gated and audited.
 3. **The ruleset is the real boundary, and it is one setting away from being
    useless.** Re-adding `update` blocks all merges; clearing `pull_request`
    allows direct pushes. The probe script is the guard against both.
@@ -263,6 +336,12 @@ commit list, explicit opt-out.
 7. **This is not a 100% security claim.** These are targeted fixes with tests;
    the repository still has 75 Medium and 100 total open CodeQL alerts that were
    not reviewed here.
+8. **A PR with more than 5,000 commits is refused, not partially checked.** The
+   pagination has a hard cap so a truncated list can never look complete; such a
+   PR has to be split.
+9. **The merge token is short-lived.** `GH_TOKEN`/`GITHUB_TOKEN` in the runner
+   expire within hours and refresh automatically; if the refresh fails, `/approve`
+   fails closed (no merge) rather than merging unverified.
 
 ---
 
@@ -286,9 +365,17 @@ Per-area notes:
   `_commit_shas`/`_signature_blockers` methods; the previous gate is the code
   below the `if self.require_signatures:` block. Reverting the tests restores the
   old fakes.
-* **Encryption KDF** — revert restores single-SHA-256 derivation. Ciphertext
-  written by this PR is PBKDF2-keyed and would then be unreadable; decrypt it
-  first if you intend to roll back.
+* **Encryption KDF** — revert restores the previous derivation (single SHA-256
+  on `main`, 200,000 iterations inside PR #87's first commit). Ciphertext written
+  by the current build is 600,000-iteration PBKDF2 and would then be unreadable.
+  Two supported paths, both lossless:
+  * stay forward: `scripts/migrate_backup_vault.py --vault-dir <dir> --apply`
+    re-encrypts old containers with the current key;
+  * go back: re-encrypt the containers with the *target* build's key before
+    deploying it, using `encrypt_with_raw_key`/`decrypt_with_raw_key` from
+    `genesis_protocol.security.encryption` (migration-only helpers) or simply
+    restore them while the current build is still running.
+  Reverting the KDF does not delete anything; it only changes who can read it.
 * **`autonomous_deploy.py`** — reverting restores writing key values into
   `.env`; do that only if you accept the credential-on-disk exposure.
 * **Probe script** — additive; delete the file. If a probe run was interrupted,
@@ -296,3 +383,25 @@ Per-area notes:
 
 If a probe run leaves a ruleset behind, it is named `pr-only-probe` and scoped to
 `refs/heads/probe-*`, so it cannot affect `main`.
+
+
+---
+
+## 9. Hardening pass (independent review follow-up)
+
+The review of this PR found four defects and four cosmetic issues. All are
+addressed here, in the same branch, without touching `main`, the ruleset or any
+secret.
+
+| ID | Finding | Fix | Test |
+| --- | --- | --- | --- |
+| F1 | `_commit_shas` read only the first page of `/pulls/{n}/commits`, so commit 101+ was never signature-checked | full pagination; a full page always triggers the next request; unreadable/malformed/non-list/over-cap fails closed | `test_reads_every_page_of_commits`, `test_exactly_one_full_page_still_asks_for_the_next_one`, `test_gate_checks_commit_101`, `test_gate_checks_an_unsigned_commit_buried_on_page_three`, `test_unreadable_second_page_fails_closed`, `test_malformed_commit_entry_fails_closed`, `test_page_cap_refuses_a_truncated_list` |
+| F2 | PBKDF2 at 200,000 iterations, below OWASP's 600,000 | raised to 600,000; legacy ciphertext is recoverable through the migration tool | `test_kdf_uses_600k_iterations`, `test_vault_migration_reencrypts_and_restores` |
+| F3 | `require_checks=False` was reachable from `SELF_IMPROVE_REQUIRE_CHECKS=0` and disabled CI + evidence + signatures together | the flag now raises unless `allow_unverified=True`; the environment variable is gone from code and workflow | `test_gate_cannot_be_disabled_by_a_constructor_flag`, `test_environment_variable_cannot_disable_the_production_gate`, `test_no_environment_variable_is_read_for_the_gate` |
+| F4 | `_after_marker` split at the first `-`/`:`, so `after: task-1 - goal` became `task` + `1 - goal` | splits at the last separator after the last comma, which is what the old regex matched | `test_after_marker_matches_the_pre_refactor_semantics`, `test_decompose_keeps_hyphenated_dependencies` |
+| F5 | `_strip_list_marker` capped at 3 digits and dropped prose between list items | no cap; prose re-attaches to the item above it, as before | `test_strip_list_marker`, `test_prose_after_list_items_stays_with_the_item_above`, `test_four_digit_list_numbers_still_split` |
+| F7 | a truthy non-boolean verdict produced "not signed (reason: valid)" | the reason is replaced when the verdict is not a boolean | `test_non_boolean_verdict_is_described_honestly` |
+| F8 | a corrupt container surfaced as `UnicodeDecodeError` | reported as `BackupError: ... corrupt ...` | `test_corrupt_container_reports_a_backup_error` |
+| F3b | `EncryptionService._password` stored the plaintext password for no reason | removed | covered by import/round-trip tests |
+
+Remaining known gaps are listed in section 7 and are unchanged by this pass.

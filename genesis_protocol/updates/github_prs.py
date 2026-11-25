@@ -95,6 +95,7 @@ class GitHubPRTransport:
         on_merged: Callable[[Update], None] | None = None,
         require_checks: bool = True,
         require_signatures: bool = True,
+        allow_unverified: bool = False,
     ) -> None:
         self.repo = repo
         self.token = token
@@ -103,7 +104,21 @@ class GitHubPRTransport:
         # Refuse to merge unless the head commit's check-runs are green and the
         # PR body carries an evidence record bound to that same commit. On by
         # default: an approval should never be able to ship an unverified head.
-        self.require_checks = require_checks
+        #
+        # This is deliberately not configurable in production. It used to be a
+        # plain constructor flag, which meant one environment variable in the
+        # approval harness (``SELF_IMPROVE_REQUIRE_CHECKS=0``) silently turned
+        # off the CI check, the evidence check *and* the signature check. A
+        # verification gate that can be switched off by configuration is not a
+        # gate, so disabling it now requires ``allow_unverified=True``, which
+        # only an isolated test driving a fake transport passes.
+        if not require_checks and not allow_unverified:
+            raise ValueError(
+                "the merge gate cannot be disabled: it verifies CI, the evidence "
+                "record and every commit signature. allow_unverified=True exists "
+                "only for isolated tests with a fake transport."
+            )
+        self.require_checks = True if not allow_unverified else require_checks
         # Every commit in the PR must carry a verified signature, not just the
         # head. This is the gate's own check, so it still holds if the
         # ``required_signatures`` ruleset is ever relaxed.
@@ -196,23 +211,46 @@ class GitHubPRTransport:
             for r in runs
         ]
 
-    def _commit_shas(self, number: str) -> list[str] | None:
-        """Every commit SHA in the pull request, or ``None`` when unreadable.
+    _COMMITS_PER_PAGE = 100
+    # 50 pages = 5000 commits. Past that the list is refused rather than
+    # truncated: an unverified tail must never look like a verified whole.
+    _COMMITS_MAX_PAGES = 50
+
+    def _commit_shas(self, number: str) -> tuple[list[str] | None, str]:
+        """Every commit SHA in the pull request, or ``(None, reason)``.
 
         All commits matter, not just the head: an unsigned commit buried in the
-        middle of a branch still lands on main when the PR is squashed.
+        middle of a branch still lands on main when the PR is squashed. GitHub
+        pages this endpoint, so a single request only ever sees the first 100
+        commits -- a one-page implementation would leave commit 101 onward
+        unchecked. Every page is therefore read, and anything unreadable or
+        malformed fails closed.
         """
-        try:
-            payload = self._http(
-                "GET",
-                f"https://api.github.com/repos/{self.repo}/pulls/{number}/commits?per_page=100",
-                None,
-            )
-        except Exception:  # noqa: BLE001 - fail closed below
-            return None
-        if not isinstance(payload, list):
-            return None
-        return [str(c["sha"]) for c in payload if isinstance(c, dict) and c.get("sha")]
+        shas: list[str] = []
+        page = 1
+        while True:
+            if page > self._COMMITS_MAX_PAGES:
+                limit = self._COMMITS_PER_PAGE * self._COMMITS_MAX_PAGES
+                return None, f"more than {limit} commits; refusing a truncated list"
+            try:
+                payload = self._http(
+                    "GET",
+                    f"https://api.github.com/repos/{self.repo}/pulls/{number}/commits"
+                    f"?per_page={self._COMMITS_PER_PAGE}&page={page}",
+                    None,
+                )
+            except Exception as exc:  # noqa: BLE001 - fail closed below
+                return None, f"page {page} unreadable ({type(exc).__name__})"
+            if not isinstance(payload, list):
+                return None, f"page {page} was not a commit list"
+            for entry in payload:
+                sha = entry.get("sha") if isinstance(entry, dict) else None
+                if not isinstance(sha, str) or not sha.strip():
+                    return None, f"page {page} carried a commit without a sha"
+                shas.append(sha)
+            if len(payload) < self._COMMITS_PER_PAGE:
+                return shas, ""
+            page += 1
 
     def _signature_blockers(self, shas: list[str]) -> list[str]:
         """Refusal reasons from ``evolution.signed_commit``; fails closed.
@@ -258,10 +296,11 @@ class GitHubPRTransport:
                 )
 
         if self.require_signatures:
-            commits = self._commit_shas(item.id)
+            commits, why = self._commit_shas(item.id)
             if commits is None:
                 blockers.append(
                     "PR commits could not be read — signatures cannot be verified"
+                    + (f" ({why})" if why else "")
                 )
             elif not commits:
                 blockers.append("PR reports no commits to verify")
