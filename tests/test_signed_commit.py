@@ -14,7 +14,7 @@ from genesis_protocol.evolution.signed_commit import (
 )
 
 REPO = "aakash00a1-byte/Genesis-protocol-"
-SHA = "96512bbc0423a1b2c3d4e5f60718293a4b5c6d7e"
+SHA = "96512bbc0423"
 
 
 def _http_returning(payload):
