@@ -13,7 +13,7 @@ from genesis_protocol.evolution.signed_commit import (
     signature_blockers,
 )
 
-REPO = "aakash00a1-byte/Genesis-protocol-"
+REPO = "example-owner/example-repo"
 SHA = "96512bbc0423"
 
 
