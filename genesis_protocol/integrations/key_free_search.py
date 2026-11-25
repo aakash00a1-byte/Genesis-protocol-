@@ -47,7 +47,8 @@ def _decode_ddg_url(href: str) -> str:
     if href.startswith("//"):
         href = "https:" + href
     parsed = urlparse(href)
-    if "duckduckgo.com" in parsed.netloc and parsed.path.startswith("/l/"):
+    host = (parsed.hostname or "").lower()
+    if (host == "duckduckgo.com" or host.endswith(".duckduckgo.com")) and parsed.path.startswith("/l/"):
         target = parse_qs(parsed.query).get("uddg")
         if target:
             return unquote(target[0])

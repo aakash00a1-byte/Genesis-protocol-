@@ -125,6 +125,28 @@ class Mission:
         return any(visit(n) for n in list(graph))
 
 
+def _after_marker(clause: str) -> Optional[tuple[List[str], str]]:
+    """Parse a leading ``after: t1, t2 - goal`` marker.
+
+    Hand-rolled rather than a regex: ``([^,]+(?:,[^,]+)*)`` is the kind of nested
+    quantifier that backtracks polynomially. Returns ``(depends, goal)`` or
+    ``None`` when the clause has no usable marker.
+    """
+    if not clause.lower().startswith("after:"):
+        return None
+    rest = clause[len("after:"):]
+    for position, char in enumerate(rest):
+        if char in "-:":
+            if position == 0:
+                return None
+            names = [name.strip() for name in rest[:position].split(",") if name.strip()]
+            goal = rest[position + 1:].strip()
+            if names and goal:
+                return names, goal
+            return None
+    return None
+
+
 def decompose(goal: str, acceptance: str = "") -> List[Dict[str, Any]]:
     """Turn a goal into an ordered list of ``{goal, depends_on, acceptance}``.
 
@@ -140,10 +162,9 @@ def decompose(goal: str, acceptance: str = "") -> List[Dict[str, Any]]:
     tasks: List[Dict[str, Any]] = []
     for index, clause in enumerate(clauses):
         depends: List[str] = []
-        match = re.match(r"after:\s*([^,]+(?:,[^,]+)*)\s*[-:]\s*(.*)", clause, re.IGNORECASE)
-        if match:
-            depends = [d.strip() for d in match.group(1).split(",") if d.strip()]
-            clause = match.group(2).strip()
+        parsed = _after_marker(clause)
+        if parsed is not None:
+            depends, clause = parsed
         elif index > 0:
             depends = [f"t{index}"]  # chain to the previous clause
         tasks.append({

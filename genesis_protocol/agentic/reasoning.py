@@ -53,8 +53,8 @@ _DEFINITE_REF = re.compile(r"\b(the|this|that|these|those|it|they|them)\b", re.I
 _NEEDS_TARGET = re.compile(r"\b(deploy|merge|send|pay|transfer|publish|delete|revoke|purchase|trade)\b", re.I)
 
 # Sequence markers used to split a goal into sub-problems.
-_NUMBERED = re.compile(r"(?:^|\n)\s*\d+[.)]\s+")
-_SEQUENCE = re.compile(r"\s*(?:;|->|→|\bthen\b|\band then\b|\n)\s*", re.I)
+_NUMBERED = re.compile(r"(?:^|\n)[ \t]*\d+[.)][ \t]+")
+_SEQUENCE = re.compile(r"[ \t]*(?:;|->|→|\bthen\b|\band then\b|\n)[ \t]*", re.I)
 
 _STOPWORDS = {
     "the", "a", "an", "and", "or", "but", "to", "of", "in", "on", "for", "with",
@@ -155,9 +155,33 @@ def _tokens(text: str) -> set:
     return {t for t in re.findall(r"[a-z0-9]+", (text or "").lower()) if t not in _STOPWORDS and len(t) > 2}
 
 
+def _strip_list_marker(line: str) -> str:
+    """Body of a ``1.`` / ``2)`` list line, or "" when the line is not numbered."""
+    stripped = line.strip()
+    digits = 0
+    while digits < len(stripped) and digits < 3 and stripped[digits].isdigit():
+        digits += 1
+    if not digits or digits >= len(stripped) or stripped[digits] not in ".)":
+        return ""
+    rest = stripped[digits + 1:]
+    if rest and rest[0] not in " \t":
+        return ""
+    return rest.strip()
+
+
 def _clauses(goal: str) -> List[str]:
-    """Split a goal into clauses for classification."""
-    parts = re.split(r"(?<=[.?!;])\s+|\s+then\s+|\s+and then\s+", goal or "")
+    """Split a goal into clauses for classification.
+
+    Connectors are replaced with a sentinel before the sentence split so no
+    regex has to express both alternatives at once (that pattern backtracked
+    polynomially on long runs of spaces).
+    """
+    text = goal or ""
+    for marker in (" and then ", " then "):
+        text = text.replace(marker, "\x00")
+    parts: List[str] = []
+    for chunk in text.split("\x00"):
+        parts.extend(re.split(r"(?<=[.?!;])[ \t]+", chunk))
     return [p.strip() for p in parts if p.strip()]
 
 
@@ -174,12 +198,15 @@ class StructuredReasoning:
 
     @staticmethod
     def _split_subproblems(goal: str) -> List[str]:
-        if _NUMBERED.search("\n" + (goal or "")):
-            items = [p.strip() for p in _NUMBERED.split("\n" + (goal or "")) if p.strip()]
-            if len(items) > 1:
-                return items
-        items = [p.strip() for p in _SEQUENCE.split(goal or "") if p.strip()]
-        return items or [(goal or "").strip()]
+        text = goal or ""
+        numbered = [item for item in (_strip_list_marker(line) for line in text.split("\n"))
+                    if item]
+        if len(numbered) > 1:
+            return numbered
+        for marker in (" and then ", " then ", ";", "->", "\u2192", "\n"):
+            text = text.replace(marker, "\x00")
+        items = [p.strip() for p in text.split("\x00") if p.strip()]
+        return items or [text.strip()]
 
     def decompose(self, goal: str) -> List[SubProblem]:
         """Break a goal into ordered sub-problems, chained by dependency.

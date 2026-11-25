@@ -6,6 +6,7 @@ Linear, Notion, Slack, GitHub/GitLab PR management, data analysis.
 
 import subprocess
 import json
+from urllib.parse import urlparse
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 from genesis_protocol.skills import Skill, SkillCategory
@@ -391,9 +392,10 @@ class GitHubPRManager:
         
         if result.get("success"):
             # Extract PR URL from output
-            for line in result["stdout"].split("\n"):
-                if "https://github.com" in line:
-                    return {"success": True, "url": line.strip()}
+            for token in result["stdout"].split():
+                parsed = urlparse(token)
+                if parsed.scheme == "https" and (parsed.hostname or "") == "github.com":
+                    return {"success": True, "url": token}
         
         return {"success": False, "error": result.get("stderr", "Unknown error")}
     

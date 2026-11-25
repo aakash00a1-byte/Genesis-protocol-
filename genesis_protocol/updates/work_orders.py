@@ -39,7 +39,7 @@ class WorkOrder:
         }
 
 
-_WORK_RE = re.compile(r"^/(?P<verb>do|cancel)\b\s*(?P<arg>.*)$", re.IGNORECASE)
+_WORK_RE = re.compile(r"^/(?P<verb>do|cancel)\b", re.IGNORECASE)
 _TASKS_RE = re.compile(r"^/tasks\b", re.IGNORECASE)
 
 WORK_HELP = (
@@ -55,10 +55,11 @@ def parse_work_order(text: str) -> tuple[str, str] | None:
     """Return (verb, arg) for ``/do`` or ``/cancel``, else None."""
     if not isinstance(text, str):
         return None
-    match = _WORK_RE.match(text.strip())
+    stripped = text.strip()
+    match = _WORK_RE.match(stripped)
     if not match:
         return None
-    return match.group("verb").lower(), match.group("arg").strip()
+    return match.group("verb").lower(), stripped[match.end():].strip()
 
 
 def is_tasks_command(text: str) -> bool:

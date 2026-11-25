@@ -58,6 +58,28 @@ class AgentResponse:
             self.tools_used = []
 
 
+def _fenced_body(query: str) -> str:
+    """The body of the first fenced code block in ``query``, or "".
+
+    Scans for the fences instead of matching a regex: the previous pattern
+    (``\\s*\\n?(.*?)``) was ambiguous enough to backtrack polynomially on a
+    long run of whitespace. A language tag on the opening line is dropped.
+    """
+    start = (query or "").find("```")
+    if start < 0:
+        return ""
+    end = query.find("```", start + 3)
+    if end < 0:
+        return ""
+    block = query[start + 3 : end]
+    newline = block.find("\n")
+    if newline >= 0:
+        tag = block[:newline].strip().lower()
+        if tag in ("", "python", "py"):
+            block = block[newline + 1 :]
+    return block.strip()
+
+
 class GenesisAgent:
     """
     Autonomous AI Agent (v2) for Genesis Protocol.
@@ -676,8 +698,7 @@ class GenesisAgent:
     @staticmethod
     def _extract_code_block(query: str) -> str:
         """The body of a fenced code block, or "" (an empty fence is not code)."""
-        fenced = re.search(r"```(?:python|py)?\s*\n?(.*?)```", query, re.S)
-        return fenced.group(1).strip() if fenced else ""
+        return _fenced_body(query)
 
     @staticmethod
     def _extract_code(query: str) -> str:
@@ -690,9 +711,9 @@ class GenesisAgent:
         other "run/execute" wording is left to the model to answer, rather than
         firing a tool call that can only fail with "No code provided".
         """
-        fenced = re.search(r"```(?:python|py)?\s*\n?(.*?)```", query, re.S)
-        if fenced and fenced.group(1).strip():
-            return fenced.group(1).strip()
+        fenced = _fenced_body(query)
+        if fenced:
+            return fenced
 
         expr = re.search(
             r"(?:calculate|compute|evaluate|what\s+is)\s*"

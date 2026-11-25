@@ -6,6 +6,8 @@ parameter extraction that feeds the exact, key-free weather/FX providers.
 """
 
 import asyncio
+import re
+from urllib.parse import urlparse
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -70,8 +72,8 @@ class TestSourceCredibility:
 
         text = format_for_model(assess([{"title": "T", "url": "https://www.reuters.com/x", "content": "c"}]))
         assert "=== VERIFIED" in text
-        assert "reuters.com" in text
-        assert "https://www.reuters.com/x" in text
+        urls = re.findall(r"https://[^\s)\]\"'<>]+", text)
+        assert any(urlparse(u).hostname == "www.reuters.com" for u in urls)
 
 
 class TestPublisherAttribution:

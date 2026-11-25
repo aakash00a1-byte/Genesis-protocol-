@@ -36,12 +36,24 @@ class EncryptionService:
         Args:
             key: Encryption key (derived from password if provided)
         """
+        self._password = key
         self._key = self._derive_key(key) if key else self._generate_key()
         logger.info("Encryption service initialized")
-    
+
+    # PBKDF2-HMAC-SHA256 rather than a single SHA-256: a plain digest is a fast
+    # hash, not a key-derivation function, so a leaked ciphertext could be
+    # attacked at GPU speed. The salt is a fixed domain-separation constant
+    # rather than random because derivation must stay deterministic across
+    # restarts -- the same password has to reproduce the same key, or stored
+    # ciphertext becomes unreadable.
+    _KDF_ITERATIONS = 200_000
+    _KDF_SALT_CONTEXT = b"genesis-protocol/encryption/v2"
+
     def _derive_key(self, password: str) -> bytes:
-        """Derive encryption key from password."""
-        return hashlib.sha256(password.encode()).digest()
+        """Derive encryption key from password (PBKDF2-HMAC-SHA256)."""
+        return hashlib.pbkdf2_hmac(
+            "sha256", password.encode(), self._KDF_SALT_CONTEXT, self._KDF_ITERATIONS, dklen=32
+        )
     
     def _generate_key(self) -> bytes:
         """Generate random encryption key."""
@@ -89,10 +101,8 @@ class EncryptionService:
         try:
             from cryptography.fernet import Fernet
             
-            f = Fernet(base64.urlsafe_b64encode(self._key))
-            
             decoded = base64.urlsafe_b64decode(encrypted_data.encode())
-            decrypted = f.decrypt(decoded)
+            decrypted = Fernet(base64.urlsafe_b64encode(self._key)).decrypt(decoded)
             
             return decrypted.decode()
             

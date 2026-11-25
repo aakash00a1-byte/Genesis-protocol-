@@ -42,7 +42,32 @@ def _normalize_operators(text: str) -> str:
                 .replace("\u2212", "-"))
     # "17 x 23" and "17x23" mean multiplication; only between two digits, so a
     # stray letter elsewhere in the query is untouched.
-    return re.sub(r"(?<=\d)\s*[xX]\s*(?=\d)", "*", text)
+    out: list[str] = []
+    index = 0
+    length = len(text)
+    while index < length:
+        char = text[index]
+        if char in "xX":
+            before = index - 1
+            while before >= 0 and text[before] in " \t":
+                before -= 1
+            after = index + 1
+            while after < length and text[after] in " \t":
+                after += 1
+            if (
+                before >= 0
+                and after < length
+                and text[before].isdigit()
+                and text[after].isdigit()
+            ):
+                while out and out[-1] in " \t":
+                    out.pop()
+                out.append("*")
+                index = after
+                continue
+        out.append(char)
+        index += 1
+    return "".join(out)
 
 
 def extract_math_expression(query: str) -> str:

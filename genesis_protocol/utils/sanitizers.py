@@ -19,8 +19,13 @@ class Sanitizer:
     Provides security-focused sanitization for user inputs.
     """
     
-    # Patterns for dangerous content
-    HTML_TAG_PATTERN = re.compile(r'<[^>]+>')
+    # Patterns for dangerous content.
+    #
+    # There is deliberately no "strip HTML tags" regex here. Escaping runs first
+    # (``html.escape``), so ``<`` is already ``&lt;`` before any pattern could
+    # match, and a ``<[^>]+>`` filter would be dead code that merely looks like
+    # sanitization. Escape-first is the boundary; do not reintroduce a regex tag
+    # filter and rely on it.
     SCRIPT_PATTERN = re.compile(r'<script[^>]*>.*?</script>', re.IGNORECASE | re.DOTALL)
     SQL_INJECTION_PATTERN = re.compile(
         r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER)\b)|"
@@ -53,12 +58,9 @@ class Sanitizer:
         # Remove null bytes
         text = text.replace('\x00', '')
         
-        # HTML escape
+        # HTML escape (the actual boundary: nothing after this can produce a tag)
         text = html.escape(text)
-        
-        # Remove any remaining HTML tags
-        text = cls.HTML_TAG_PATTERN.sub('', text)
-        
+
         # Normalize whitespace
         text = ' '.join(text.split())
         
