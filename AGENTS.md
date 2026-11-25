@@ -1822,3 +1822,42 @@ than 404.
   commits, `mergeable_state: clean`, 0 new alerts, 2176 tests passing. It is
   **not** merged - the owner approves. The ruleset probe
   (`scripts/probe_pr_only_ruleset.py`) needs owner approval to run.
+
+## Instagram publisher (revenue mission 1, 2026-11-25)
+
+`genesis_protocol/instagram/` publishes to an Instagram **professional**
+account through Meta's official API (`graph.instagram.com` for Instagram Login,
+`graph.facebook.com` for Facebook Login). Docs and quotes:
+`docs/integrations/INSTAGRAM_SETUP.md`.
+
+- **Two-step flow, as Meta defines it:** `POST /<IG_ID>/media` → poll
+  `GET /<CONTAINER_ID>?fields=status_code` until `FINISHED` → `POST
+  /<IG_ID>/media_publish`. Default polling is once per minute, five-minute
+  ceiling (Meta's own recommendation).
+- **No native scheduling and no binary upload.** Meta has no "publish at"
+  parameter and cURLs the media URL, which must be publicly reachable *at publish
+  time*. Scheduling is our JSON calendar (`ContentCalendar` + `run_due`), and
+  `validate_post` rejects non-https, credentialed, localhost and private-range
+  URLs.
+- **Limits conflict in Meta's own docs** (100 API-published posts / 24h in the
+  rate-limit section, 50 in the carousel section). `HARD_DAILY_CAP = 25` per
+  account is enforced locally so neither figure is ever approached; Meta still
+  enforces the real limit.
+- **Approval is a token, not a boolean.** `ApprovalGate` mints
+  `v1.<expiry>.<hmac>` bound to `account_id` + content fingerprint, 15-minute TTL,
+  constant-time compare, and **fails closed when `IG_APPROVAL_SECRET` is unset**.
+  `run_due(dry_run=True)` is the default; a due entry without a token is reported
+  `awaiting-approval` and stays `planned`.
+- **Client separation is structural:** a publish names one `account_id`, and a
+  post whose `client_id` differs from the account's is refused. There is no
+  default-account fallback.
+- **Duplicate protection is a fingerprint ledger** (24h) plus an optional
+  idempotency key (30d), written atomically; the check runs before approval, so a
+  duplicate never even consumes a token.
+- **Never claim it is client-ready.** Standard Access only lets you publish to
+  accounts with a role on the app; a paying client needs App Review / Advanced
+  Access / Live mode, a business portfolio, and one real end-to-end publish on a
+  test account. None of that is code.
+- Tests: `tests/test_instagram_{core,client,publisher,calendar}.py` (119 cases,
+  fake HTTP only). Demo: `python3 -m genesis_protocol.instagram.demo`. CLI:
+  `scripts/instagram.py`.
