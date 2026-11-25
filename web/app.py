@@ -323,7 +323,21 @@ def string_field(data: dict, key: str,
 
 
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
-EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+def _valid_email(value: str) -> bool:
+    """Linear email shape check.
+
+    Deliberately not a regex: ``^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$`` backtracks
+    polynomially on a long string with many dots. This is a shape check, not a
+    deliverability check - the address is still unverified.
+    """
+    if not value or len(value) > MAX_FIELD_LENGTH:
+        return False
+    if value.count("@") != 1 or any(ch.isspace() for ch in value):
+        return False
+    local, _, domain = value.partition("@")
+    if not local or not domain or "." not in domain:
+        return False
+    return not (domain.startswith(".") or domain.endswith("."))
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 1024
 
@@ -337,7 +351,7 @@ def validate_registration(username: str, email: str, password: str) -> Optional[
     """
     if not USERNAME_PATTERN.match(username or ""):
         return "Username must be 3-32 characters (letters, digits, dot, dash, underscore)"
-    if not EMAIL_PATTERN.match(email or "") or len(email) > MAX_FIELD_LENGTH:
+    if not _valid_email(email or ""):
         return "Enter a valid email address"
     if not password or len(password) < MIN_PASSWORD_LENGTH:
         return f"Password must be at least {MIN_PASSWORD_LENGTH} characters"

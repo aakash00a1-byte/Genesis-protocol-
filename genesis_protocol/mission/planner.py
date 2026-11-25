@@ -125,6 +125,32 @@ class Mission:
         return any(visit(n) for n in list(graph))
 
 
+def _after_marker(clause: str) -> Optional[tuple[List[str], str]]:
+    """Parse a leading ``after: t1, t2 - goal`` marker.
+
+    Hand-rolled rather than a regex: ``([^,]+(?:,[^,]+)*)`` is the kind of nested
+    quantifier that backtracks polynomially.
+
+    The separator is the *last* ``-``/``:`` after the last comma, which is what
+    the old pattern matched: its first group could not contain a comma and the
+    engine backtracked to the final separator. Splitting at the first separator
+    instead broke dependency ids that contain a hyphen -- ``after: task-1 - goal``
+    parsed as ``task`` + ``1 - goal``.
+    """
+    if not clause.lower().startswith("after:"):
+        return None
+    rest = clause[len("after:"):]
+    after_last_comma = rest.rfind(",") + 1
+    cut = max(rest.rfind("-"), rest.rfind(":"))
+    if cut < 0 or cut < after_last_comma:
+        return None
+    names = [name.strip() for name in rest[:cut].split(",") if name.strip()]
+    goal = rest[cut + 1:].strip()
+    if names and goal:
+        return names, goal
+    return None
+
+
 def decompose(goal: str, acceptance: str = "") -> List[Dict[str, Any]]:
     """Turn a goal into an ordered list of ``{goal, depends_on, acceptance}``.
 
@@ -140,10 +166,9 @@ def decompose(goal: str, acceptance: str = "") -> List[Dict[str, Any]]:
     tasks: List[Dict[str, Any]] = []
     for index, clause in enumerate(clauses):
         depends: List[str] = []
-        match = re.match(r"after:\s*([^,]+(?:,[^,]+)*)\s*[-:]\s*(.*)", clause, re.IGNORECASE)
-        if match:
-            depends = [d.strip() for d in match.group(1).split(",") if d.strip()]
-            clause = match.group(2).strip()
+        parsed = _after_marker(clause)
+        if parsed is not None:
+            depends, clause = parsed
         elif index > 0:
             depends = [f"t{index}"]  # chain to the previous clause
         tasks.append({

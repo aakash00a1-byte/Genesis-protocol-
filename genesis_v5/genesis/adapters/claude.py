@@ -55,7 +55,7 @@ class ClaudeAdapter(Provider):
         self._http_post = http_post or default_post
         self._enabled = bool(self._api_key)
         if not self._enabled:
-            logger.info("Claude adapter DISABLED (missing %s)", api_key_env)
+            logger.info("Claude adapter DISABLED (API key not set)")
 
     def health(self) -> ProviderHealth:
         if not self._enabled:

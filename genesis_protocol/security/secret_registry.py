@@ -100,7 +100,7 @@ class SecretRegistry:
         self._values[name] = value
         self._masked_values[name] = self._mask_value(value)
         
-        logger.debug(f"Registered secret: {name}")
+        logger.debug("Registered a secret")
     
     def get(self, name: str) -> Optional[str]:
         """

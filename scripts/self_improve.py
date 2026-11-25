@@ -96,7 +96,6 @@ VERIFY_TEST_COMMAND = os.environ.get(
 VERIFY_REQUIRE_TESTS = os.environ.get("SELF_IMPROVE_VERIFY_REQUIRE_TESTS", "1").strip() not in ("0", "false", "no")
 # The merge gate refuses to merge an agent PR unless its head check-runs are
 # green and its body carries evidence bound to that head. On by default.
-REQUIRE_CHECKS = os.environ.get("SELF_IMPROVE_REQUIRE_CHECKS", "1").strip() not in ("0", "false", "no")
 # A conversation can take a while; the earlier one took ~50 minutes. Allow 45
 # minutes per cycle and make it tunable.
 RUN_TIMEOUT_SECONDS = int(os.environ.get("SELF_IMPROVE_CYCLE_TIMEOUT_SECONDS", "2700"))
@@ -714,11 +713,13 @@ def _transport():
     try:
         from genesis_protocol.updates.github_prs import GitHubPRTransport
 
+        # The verification gate is not configurable here on purpose: CI, the
+        # evidence record and every commit signature are always checked. There
+        # is no environment variable that can switch them off.
         return GitHubPRTransport(
             REPO,
             GH_MERGE_TOKEN,
             on_merged=lambda _item: _dispatch_deploy(),
-            require_checks=REQUIRE_CHECKS,
         )
     except Exception as exc:  # noqa: BLE001
         _log(f"approval transport unavailable: {type(exc).__name__}")

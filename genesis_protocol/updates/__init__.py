@@ -92,7 +92,7 @@ class UpdateTransport(Protocol):
 
 
 _COMMAND_RE = re.compile(
-    r"^/(?P<verb>approve|reject|list|updates|pending|status|help)\b\s*(?P<arg>.*)$",
+    r"^/(?P<verb>approve|reject|list|updates|pending|status|help)\b",
     re.IGNORECASE,
 )
 
@@ -119,10 +119,11 @@ def parse_command(text: str) -> tuple[str, str] | None:
     """Return (verb, arg) for a recognised command, else None."""
     if not isinstance(text, str):
         return None
-    match = _COMMAND_RE.match(text.strip())
+    stripped = text.strip()
+    match = _COMMAND_RE.match(stripped)
     if not match:
         return None
-    return match.group("verb").lower(), match.group("arg").strip()
+    return match.group("verb").lower(), stripped[match.end():].strip()
 
 
 def render_list(items: list[Update]) -> str:

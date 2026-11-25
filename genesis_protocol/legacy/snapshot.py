@@ -66,8 +66,13 @@ class SnapshotLayer:
             }
         }
         
-        # Save snapshot file
-        filepath = os.path.join(self.storage_path, snapshot_type, f"{snapshot_id}.json")
+        # snapshot_type is allowlisted above and snapshot_id is generated here,
+        # but resolve and re-check containment anyway so a future caller cannot
+        # make the path escape storage_path.
+        base = os.path.realpath(self.storage_path)
+        filepath = os.path.join(base, snapshot_type, f"{snapshot_id}.json")
+        if os.path.commonpath([base, os.path.realpath(filepath)]) != base:
+            raise ValueError(f"refusing to write outside storage_path: {snapshot_type!r}")
         with open(filepath, 'w') as f:
             json.dump(snapshot_data, f, indent=2)
         

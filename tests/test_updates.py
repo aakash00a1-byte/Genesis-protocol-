@@ -6,8 +6,11 @@ merged without an explicit approve, and only agent branches are approvable.
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -184,6 +187,35 @@ def _green_checks(method, url, payload):
     }
 
 
+def _signed_http(inner):
+    """Wrap a fake http so the signature endpoints answer 'signed & verified'.
+
+    The merge gate now asks for the PR's commits and each commit's verification
+    verdict. Fakes that only model checks/pulls would otherwise look like an
+    unreadable verdict, which the gate (correctly) treats as a refusal.
+    """
+
+    def http(method, url, payload):
+        if method == "GET":
+            if re.search(r"/pulls/\d+/commits", url):
+                return [{"sha": "abc1234def"}]
+            if "/commits/" in url and not url.endswith("/check-runs"):
+                sha = url.rsplit("/", 1)[-1]
+                return {
+                    "sha": sha,
+                    "commit": {
+                        "verification": {
+                            "verified": True,
+                            "reason": "valid",
+                            "signature_type": "ssh",
+                        }
+                    },
+                }
+        return inner(method, url, payload)
+
+    return http
+
+
 def test_transport_lists_only_agent_branches() -> None:
     calls = []
 
@@ -191,7 +223,7 @@ def test_transport_lists_only_agent_branches() -> None:
         calls.append((method, url, payload))
         return [_pr(1, "agent work"), _pr(2, "human work", branch="feature/human")]
 
-    transport = GitHubPRTransport("o/r", "tok", http=http)
+    transport = GitHubPRTransport("o/r", "tok", http=_signed_http(http))
     items = transport.list_open()
     assert [i.id for i in items] == ["1"]
 
@@ -207,7 +239,7 @@ def test_transport_approve_merges_squash() -> None:
             return [_pr(5, "improve docs")]
         return {"merged": True, "sha": "abc123"}
 
-    transport = GitHubPRTransport("o/r", "tok", http=http)
+    transport = GitHubPRTransport("o/r", "tok", http=_signed_http(http))
     reply = transport.approve("1")
     assert "Approved & merged" in reply
     merge = [c for c in calls if c[0] == "PUT"][0]
@@ -223,7 +255,7 @@ def test_transport_approve_reports_merge_failure() -> None:
             return [_pr(5, "improve docs")]
         return {"merged": False, "message": "Pull Request is not mergeable"}
 
-    transport = GitHubPRTransport("o/r", "tok", http=http)
+    transport = GitHubPRTransport("o/r", "tok", http=_signed_http(http))
     assert "not mergeable" in transport.approve("5")
 
 
@@ -238,7 +270,7 @@ def test_transport_calls_on_merged_after_success() -> None:
         return {"merged": True, "sha": "deadbeef"}
 
     transport = GitHubPRTransport(
-        "o/r", "tok", http=http, on_merged=lambda item: merged.append(item.id)
+        "o/r", "tok", http=_signed_http(http), on_merged=lambda item: merged.append(item.id)
     )
     transport.approve("6")
     assert merged == ["6"]
@@ -255,7 +287,7 @@ def test_transport_on_merged_not_called_when_merge_fails() -> None:
         return {"merged": False}
 
     transport = GitHubPRTransport(
-        "o/r", "tok", http=http, on_merged=lambda item: merged.append(item.id)
+        "o/r", "tok", http=_signed_http(http), on_merged=lambda item: merged.append(item.id)
     )
     transport.approve("6")
     assert merged == []
@@ -270,7 +302,7 @@ def test_approve_refuses_when_checks_are_red() -> None:
             return {"check_runs": [{"name": "CI/CD", "conclusion": "failure"}]}
         return [_pr(5, "improve docs")]
 
-    transport = GitHubPRTransport("o/r", "tok", http=http)
+    transport = GitHubPRTransport("o/r", "tok", http=_signed_http(http))
     reply = transport.approve("5")
     assert "merge blocked" in reply and "CI/CD" in reply
 
@@ -281,7 +313,7 @@ def test_approve_refuses_when_evidence_sha_differs_from_head() -> None:
             return _green_checks(method, url, payload)
         return [_pr(5, "improve docs", sha="aaaaaaaabbbb", body="- landed commit: `ccccccccdddd`\n")]
 
-    transport = GitHubPRTransport("o/r", "tok", http=http)
+    transport = GitHubPRTransport("o/r", "tok", http=_signed_http(http))
     reply = transport.approve("5")
     assert "merge blocked" in reply and "evidence bound to" in reply
 
@@ -292,7 +324,7 @@ def test_approve_refuses_when_pr_body_has_no_evidence() -> None:
             return _green_checks(method, url, payload)
         return [_pr(5, "improve docs", body="no evidence here")]
 
-    transport = GitHubPRTransport("o/r", "tok", http=http)
+    transport = GitHubPRTransport("o/r", "tok", http=_signed_http(http))
     reply = transport.approve("5")
     assert "merge blocked" in reply and "no verification evidence" in reply
 
@@ -303,7 +335,7 @@ def test_approve_refuses_when_no_checks_reported() -> None:
             return {"check_runs": []}
         return [_pr(5, "improve docs")]
 
-    transport = GitHubPRTransport("o/r", "tok", http=http)
+    transport = GitHubPRTransport("o/r", "tok", http=_signed_http(http))
     reply = transport.approve("5")
     assert "merge blocked" in reply and "no check-runs" in reply
 
@@ -323,7 +355,7 @@ def test_approve_refuses_when_check_runs_unreadable() -> None:
             raise RuntimeError("GET .../actions/runs -> HTTP 403: not accessible")
         return [_pr(5, "improve docs")]
 
-    transport = GitHubPRTransport("o/r", "tok", http=http)
+    transport = GitHubPRTransport("o/r", "tok", http=_signed_http(http))
     reply = transport.approve("5")
     assert "merge blocked" in reply and "checks: read" in reply
 
@@ -349,7 +381,7 @@ def test_approve_falls_back_to_actions_runs() -> None:
             return [_pr(5, "improve docs")]
         return {"merged": True, "sha": "abc123"}
 
-    transport = GitHubPRTransport("o/r", "tok", http=http)
+    transport = GitHubPRTransport("o/r", "tok", http=_signed_http(http))
     assert "Approved & merged" in transport.approve("5")
 
 
@@ -361,7 +393,7 @@ def test_approve_fallback_blocks_a_failing_run() -> None:
             return {"workflow_runs": [{"name": "CI/CD", "conclusion": "failure"}]}
         return [_pr(5, "improve docs")]
 
-    transport = GitHubPRTransport("o/r", "tok", http=http)
+    transport = GitHubPRTransport("o/r", "tok", http=_signed_http(http))
     reply = transport.approve("5")
     assert "merge blocked" in reply and "CI/CD" in reply
 
@@ -380,12 +412,13 @@ def test_approve_fallback_blocks_a_run_still_in_progress() -> None:
             }
         return [_pr(5, "improve docs")]
 
-    transport = GitHubPRTransport("o/r", "tok", http=http)
+    transport = GitHubPRTransport("o/r", "tok", http=_signed_http(http))
     reply = transport.approve("5")
     assert "merge blocked" in reply and "CI/CD" in reply
 
 
 def test_approve_with_gate_disabled_merges() -> None:
+    """The opt-out is test-only: it needs the explicit ``allow_unverified`` hook."""
     calls = []
 
     def http(method, url, payload):
@@ -394,10 +427,17 @@ def test_approve_with_gate_disabled_merges() -> None:
             return [_pr(5, "improve docs")]
         return {"merged": True, "sha": "abc123"}
 
-    transport = GitHubPRTransport("o/r", "tok", http=http, require_checks=False)
+    transport = GitHubPRTransport(
+        "o/r", "tok", http=_signed_http(http), require_checks=False, allow_unverified=True
+    )
     assert "Approved & merged" in transport.approve("5")
     # With the gate off, check-runs are never queried.
     assert not any("/check-runs" in url for _, url in calls)
+
+
+def test_gate_flag_without_the_test_hook_is_refused() -> None:
+    with pytest.raises(ValueError, match="cannot be disabled"):
+        GitHubPRTransport("o/r", "tok", http=_green_checks, require_checks=False)
 
 
 def test_transport_reject_closes_pr() -> None:
@@ -409,7 +449,7 @@ def test_transport_reject_closes_pr() -> None:
             return [_pr(9, "bad idea")]
         return {}
 
-    transport = GitHubPRTransport("o/r", "tok", http=http)
+    transport = GitHubPRTransport("o/r", "tok", http=_signed_http(http))
     reply = transport.reject("9", "not needed")
     assert "Rejected" in reply
     patch = [c for c in calls if c[0] == "PATCH"][0]
@@ -519,7 +559,7 @@ def _approve_with(checks):
             return {"merged": True, "sha": "abc123"}
         return [_pr(5, "improve docs")]
 
-    reply = GitHubPRTransport("o/r", "tok", http=http).approve("5")
+    reply = GitHubPRTransport("o/r", "tok", http=_signed_http(http)).approve("5")
     return reply, bool(merged)
 
 
@@ -580,3 +620,85 @@ def test_required_checks_stay_enforced_when_the_shared_model_is_missing() -> Non
         builtins.__import__ = real_import
 
     assert required == frozenset({"lint", "test"})
+
+
+# ------------------------------------------------------------------
+# Signature gate: an unsigned or unverified head must never merge
+# ------------------------------------------------------------------
+def _verification_http(verdicts, commits=None):
+    """Fake http with per-SHA verification verdicts (checks always green)."""
+    calls = []
+
+    def http(method, url, payload):
+        calls.append((method, url, payload))
+        if method == "GET":
+            if re.search(r"/pulls/\d+/commits", url):
+                return commits if commits is not None else [{"sha": s} for s in verdicts]
+            if "/commits/" in url and not url.endswith("/check-runs"):
+                sha = url.rsplit("/", 1)[-1]
+                return {
+                    "sha": sha,
+                    "commit": {
+                        "verification": verdicts.get(
+                            sha, {"verified": False, "reason": "unknown"}
+                        )
+                    },
+                }
+            if "/check-runs" in url:
+                return _green_checks(method, url, payload)
+            return [_pr(7, "agent work")]
+        return {"merged": True, "sha": "merged-sha"}
+
+    http.calls = calls
+    return http
+
+
+def test_transport_refuses_unsigned_commit() -> None:
+    http = _verification_http({"abc1234def": {"verified": False, "reason": "unsigned"}})
+    reply = GitHubPRTransport("o/r", "tok", http=http).approve("7")
+    assert "not signed" in reply
+    assert [c for c in http.calls if c[0] == "PUT"] == []
+
+
+def test_transport_refuses_unverified_email_signature() -> None:
+    http = _verification_http(
+        {"abc1234def": {"verified": False, "reason": "unverified_email"}}
+    )
+    reply = GitHubPRTransport("o/r", "tok", http=http).approve("7")
+    assert "not signed" in reply and "unverified_email" in reply
+    assert [c for c in http.calls if c[0] == "PUT"] == []
+
+
+def test_transport_checks_every_commit_not_just_the_head() -> None:
+    """An unsigned commit buried mid-branch still lands on a squash merge."""
+    http = _verification_http(
+        {
+            "abc1234def": {"verified": True, "reason": "valid"},
+            "badc0ffee1": {"verified": False, "reason": "unsigned"},
+        },
+        commits=[{"sha": "abc1234def"}, {"sha": "badc0ffee1"}],
+    )
+    reply = GitHubPRTransport("o/r", "tok", http=http).approve("7")
+    assert "badc0ffee1" in reply
+    assert [c for c in http.calls if c[0] == "PUT"] == []
+
+
+def test_transport_refuses_when_commits_cannot_be_read() -> None:
+    http = _verification_http({}, commits={"message": "Resource not accessible"})
+    reply = GitHubPRTransport("o/r", "tok", http=http).approve("7")
+    assert "commits could not be read" in reply
+    assert [c for c in http.calls if c[0] == "PUT"] == []
+
+
+def test_transport_refuses_when_pr_reports_no_commits() -> None:
+    http = _verification_http({}, commits=[])
+    reply = GitHubPRTransport("o/r", "tok", http=http).approve("7")
+    assert "no commits" in reply
+    assert [c for c in http.calls if c[0] == "PUT"] == []
+
+
+def test_signature_check_is_explicitly_optional() -> None:
+    """The opt-out exists for tests/legacy callers and is never the default."""
+    http = _verification_http({"abc1234def": {"verified": False, "reason": "unsigned"}})
+    transport = GitHubPRTransport("o/r", "tok", http=http, require_signatures=False)
+    assert "Approved & merged" in transport.approve("7")
