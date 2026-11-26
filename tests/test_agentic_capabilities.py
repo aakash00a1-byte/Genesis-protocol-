@@ -515,6 +515,9 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("GLUTEN_OWNER_IDS", "1")
     import importlib
 
+    import genesis_protocol.agentic.policy as policy_module
+
+    monkeypatch.setattr(policy_module, "_default", None)
     import web.app as appmod
 
     importlib.reload(appmod)

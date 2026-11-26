@@ -1857,10 +1857,18 @@ than 404.
   ignored. (`/api/coordination/authorize` still echoes a body flag, but it is a
   dry-run preview that executes nothing.)
 - **The consent store keeps no secret and no spent source.** `request()`
-  refuses credential-shaped code (the memory scanner plus `sk-...` multi-segment
-  and `key=`/`token=` shapes), `claim()` blanks the code on disk and keeps only
-  its hash, and `cleanup()` (called on every `request()`) drops expired and
-  consumed entries.
+  refuses credential-shaped code (`_CREDENTIAL_PATTERNS`: vendor prefixes plus a
+  20+ character opaque assignment; deliberately narrower than the memory
+  scanner, which would refuse ordinary code such as `token = get_token()`),
+  `claim()` blanks the code on disk and keeps only its hash, and `cleanup()`
+  (called on every `request()`) drops expired and consumed entries.
+- **A claim is atomic across workers.** `claim()` runs its whole
+  load-check-save under an exclusive `flock` on `<state>.lock`, so two workers
+  racing on one id produce exactly one `approved` and the loser re-reads the
+  file and reports "already used". `request()` and `cleanup()` take the same
+  lock, and `get()` reports only *pending* requests. `tests/test_consent_concurrency.py`
+  races 16 threads and 4 processes on one approval and asserts a single winner;
+  do not remove the lock or re-introduce an unlocked read-modify-write.
 - **Shell execution is default-deny.** `skill_tools` no longer uses
   `shell=True` anywhere: `SubprocessTool` and `_CliTool` build an argv and run
   `shell=False`, so `;`, `&&`, `|`, `$(...)` and backticks are inert. Shell
@@ -1877,3 +1885,28 @@ than 404.
   quoting it. The request-level message is kept.
 - **`/api/test-417a557` is gated too** and reports no commit: it was the last
   endpoint serving deployment detail without the owner gate.
+- **CLI tools are authorised per operation, not by `shell=False`.**
+  `tools/cli_policy.py` classifies every argv for `kubectl`, `docker`, `aws`,
+  `terraform`, `gh`, `gcloud`, `az`, `crontab`, `pdflatex` and `pandoc`:
+  credential terms (`secret`, `iam`, `sts`, `kms`, `token`, ...) are refused
+  wherever they appear; a read-only verb (`get`, `describe`, `logs`, `list`,
+  `describe-*`, `gh pr view`, ...) runs for the owner; destructive, deployment
+  and privilege verbs (`delete`, `apply`, `run`, `exec`, `prune`, `merge`,
+  `auth`, `rollout`, `crontab -r`, ...) are refused outright and cannot be
+  consented to; everything else needs a single-use approval bound to the exact
+  executable *and* arguments (`canonical_command`). The tool receives the
+  verified caller id as `_user_id` from the loop and refuses when there is
+  none, so a skill or a direct registry call cannot run a state-changing
+  command. Do not add a CLI tool without a policy entry; the audit test asserts
+  the exact registered set (`tests/test_cli_authorization.py`).
+- **The Space must be given a strong `SECRET_KEY`.** `web/app.py` resolves it at
+  import: a missing, known-default or short (<16) value raises
+  `RuntimeError("... refusing to start in production")` when a hosting marker
+  (`SPACE_ID`, `RENDER`, `RAILWAY_ENVIRONMENT`) or `GENESIS_ENV=production` is
+  set. Local runs without a key get a random per-process key and a warning, so
+  sessions never sign with a public value. The value is never logged. Session
+  integrity is covered by `tests/test_session_integrity.py` (a cookie signed
+  with the documented default or any other key is rejected, logout clears the
+  session, a session naming a missing user is rejected, a bad Bearer token does
+  not fall back to the cookie) and startup refusal by
+  `tests/test_web_secret_key_startup.py`.

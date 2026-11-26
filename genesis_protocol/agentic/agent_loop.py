@@ -296,6 +296,16 @@ class AgentLoop:
         # A tool that executes code or a command is never authorised by a flag.
         # It needs a server-side consent record for this user and this payload,
         # exactly like an execute_code step. A successful claim is the approval.
+        # CLI tools decide per operation (read / consent / deny) inside
+        # ``tools.cli_policy``; they need the verified caller id to do it, and
+        # the approval id travels with the parameters.
+        cli_owner = False
+        if getattr(tool, "cli_consent", False):
+            params["_user_id"] = user_id
+            # The tool authorises the operation itself (read / consent / deny),
+            # so verified ownership is the loop's approval for this call.
+            cli_owner = self.policy.is_owner(user_id)
+
         consent_granted = False
         if getattr(tool, "requires_consent", False):
             payload = params.get("code") or params.get("command") or ""
@@ -338,7 +348,7 @@ class AgentLoop:
 
         decision = self.policy.authorize_tool(
             user_id, name, permission=perm,
-            owner_approved=owner_approved or consent_granted,
+            owner_approved=owner_approved or consent_granted or cli_owner,
         )
         self.audit.record(
             "tool_request", user_id, name, decision.allowed, decision.reason,

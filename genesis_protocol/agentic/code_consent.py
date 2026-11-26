@@ -25,12 +25,16 @@ Two storage rules keep the parked text from becoming a leak of its own:
   often contains the very key the user is debugging (see
   ``_CREDENTIAL_PATTERNS`` for the exact, deliberately narrow list);
 * ``claim()`` deletes the code from disk and keeps only its hash, so a used
-  approval never leaves the source behind. ``cleanup()`` - run on every
+  approval never leaves the source behind;
+* load-check-save runs under an exclusive ``flock`` on ``<state>.lock``, so two
+  workers cannot consume the same approval: the second one re-reads the file
+  inside the lock and sees ``consumed_at`` set. ``cleanup()`` - run on every
   ``request()`` - drops expired and consumed entries, and the file is capped at
   ``MAX_KEPT_REQUESTS`` entries.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -39,7 +43,12 @@ import secrets
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
+
+try:  # POSIX file locking; the deployment is Linux, tests may run anywhere.
+    import fcntl
+except ImportError:  # pragma: no cover - non-POSIX fallback
+    fcntl = None  # type: ignore[assignment]
 
 DEFAULT_PATH = "data/gluten_code_requests.json"
 
@@ -109,6 +118,27 @@ class CodeConsentStore:
         self.ttl_seconds = ttl_seconds
 
     # -- storage -----------------------------------------------------------
+    @property
+    def lock_path(self) -> Path:
+        return self.path.with_name(self.path.name + ".lock")
+
+    @contextlib.contextmanager
+    def _locked(self) -> Iterator[None]:
+        """Exclusive lock across threads and processes for one state file."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        if fcntl is None:  # pragma: no cover - non-POSIX
+            yield
+            return
+        fd = os.open(str(self.lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            finally:
+                os.close(fd)
+
     def _load(self) -> Dict[str, dict]:
         try:
             raw = self.path.read_text(encoding="utf-8")
@@ -176,59 +206,67 @@ class CodeConsentStore:
             created_at=now,
             expires_at=now + self.ttl_seconds,
         )
-        requests = self._load()
-        requests[request.request_id] = asdict(request)
-        self._save(requests)
+        with self._locked():
+            requests = self._load()
+            requests[request.request_id] = asdict(request)
+            self._save(requests)
         return request
 
     def get(self, user_id: int, request_id: str) -> Optional[CodeRequest]:
-        """Read a pending request without consuming it."""
+        """Read a *pending* request without consuming it (None once spent)."""
         entry = self._load().get(request_id or "")
         request = self._to_request(entry) if entry else None
-        if request is None or request.user_id != int(user_id):
+        if request is None or request.user_id != int(user_id) or request.consumed:
             return None
         return request
 
     def claim(self, user_id: int, request_id: str,
               code: Optional[str] = None) -> Tuple[Optional[CodeRequest], str]:
-        """Consume one approval. Returns ``(request, reason)``; request is None on refusal."""
-        requests = self._load()
-        entry = requests.get(request_id or "")
-        request = self._to_request(entry) if entry else None
-        if request is None:
-            return None, "unknown approval id"
-        if request.user_id != int(user_id):
-            return None, "approval belongs to another user"
-        if request.consumed:
-            return None, "approval already used"
-        if request.is_expired():
-            return None, "approval expired"
-        if code is not None and _digest(code) != request.code_sha256:
-            return None, "approval does not match this code"
+        """Consume one approval. Returns ``(request, reason)``; request is None on refusal.
 
-        request.consumed_at = time.time()
-        stored = asdict(request)
-        # The approval is spent; the source is not needed any more. Keep the
-        # hash for audit, drop the text so it does not sit on disk.
-        stored["code"] = ""
-        requests[request.request_id] = stored
-        self._save(requests)
-        return request, "approved"
+        The whole load-check-save runs under the store lock, so two workers
+        racing on one id produce exactly one ``approved``: the loser re-reads
+        the file after the winner's write and reports "already used".
+        """
+        with self._locked():
+            requests = self._load()
+            entry = requests.get(request_id or "")
+            request = self._to_request(entry) if entry else None
+            if request is None:
+                return None, "unknown approval id"
+            if request.user_id != int(user_id):
+                return None, "approval belongs to another user"
+            if request.consumed:
+                return None, "approval already used"
+            if request.is_expired():
+                return None, "approval expired"
+            if code is not None and _digest(code) != request.code_sha256:
+                return None, "approval does not match this code"
+
+            request.consumed_at = time.time()
+            stored = asdict(request)
+            # The approval is spent; the source is not needed any more. Keep the
+            # hash for audit, drop the text so it does not sit on disk.
+            stored["code"] = ""
+            requests[request.request_id] = stored
+            self._save(requests)
+            return request, "approved"
 
     def cleanup(self) -> int:
         """Drop expired and consumed entries. Returns how many were removed."""
-        now = time.time()
-        requests = self._load()
-        keep = {}
-        for request_id, entry in requests.items():
-            request = self._to_request(entry)
-            if request is None or request.consumed or request.is_expired(now):
-                continue
-            keep[request_id] = entry
-        removed = len(requests) - len(keep)
-        if removed:
-            self._save(keep)
-        return removed
+        with self._locked():
+            now = time.time()
+            requests = self._load()
+            keep = {}
+            for request_id, entry in requests.items():
+                request = self._to_request(entry)
+                if request is None or request.consumed or request.is_expired(now):
+                    continue
+                keep[request_id] = entry
+            removed = len(requests) - len(keep)
+            if removed:
+                self._save(keep)
+            return removed
 
     def pending(self, user_id: int) -> List[CodeRequest]:
         """Unconsumed, unexpired requests for one user."""

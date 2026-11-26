@@ -146,7 +146,10 @@ def test_http_route_ignores_the_owner_approved_body_field(tmp_path, monkeypatch)
     monkeypatch.setenv("GLUTEN_MEMORY_DB", str(tmp_path / "mem.db"))
     monkeypatch.setenv("GLUTEN_TASK_DB", str(tmp_path / "tasks.json"))
     monkeypatch.setenv("GLUTEN_AUDIT_LOG", str(tmp_path / "audit.jsonl"))
+    import genesis_protocol.agentic.policy as policy_module
+
     monkeypatch.setenv("GLUTEN_OWNER_IDS", str(OWNER))
+    monkeypatch.setattr(policy_module, "_default", None)
     appmod = importlib.import_module("web.app")
     importlib.reload(appmod)
     appmod.app.config["TESTING"] = True
@@ -155,6 +158,11 @@ def test_http_route_ignores_the_owner_approved_body_field(tmp_path, monkeypatch)
     token = client.post("/api/auth/login", json={
         "username": "admin", "password": "genesis-admin-2024"}).get_json()["token"]
     headers = {"Authorization": f"Bearer {token}"}
+    # The admin row's id depends on the database this run uses; make that id
+    # the owner instead of assuming 1.
+    admin_id = client.get("/api/auth/me", headers=headers).get_json()["user"]["id"]
+    monkeypatch.setenv("GLUTEN_OWNER_IDS", str(admin_id))
+    monkeypatch.setattr(policy_module, "_default", None)
     code = "print(41 + 1)"
 
     # The owner's forged flag does not replace the consent record...

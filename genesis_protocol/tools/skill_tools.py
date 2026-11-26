@@ -405,12 +405,44 @@ class PandasTool(_DeclaredTool):
 
 
 class _CliTool(_DeclaredTool):
-    """A tool backed by an external CLI. Missing binaries fail closed."""
+    """A tool backed by an external CLI. Missing binaries fail closed.
+
+    ``shell=False`` stops shell injection but authorises nothing, so the
+    operation itself is classified by ``tools.cli_policy``: read-only verbs run
+    for the owner, destructive/deployment/credential/privilege verbs are
+    refused outright, and everything else needs a single-use approval bound to
+    this exact executable and these exact arguments.
+    """
 
     _binary = ""
+    cli_consent = True
 
     def is_available(self) -> bool:
         return bool(shutil.which(self._binary))
+
+    @staticmethod
+    def _authorize(user_id: Any, approval_id: Any, payload: str,
+                   operation: str) -> Optional[Dict[str, Any]]:
+        """Owner identity plus a scoped, single-use approval. Fail closed."""
+        def refuse(reason: str) -> Dict[str, Any]:
+            return {"success": False, "denied": True, "operation": operation, "error": reason}
+
+        if user_id is None:
+            return refuse("refused: this operation needs an owner approval record and "
+                          "no caller identity was supplied")
+        from genesis_protocol.agentic.policy import get_agent_policy
+
+        if not get_agent_policy().is_owner(int(user_id)):
+            return refuse(f"refused: user {user_id} is not the owner")
+        if not approval_id:
+            return refuse("refused: an approval record is required for this operation "
+                          "(approval_id) and nothing was run")
+        from genesis_protocol.agentic.code_consent import get_code_consent
+
+        approved, reason = get_code_consent().claim(int(user_id), str(approval_id), payload)
+        if approved is None:
+            return refuse(f"refused: {reason}")
+        return None
 
     def execute(self, args: str = "", **kwargs: Any) -> Dict[str, Any]:
         if not shutil.which(self._binary):
@@ -428,6 +460,26 @@ class _CliTool(_DeclaredTool):
         refused = _refuse_shell_binary(argv)
         if refused:
             return refused
+
+        from genesis_protocol.tools.cli_policy import canonical_command, classify
+
+        verdict = classify(self._binary, argv[1:])
+        if verdict.denied:
+            return {
+                "success": False,
+                "denied": True,
+                "operation": verdict.operation,
+                "command": command,
+                "error": f"refused: {verdict.reason}",
+            }
+        if verdict.needs_consent:
+            denied = self._authorize(user_id=kwargs.get("_user_id"),
+                                     approval_id=kwargs.get("approval_id"),
+                                     payload=canonical_command(self._binary, argv[1:]),
+                                     operation=verdict.operation)
+            if denied is not None:
+                denied["command"] = command
+                return denied
         try:
             result = subprocess.run(
                 argv, shell=False, capture_output=True, text=True,
