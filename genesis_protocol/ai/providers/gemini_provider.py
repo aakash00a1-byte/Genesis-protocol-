@@ -25,6 +25,11 @@ class GeminiProvider(BaseProvider):
     """
     
     BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+
+    # Gemini accepts very large prompts but can sit on them: a 594k-char
+    # request timed out at ~30s with an empty exception string. 15s keeps one
+    # slow call from stalling the whole fallback chain.
+    CALL_TIMEOUT_SECONDS = 15.0
     
     def __init__(self):
         """Initialize Gemini provider."""
@@ -83,14 +88,16 @@ class GeminiProvider(BaseProvider):
                 },
             }
             
-            response = await self._get_client().post(url, json=payload, params=params)
+            response = await self._get_client().post(
+                url, json=payload, params=params, timeout=self.CALL_TIMEOUT_SECONDS
+            )
             
             if response.status_code == 429:
-                self.record_failure()
+                self.record_failure("Gemini rate limit exceeded (429)")
                 raise Exception("Gemini rate limit exceeded")
-            
+
             if response.status_code != 200:
-                self.record_failure()
+                self.record_failure(f"Gemini API error: {response.status_code}")
                 raise Exception(f"Gemini API error: {response.status_code}")
             
             data = response.json()
@@ -133,8 +140,9 @@ class GeminiProvider(BaseProvider):
             )
             
         except Exception as e:
-            self.record_failure()
-            logger.error(f"Gemini generation failed: {e}")
+            # A timeout can arrive with an empty message, so keep the type.
+            self.record_failure(f"{type(e).__name__}: {e}".rstrip(": "))
+            logger.error(f"Gemini generation failed: {type(e).__name__}: {e}")
             raise
     
     def _convert_messages(self, messages: List[Dict[str, str]]) -> List[Dict]:

@@ -29,7 +29,9 @@ from genesis_protocol.ai.autonomous_mode import (
 )
 from genesis_protocol.ai.tool_system import get_tool_system, ToolSystem
 from genesis_protocol.memory.unified_memory import get_unified_memory, UnifiedMemory
-from genesis_protocol.ai.provider_chain import get_provider_chain, AICallResult
+from genesis_protocol.ai.provider_chain import (
+    get_provider_chain, AICallResult, FAILURE_TOO_LARGE,
+)
 from genesis_protocol.ai.providers.base_provider import AIResponse
 from genesis_protocol.ai.identity_router import route_identity
 from genesis_protocol.ai.failure_communicator import FailureCommunicator, get_failure_communicator, FailureType
@@ -142,6 +144,33 @@ class GenesisAgent:
             "Provider returned empty or invalid response",
         )
 
+    def _failure_message(self, result: AICallResult, query: str) -> str:
+        """User-facing text for a failed call, chosen by category.
+
+        The full error is already logged by the caller; this only decides
+        which explanation the user sees.
+        """
+        fc = get_failure_communicator()
+        attempts = ["primary_provider", "fallback_provider"]
+        if getattr(result, "failure_kind", None) == FAILURE_TOO_LARGE:
+            return fc.communicate(
+                failure_type=FailureType.MESSAGE_TOO_LARGE,
+                reason=result.error or "the message is larger than the model window",
+                attempts=attempts,
+                query=query,
+            )
+        try:
+            available = self.provider_chain.get_available_providers()
+        except Exception:
+            available = []
+        return fc.communicate(
+            failure_type=(FailureType.NO_PROVIDERS if not available
+                          else FailureType.PROVIDER_ERROR),
+            reason=result.error or "all providers failed",
+            attempts=attempts,
+            query=query,
+        )
+
     def _update_claude_status(self):
         """Check and update Claude availability."""
         available = self.provider_chain.get_available_providers()
@@ -236,8 +265,15 @@ class GenesisAgent:
             else:
                 raw_response = str(response.response) if response.response else ""
             
-            # Fix: Check for None string and invalid responses
-            if raw_response and raw_response.lower() not in ('none', 'null', ''):
+            # A failed call has no answer at all: log the full provider
+            # error and show the user the category, instead of reporting it
+            # as an empty response.
+            if not response.success:
+                self.logger.error(
+                    f"AI call failed after {response.attempts} attempt(s): {response.error}"
+                )
+                response_content = self._failure_message(response, query)
+            elif raw_response and raw_response.lower() not in ('none', 'null', ''):
                 response_content = raw_response
             else:
                 # Use failure communicator instead of generic "Sorry..."
