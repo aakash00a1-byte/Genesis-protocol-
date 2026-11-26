@@ -5,6 +5,7 @@ centralises that call so a new provider only needs to declare its base URL,
 env var, default model and display name.
 """
 
+import os
 import time
 from typing import Dict, List, Optional
 
@@ -102,13 +103,26 @@ class CerebrasProvider(OpenAICompatibleProvider):
 
 
 class NvidiaProvider(OpenAICompatibleProvider):
-    """NVIDIA NIM hosted models."""
+    """NVIDIA NIM hosted models, off until a live model is named.
+
+    The old default, ``meta/llama-3.2-90b-vision-instruct``, was retired on
+    2026-11-16 and now answers 410 Gone. The chat models in the current
+    public list that this account can reach return content: null with the
+    text in reasoning_content, which the chain reads as an empty answer, so
+    no drop-in replacement is safe. Set NVIDIA_MODEL to a model your account
+    can actually serve to re-enable the provider.
+    """
+
     ENV_VAR = "NVIDIA_API_KEY"
     BASE_URL = "https://integrate.api.nvidia.com/v1"
-    DEFAULT_MODEL = "meta/llama-3.2-90b-vision-instruct"
+    DEFAULT_MODEL = ""
 
     def __init__(self):
-        super().__init__("nvidia")
+        super().__init__("nvidia", default_model=os.environ.get("NVIDIA_MODEL", ""))
+
+    def is_configured(self) -> bool:
+        """A key alone is not enough: the provider also needs a live model."""
+        return bool(self.api_key and self.default_model)
 
 
 class OpenRouterProvider(OpenAICompatibleProvider):

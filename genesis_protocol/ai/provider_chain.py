@@ -23,6 +23,37 @@ from genesis_protocol.utils.logger import get_logger
 logger = get_logger("ai.provider_chain")
 
 
+# Token estimate divisor. Real English averages ~4 chars/token; dividing by 3
+# over-estimates by ~25%, so the guard errs toward trimming or skipping rather
+# than sending a prompt the provider will reject.
+CHARS_PER_TOKEN = 3
+
+# Documented input windows, in tokens. Only limits that were observed or
+# documented are listed; anything else falls back to DEFAULT_CONTEXT_WINDOW.
+CONTEXT_WINDOWS: Dict[str, int] = {
+    # 400 from openrouter: "maximum context length is 131072 tokens"
+    "openrouter": 131072,
+    # 400 from freeai: "maximum context length is 32768 tokens"
+    "freeai": 32768,
+    # Gemini 2.5 Flash documented input limit
+    "gemini": 1048576,
+    # gpt-oss-120b on Groq
+    "groq": 131072,
+}
+# Smallest limit observed in practice. Unknown providers are treated as small
+# on purpose: under-estimating only skips a provider, over-estimating sends a
+# prompt that fails.
+DEFAULT_CONTEXT_WINDOW = 32768
+
+# Room kept for the reply; output tokens count against the same window.
+MIN_OUTPUT_RESERVE = 512
+
+# AICallResult.failure_kind values, so callers can categorise without parsing
+# the error text.
+FAILURE_TOO_LARGE = "too_large"
+FAILURE_UNAVAILABLE = "unavailable"
+
+
 @dataclass
 class AICallResult:
     """Result of an AI call attempt."""
@@ -35,6 +66,7 @@ class AICallResult:
     attempts: int = 0
     total_latency_ms: int = 0
     total_cost: float = 0.0
+    failure_kind: Optional[str] = None
 
 
 class ProviderChain:
@@ -122,6 +154,7 @@ class ProviderChain:
                 success=False,
                 error="No AI providers configured. Please set GROQ_API_KEY environment variable.",
                 attempts=0,
+                failure_kind=FAILURE_UNAVAILABLE,
             )
 
         # Determine model and provider using scoring
@@ -140,26 +173,68 @@ class ProviderChain:
         # Build provider order: target → fallbacks
         providers_to_try = self._get_fallback_chain(target_provider, available)
         
+        # A message that cannot fit any window is a size problem, not a provider
+        # problem. Walking the fallback chain would bury that behind "all
+        # providers failed", so refuse up front with the real numbers.
+        usable = [n for n in providers_to_try
+                  if self._providers.get(n) is not None and self._providers[n].is_configured()]
+        latest_content = messages[-1].get("content", "") if messages else ""
+        latest_tokens = self._estimate_tokens(latest_content)
+        largest_window = max(
+            (self._context_window(n, self._providers[n]) for n in usable), default=0
+        )
+        if usable and latest_tokens + max(max_tokens, MIN_OUTPUT_RESERVE) > largest_window:
+            error = (
+                f"Message too large: ~{latest_tokens} tokens ({len(latest_content)} chars "
+                f"at {CHARS_PER_TOKEN} chars/token), but the largest available context is "
+                f"~{largest_window} tokens. Please split the message into smaller parts."
+            )
+            logger.error(error)
+            self._log_request(user_input or "", target_provider, target_model, "failed", 0, errors=[error])
+            return AICallResult(
+                success=False,
+                error=error,
+                attempts=0,
+                failure_kind=FAILURE_TOO_LARGE,
+            )
+
+        size_skips = 0
+
         # Try each provider
         for provider_name in providers_to_try:
             provider = self._providers.get(provider_name)
             if not provider or not provider.is_configured():
                 continue
-            
+
             if not provider.should_use():
                 errors.append(f"{provider_name}: circuit_open")
                 continue
-            
+
+            window = self._context_window(provider_name, provider)
+            provider_messages, detail = self._fit_messages(messages, window, max_tokens)
+            if provider_messages is None:
+                size_skips += 1
+                errors.append(
+                    f"{provider_name}: prompt too large (~{detail} tokens, window {window})"
+                )
+                logger.info(f"Skipping {provider_name}: ~{detail} tokens exceeds {window}")
+                continue
+            if len(provider_messages) != len(messages):
+                logger.info(
+                    f"{provider_name}: dropped {len(messages) - len(provider_messages)} old "
+                    f"message(s) to fit {window} tokens"
+                )
+
             attempts += 1
-            
+
             # Map model to provider's available model
             model_to_use = self._map_model_to_provider(target_model, provider_name, provider)
-            
+
             try:
                 logger.info(f"Attempting: {provider_name}/{model_to_use}")
-                
+
                 request = AIRequest(
-                    messages=messages,
+                    messages=provider_messages,
                     model=model_to_use,
                     temperature=temperature,
                     max_tokens=max_tokens,
@@ -183,7 +258,11 @@ class ProviderChain:
                 )
                 
             except Exception as e:
-                error_str = str(e)
+                # A read timeout often carries no message at all, which used to
+                # produce the useless "All providers failed: gemini: ". Fall
+                # back to what the provider recorded, then to the type name.
+                error_str = str(e) or provider.get_status().get("last_error") \
+                    or type(e).__name__
                 errors.append(f"{provider_name}: {error_str}")
                 logger.warning(f"{provider_name} failed: {error_str}")
                 continue
@@ -198,7 +277,53 @@ class ProviderChain:
             error=f"All providers failed: {'; '.join(errors)}",
             attempts=attempts,
             total_latency_ms=total_latency,
+            failure_kind=(FAILURE_TOO_LARGE if (size_skips and not attempts)
+                          else FAILURE_UNAVAILABLE),
         )
+
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        """Conservative token count: chars / CHARS_PER_TOKEN, never zero."""
+        return max(1, len(text or "") // CHARS_PER_TOKEN)
+
+    def _message_tokens(self, messages: List[Dict[str, str]]) -> int:
+        """Estimated prompt size of a whole message list."""
+        return sum(self._estimate_tokens(m.get("content", "")) for m in messages)
+
+    def _context_window(self, provider_name: str, provider) -> int:
+        """Input window in tokens: provider declaration first, then the map."""
+        declared = getattr(provider, "context_window", None)
+        if isinstance(declared, int) and declared > 0:
+            return declared
+        return CONTEXT_WINDOWS.get(provider_name, DEFAULT_CONTEXT_WINDOW)
+
+    def _fit_messages(self, messages: List[Dict[str, str]], window: int,
+                      max_tokens: int):
+        """Fit `messages` into `window`, dropping the oldest history first.
+
+        Returns ``(messages_to_send, trimmed)`` or ``(None, tokens_needed)``
+        when the newest message alone cannot fit. The newest message is never
+        dropped or shortened: answering a truncated version of the question is
+        worse than reporting that it is too large.
+        """
+        budget = window - max(max_tokens, MIN_OUTPUT_RESERVE)
+        latest_tokens = self._estimate_tokens(
+            messages[-1].get("content", "") if messages else ""
+        )
+        if latest_tokens > budget:
+            return None, latest_tokens
+
+        kept = list(messages)
+        while len(kept) > 1 and self._message_tokens(kept) > budget:
+            # Keep a leading system prompt; drop the oldest history entry.
+            drop_at = 1 if kept[0].get("role") == "system" else 0
+            if drop_at >= len(kept) - 1:
+                break
+            kept.pop(drop_at)
+
+        if self._message_tokens(kept) > budget:
+            return None, self._message_tokens(kept)
+        return kept, len(kept) != len(messages)
     
     def _map_model_to_provider(self, model: str, provider: str, provider_obj) -> str:
         """Map router model to provider's actual model."""

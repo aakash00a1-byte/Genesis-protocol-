@@ -3,6 +3,8 @@
 Abstract base class for all AI providers.
 """
 
+import re
+import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -20,6 +22,27 @@ logger = get_logger("ai.providers.base")
 # new loop (e.g. the webhook builds a fresh loop per request) fails with
 # "Event loop is closed". Keying by the running loop avoids that.
 _clients_by_loop: "Dict[tuple[str, int], httpx.AsyncClient]" = {}
+
+# get_status() is served by /api/diagnostics, so error text is trimmed and any
+# credential-shaped fragment is removed before it is stored.
+LAST_ERROR_MAX_CHARS = 200
+_SECRET_PATTERNS = (
+    re.compile(r"(?i)\b(bearer|authorization|api[-_]?key|x-api-key|secret[-_]?token)\b\s*[:=]?\s*\S+"),
+    re.compile(r"\bsk-[A-Za-z0-9_\-]{6,}"),
+    re.compile(r"\b(key|token|secret)=[^&\s]+"),
+    re.compile(r"\b[A-Za-z0-9_\-]{32,}\b"),
+)
+
+
+def sanitize_error(error: Optional[str]) -> Optional[str]:
+    """Short, credential-free error text for provider status."""
+    if not error:
+        return None
+    text = str(error)
+    for pattern in _SECRET_PATTERNS:
+        text = pattern.sub("[redacted]", text)
+    text = " ".join(text.split())
+    return text[:LAST_ERROR_MAX_CHARS] or None
 
 
 def loop_safe_client(
@@ -114,6 +137,7 @@ class BaseProvider(ABC):
         self._circuit_state = CircuitState.CLOSED
         self._failures = 0
         self._last_failure_time: Optional[datetime] = None
+        self._last_error: Optional[str] = None
         self._failure_threshold = 5
         self._recovery_timeout = 60  # seconds
         
@@ -185,14 +209,24 @@ class BaseProvider(ABC):
     def record_success(self):
         """Record successful call."""
         self._failures = 0
+        self._last_error = None
         if self._circuit_state == CircuitState.HALF_OPEN:
             self._circuit_state = CircuitState.CLOSED
             logger.info(f"{self.name} circuit CLOSED after recovery")
     
-    def record_failure(self):
-        """Record failed call."""
+    def record_failure(self, error: Optional[str] = None):
+        """Record failed call.
+
+        `error` is what the next caller sees in get_status(). When it is not
+        given, the exception being handled is used, so the many
+        `except Exception: self.record_failure(); raise` sites need no change.
+        """
         self._failures += 1
         self._last_failure_time = datetime.utcnow()
+        if error is None:
+            exc = sys.exc_info()[1]
+            error = f"{type(exc).__name__}: {exc}" if exc is not None else None
+        self._last_error = sanitize_error(error)
         
         if self._failures >= self._failure_threshold:
             self._circuit_state = CircuitState.OPEN
@@ -217,6 +251,7 @@ class BaseProvider(ABC):
             "configured": self.is_configured(),
             "circuit_state": self._circuit_state.value,
             "failures": self._failures,
+            "last_error": self._last_error,
             "capabilities": [c.value for c in self.get_capabilities()],
         }
     

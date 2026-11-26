@@ -7,6 +7,9 @@ python-telegram-bot>=20.0
 discord.py>=2.0
 
 # AI Providers
+# MistralProvider imports aiohttp inside generate(); without it every
+# Mistral attempt dies with ModuleNotFoundError and its circuit opens.
+aiohttp>=3.9.0,<4.0.0
 groq>=0.4.0
 openai>=1.3.0
 google-generativeai>=0.3.0

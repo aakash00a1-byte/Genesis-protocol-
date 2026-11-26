@@ -15,6 +15,7 @@ class FailureType(Enum):
     PROVIDER_EMPTY = "provider_empty"
     PROVIDER_ERROR = "provider_error"
     PROVIDER_TIMEOUT = "provider_timeout"
+    MESSAGE_TOO_LARGE = "message_too_large"
     IDENTITY_ROUTE_FAILED = "identity_route_failed"
     AUTONOMOUS_FAILED = "autonomous_failed"
     MODE_SWITCH_FAILED = "mode_switch_failed"
@@ -106,6 +107,9 @@ class FailureCommunicator:
         
         elif failure_type == FailureType.PROVIDER_TIMEOUT:
             return self._timeout_response(reason, attempts)
+
+        elif failure_type == FailureType.MESSAGE_TOO_LARGE:
+            return self._message_too_large_response(reason, attempts)
         
         elif failure_type == FailureType.IDENTITY_ROUTE_FAILED:
             return self._identity_failed_response(reason)
@@ -135,10 +139,24 @@ class FailureCommunicator:
             "for a status report."
         )
 
+    def _message_too_large_response(self, reason: str, attempts: list) -> str:
+        """Response when the message itself exceeds every provider's window.
+
+        Nothing was sent to a model, so the reason carries the real token
+        numbers instead of a provider error.
+        """
+        return f"""**Message Too Large**
+
+{reason}
+
+**Status:** No model was called, so this is not a provider outage. The message itself is bigger than the largest context window I can reach.
+
+**Suggestion:** Split the text into smaller parts and send them one at a time. For a long document, send the section you want me to work on first."""
+
     def _provider_empty_response(self, reason: str, attempts: list) -> str:
         """Response when provider returns empty."""
         action = self._get_action_taken(attempts)
-        
+
         return f"""**Response Generation Issue**
 
 I attempted to generate a response but the provider returned an empty result.
