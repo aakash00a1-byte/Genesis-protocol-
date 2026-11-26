@@ -79,9 +79,13 @@ def test_diagnostics_reports_every_provider_and_no_fake_backends():
     import os
 
     os.environ.setdefault('SECRET_KEY', 'test-secret')
+    os.environ['DIAGNOSTICS_SECRET'] = 'test-diagnostics-secret'
     app_module = importlib.import_module('web.app')
     client = app_module.app.test_client()
-    resp = client.get('/api/diagnostics')
+    resp = client.get(
+        '/api/diagnostics',
+        headers={'X-Genesis-Secret': 'test-diagnostics-secret'},
+    )
     assert resp.status_code == 200
     data = resp.get_json()
 

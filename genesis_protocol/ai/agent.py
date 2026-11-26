@@ -230,6 +230,13 @@ class GenesisAgent:
             # ['calculator', 'calculator'].
             self.mode_manager.reset_to_normal()
             self._tools_used = []
+
+            # An explicit code approval is handled before anything else: the
+            # message is a command, not a question, and the code it releases is
+            # the exact block that was parked earlier.
+            approval_id = self._parse_approve_code(query)
+            if approval_id:
+                return await self._run_approved_code(approval_id, user_id, start_time)
             
             # Auto-switch or force mode
             if force_mode == "autonomous":
@@ -674,6 +681,12 @@ class GenesisAgent:
                     failures.append(f"{tool_name}: {decision.reason}")
                     continue
 
+                # Pasted code is never run on selection. Even the owner must
+                # approve one exact block, once, through /approve_code.
+                if tool_name == "code_execution":
+                    failures.append(self._request_code_approval(query, user_id))
+                    continue
+
                 params = self._build_tool_params(tool_name, query, user_id)
                 result = await self.tool_system.execute_tool(tool_name, params)
 
@@ -693,6 +706,89 @@ class GenesisAgent:
                 failures.append(f"{tool_name}: {e}")
 
         return ("\n".join(results) if results else "No tool results"), failures
+
+    # -- pasted-code approval ---------------------------------------------
+    _APPROVE_CODE_RE = re.compile(r"^\s*/approve_code\s+([A-Za-z0-9_\-]+)\s*$")
+
+    def _parse_approve_code(self, query: str) -> Optional[str]:
+        """Return the approval id from ``/approve_code <id>``, else None."""
+        match = self._APPROVE_CODE_RE.match(query or "")
+        return match.group(1) if match else None
+
+    def _request_code_approval(self, query: str, user_id: int) -> str:
+        """Park a fenced block and return the message telling the user how to approve it."""
+        block = self._extract_code_block(query) or ""
+        if not block.strip():
+            return "code_execution: no code block found"
+        if not user_id:
+            return "code_execution: a signed-in user is required to approve code"
+        try:
+            from genesis_protocol.agentic.code_consent import get_code_consent
+
+            request = get_code_consent().request(user_id, block)
+        except Exception as e:
+            return f"code_execution: approval could not be requested: {e}"
+        return (
+            "code_execution: NOT run. A code block in a message is data, so "
+            "nothing was executed. Reply `/approve_code "
+            f"{request.request_id}` to run this exact block once (valid 15 "
+            "minutes)."
+        )
+
+    def _approval_response(self, text: str, start_time: datetime,
+                           success: bool) -> AgentResponse:
+        return AgentResponse(
+            success=success,
+            response=text,
+            mode=self.mode_manager.current_mode.value,
+            model_used="approved_code_execution",
+            provider_used="sandbox",
+            quality_score=1.0 if success else 0.0,
+            planning_active=False,
+            tools_used=["code_execution"],
+            memory_used=False,
+            execution_time_ms=int((datetime.utcnow() - start_time).total_seconds() * 1000),
+            error=None if success else text,
+        )
+
+    async def _run_approved_code(self, request_id: str, user_id: int,
+                                 start_time: datetime) -> AgentResponse:
+        """Run one explicitly approved block through the bounded sandbox."""
+        from genesis_protocol.agentic.code_consent import get_code_consent
+
+        pending = get_code_consent().get(user_id, request_id)
+        if pending is None:
+            return self._approval_response(
+                "Code approval refused: unknown, expired, already used or not "
+                f"yours (`{request_id}`). Nothing was executed.",
+                start_time, success=False,
+            )
+
+        policy = self._tool_policy()
+        decision = self._authorize_chat_tool(policy, "code_execution", user_id)
+        if decision is not None and not decision.allowed:
+            return self._approval_response(
+                f"Code execution denied: {decision.reason}. Nothing was executed.",
+                start_time, success=False,
+            )
+
+        # The tool consumes the approval itself, so a retry cannot run twice.
+        result = await self.tool_system.execute_tool("code_execution", {
+            "code": pending.code,
+            "approval_id": request_id,
+            "user_id": user_id,
+        })
+        if result.success:
+            data = result.data or {}
+            output = (data.get("output") or "").strip()
+            body = output if output else "(no output)"
+            return self._approval_response(
+                f"Ran the approved block once.\n\n```\n{body[:2000]}\n```",
+                start_time, success=True,
+            )
+        return self._approval_response(
+            f"Approved block failed: {result.error}", start_time, success=False,
+        )
 
     # Common words that are never a place or currency name.
     _STOPWORDS = {

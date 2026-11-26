@@ -321,7 +321,14 @@ async function loadTasks() {
 
 async function loadModelLabel() {
     try {
-        const d = await (await fetch('/api/diagnostics', { headers: { 'Accept': 'application/json' } })).json();
+        const res = await fetch('/api/diagnostics', { headers: { 'Accept': 'application/json' } });
+        // Diagnostics is owner-only now; a non-owner gets a 403 by design.
+        if (!res.ok) {
+            document.getElementById('modelLabel').textContent =
+                res.status === 403 ? 'providers: owner only' : 'model: unknown';
+            return;
+        }
+        const d = await res.json();
         const env = d.environment || {};
         const configured = Object.keys(env).filter(k => k.endsWith('_configured') && env[k]);
         document.getElementById('modelLabel').textContent = configured.length

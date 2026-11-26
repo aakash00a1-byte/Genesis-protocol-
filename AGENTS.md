@@ -1822,3 +1822,25 @@ than 404.
   commits, `mergeable_state: clean`, 0 new alerts, 2176 tests passing. It is
   **not** merged - the owner approves. The ruleset probe
   (`scripts/probe_pr_only_ruleset.py`) needs owner approval to run.
+
+## Security hardening: gated diagnostics, code-execution consent (2026-11-24)
+
+- **`/api/diagnostics` and `/api/debug` are owner-only.** Allowed by an owner
+  session or the `X-Genesis-Secret` header matching `DIAGNOSTICS_SECRET`, and
+  fail closed when the secret is unset. They name which provider credentials
+  exist and carry provider error text, so they are not public. `/api/health`
+  stays public. `scripts/release_test.py` sends the secret and reports SKIP
+  without it; `web/templates/agent_workspace.html` shows "owner only" on a 403.
+- **`/api/debug` reports the real commit** via `_running_commit()`: env
+  `GENESIS_COMMIT_SHA` / `GIT_COMMIT_SHA` / `SOURCE_COMMIT_SHA`, else
+  `deploy/sha.txt` (written by `scripts/hf_deploy.sh`), else `unknown`. Never
+  hardcode a commit in a response again.
+- **Provider `last_error` is reduced before storage.** `sanitize_error` turns a
+  JSON provider body into its message only, so account, plan and request-id
+  detail never reaches a status field.
+- **Pasted code never runs on selection.** A fenced block is parked by
+  `agentic/code_consent.py`; the user must reply `/approve_code <id>`, and that
+  approval is single-use, 15-minute, user-scoped and bound to the exact code
+  hash. `tool_system._tool_code_execution` refuses without a valid approval, so
+  no caller (owner included) can bypass it. Sandbox limits are unchanged
+  (5s CPU, 256 MB, secrets stripped from the child environment).

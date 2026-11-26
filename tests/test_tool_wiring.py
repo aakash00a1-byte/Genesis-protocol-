@@ -18,6 +18,17 @@ import pytest
 os.environ.setdefault("GLUTEN_MEMORY_DB", os.path.join(tempfile.gettempdir(), "gluten_test_mem.db"))
 
 
+@pytest.fixture(autouse=True)
+def _code_consent(tmp_path, monkeypatch):
+    """Code execution now needs an explicit approval; tests get their own store."""
+    import genesis_protocol.agentic.code_consent as consent
+
+    monkeypatch.setattr(
+        consent, "_default",
+        consent.CodeConsentStore(path=str(tmp_path / "code_requests.json")),
+    )
+
+
 def _agent():
     from genesis_protocol.ai.agent import get_genesis_agent
 
@@ -70,27 +81,40 @@ class TestCodeExecutionRuns:
 
         policy._default = None
 
-    def test_calculate_produces_output(self):
+    def test_plain_arithmetic_is_not_run_through_code_execution(self):
         import asyncio
 
         agent = _agent()
-        query = "calculate 17*23"
         text, failures = asyncio.run(
-            agent._execute_tools(["code_execution"], query, user_id=self._OWNER)
+            agent._execute_tools(["code_execution"], "calculate 17*23",
+                                 user_id=self._OWNER)
         )
-        assert failures == []
-        assert "391" in text
+        assert any("no code block" in f for f in failures)
+        assert "391" not in text
 
-    def test_fenced_block_runs(self):
+    def test_fenced_block_is_parked_and_runs_once_on_approval(self):
         import asyncio
+        from datetime import datetime
+
+        from genesis_protocol.agentic.code_consent import get_code_consent
 
         agent = _agent()
         query = "run\n```python\nprint(sum(range(1,11)))\n```"
+
         text, failures = asyncio.run(
             agent._execute_tools(["code_execution"], query, user_id=self._OWNER)
         )
-        assert failures == []
-        assert "55" in text
+        assert text == "No tool results"
+        assert any("NOT run" in f for f in failures)
+        pending = get_code_consent().pending(self._OWNER)
+        assert pending, "the block must be parked for approval"
+
+        result = asyncio.run(
+            agent._run_approved_code(pending[0].request_id, self._OWNER,
+                                     datetime.utcnow())
+        )
+        assert result.success is True
+        assert "55" in result.response
 
 
 class TestArithmeticIsCorrectForEveryone:
@@ -223,9 +247,13 @@ class TestCodeExecutionIsSandboxed:
     def _run(self, code):
         import asyncio
 
+        from genesis_protocol.agentic.code_consent import get_code_consent
         from genesis_protocol.ai.tool_system import get_tool_system
 
-        return asyncio.run(get_tool_system().execute_tool("code_execution", {"code": code}))
+        request = get_code_consent().request(1, code)
+        return asyncio.run(get_tool_system().execute_tool("code_execution", {
+            "code": code, "approval_id": request.request_id, "user_id": 1,
+        }))
 
     def test_simple_code_runs(self):
         result = self._run("print(sum(range(1,11)))")

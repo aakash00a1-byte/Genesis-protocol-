@@ -42,6 +42,12 @@ tar_args=()
 for e in "${EXCLUDES[@]}"; do tar_args+=(--exclude="$e"); done
 ( cd "$SRC" && tar "${tar_args[@]}" -cf - . ) | ( cd "$WORK/space" && tar -xf - )
 
+# Record the source commit inside the Space, so /api/debug reports the code
+# that is actually running instead of a hardcoded literal.
+SHA="$(cd "$SRC" && git rev-parse HEAD 2>/dev/null || echo unknown)"
+mkdir -p "$WORK/space/deploy"
+printf '%s\n' "$SHA" > "$WORK/space/deploy/sha.txt"
+
 echo "[4/5] Restoring Space README/.gitattributes and HF Dockerfile ..."
 cp "$WORK/README.space.md" "$WORK/space/README.md"
 [ -f "$WORK/gitattributes.space" ] && cp "$WORK/gitattributes.space" "$WORK/space/.gitattributes"
@@ -54,8 +60,8 @@ if git diff --cached --quiet; then
   echo "Nothing to deploy (Space already matches this repo)."
   exit 0
 fi
-SHA="$(cd "$SRC" && git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+SHORT="${SHA:0:7}"
 git -c user.name="genesis-deploy" -c user.email="deploy@genesis.local" \
-  commit -q -m "deploy: sync from GitHub main (${SHA})"
+  commit -q -m "deploy: sync from GitHub main (${SHORT})"
 git push --quiet origin HEAD:main
-echo "Deployed ${SHA}. The HF Space will rebuild automatically."
+echo "Deployed ${SHORT} (${SHA}). The HF Space will rebuild automatically."

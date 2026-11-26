@@ -1081,6 +1081,53 @@ def _is_owner(user_id):
     return get_agent_policy().is_owner(user_id)
 
 
+# Provider status and deployment internals are not public: they name which
+# credentials exist and carry provider error text. Owner session or the shared
+# diagnostics secret, and fail closed when neither is available.
+DIAGNOSTICS_SECRET_ENV = 'DIAGNOSTICS_SECRET'
+DIAGNOSTICS_SECRET_HEADER = 'X-Genesis-Secret'
+
+
+def _diagnostics_allowed():
+    """True for an owner session or a caller holding DIAGNOSTICS_SECRET."""
+    user_id = session.get('user_id')
+    if user_id:
+        try:
+            if _is_owner(user_id):
+                return True
+        except Exception:
+            pass
+    expected = os.environ.get(DIAGNOSTICS_SECRET_ENV, '')
+    if not expected:
+        return False
+    supplied = request.headers.get(DIAGNOSTICS_SECRET_HEADER, '')
+    return bool(supplied) and hmac.compare_digest(supplied, expected)
+
+
+def _running_commit():
+    """The commit this process is actually running.
+
+    Read from the deploy environment or the marker the deploy script writes.
+    The previous value was a hardcoded literal, so it reported a commit that
+    had nothing to do with the running code.
+    """
+    for var in ('GENESIS_COMMIT_SHA', 'GIT_COMMIT_SHA', 'SOURCE_COMMIT_SHA'):
+        value = os.environ.get(var, '').strip()
+        if value:
+            return value
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    for rel in ('deploy/sha.txt', '.deploy_sha'):
+        try:
+            value = (root / rel).read_text(encoding='utf-8').strip()
+        except OSError:
+            continue
+        if value:
+            return value
+    return 'unknown'
+
+
 def _self_preservation():
     from genesis_protocol.gluten_os import get_self_preservation
 
@@ -2063,7 +2110,13 @@ init_db()
 
 @app.route('/api/debug', methods=['GET'])
 def api_debug():
-    """Debug endpoint to check AI providers and deployment info."""
+    """Debug endpoint to check AI providers and deployment info.
+
+    Owner-only (or the shared diagnostics secret), same reason as
+    /api/diagnostics.
+    """
+    if not _diagnostics_allowed():
+        return jsonify({'error': 'owner or diagnostics secret required'}), 403
     try:
         from genesis_protocol.ai.provider_chain import get_provider_chain
         
@@ -2074,7 +2127,7 @@ def api_debug():
         return jsonify({
             'status': 'ok',
             'entrypoint': 'web/app.py',
-            'commit': '417a557',
+            'commit': _running_commit(),
             'available_providers': available,
             'provider_status': status,
             'groq_configured': status.get('groq', {}).get('configured', False)
@@ -2095,7 +2148,7 @@ def api_test():
     return jsonify({
         'status': 'ok',
         'entrypoint': 'web/app.py',
-        'commit': '417a557',
+        'commit': _running_commit(),
         'unique': True,
         'timestamp': str(datetime.now())
     })
@@ -2877,7 +2930,13 @@ def api_status():
 
 @app.route('/api/diagnostics', methods=['GET'])
 def api_diagnostics():
-    """Full diagnostics - provider status, memory, uptime, version."""
+    """Full diagnostics - provider status, memory, uptime, version.
+
+    Owner-only (or the shared diagnostics secret): it names which provider
+    credentials exist and carries provider error text.
+    """
+    if not _diagnostics_allowed():
+        return jsonify({'error': 'owner or diagnostics secret required'}), 403
     try:
         from genesis_protocol.ai.provider_chain import get_provider_chain
         chain = get_provider_chain()
