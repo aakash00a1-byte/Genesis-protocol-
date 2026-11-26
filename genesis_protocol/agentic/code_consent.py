@@ -43,21 +43,28 @@ from typing import Dict, List, Optional, Tuple
 DEFAULT_PATH = "data/gluten_code_requests.json"
 
 
-# The memory scanner covers the common vendors; these two also catch the
-# multi-segment forms (``sk-proj-...``) and a key in a query string
-# (``?key=AIza...``), which is how a key usually appears in pasted code.
-_EXTRA_SECRET_PATTERNS = (
-    re.compile(r"\bsk-[A-Za-z0-9_\-]{16,}\b"),
-    re.compile(r"(?i)\b(key|token|secret|password|passwd)\b\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{8,}"),
+# A curated list, deliberately narrower than the memory store's scanner: that
+# one also refuses ``token = anything``, which would make ordinary code
+# unparkable (``token = get_token()``). Here a match must be a real vendor key
+# or a long opaque assignment.
+_CREDENTIAL_PATTERNS = (
+    re.compile(r"\bsk-[A-Za-z0-9_\-]{16,}\b"),                       # sk-, sk-proj-, sk-ant-
+    re.compile(r"\bgsk_[A-Za-z0-9]{20,}\b"),                          # Groq
+    re.compile(r"\bAIza[0-9A-Za-z_\-]{30,}\b"),                      # Google
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),                    # GitHub
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),                  # Slack
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                              # AWS
+    re.compile(r"\bhf_[A-Za-z0-9]{20,}\b"),                           # Hugging Face
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),                # PEM
+    re.compile(r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\."),  # JWT
+    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._\-]{12,}"),
+    re.compile(r"(?i)\b(api[_-]?key|access[_-]?key|secret[_-]?key|key|password|passwd|token)"
+               r"\b\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{20,}"),
 )
 
 
 def _contains_credential(text: str) -> bool:
-    from genesis_protocol.agentic.memory_safety import looks_like_secret
-
-    if looks_like_secret(text):
-        return True
-    return any(pattern.search(text or "") for pattern in _EXTRA_SECRET_PATTERNS)
+    return any(pattern.search(text or "") for pattern in _CREDENTIAL_PATTERNS)
 
 
 class CodeConsentError(RuntimeError):

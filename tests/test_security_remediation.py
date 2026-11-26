@@ -225,6 +225,16 @@ def test_credential_shaped_code_is_not_parked(isolated):
     assert not Path(isolated.path).exists() or "sk-proj" not in Path(isolated.path).read_text()
 
 
+def test_ordinary_code_with_a_token_variable_still_parks(isolated):
+    """The scanner must not refuse every block that mentions a token."""
+    code = 'token = get_token()\nsecret = load_secret()\nprint(token)'
+
+    approval = isolated.request(OWNER, code)
+
+    assert approval.request_id
+    assert approval.code == code
+
+
 def test_claim_removes_the_plaintext_and_cleanup_prunes(isolated):
     code = "print('hello')"
     approval = isolated.request(OWNER, code)
