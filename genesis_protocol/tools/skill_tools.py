@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import json as _json
 import shutil
+import os
+import shlex
 import subprocess
 from typing import Any, Dict, List, Optional
 
@@ -35,6 +37,28 @@ _FORBIDDEN_SUBSTRINGS = (
     "rm -rf /",
     ":(){",  # fork bomb
 )
+
+
+# With shell=False these are inert as shell syntax, but running a shell
+# binary directly (``bash -c ...``) or a wrapper that re-invokes one
+# (``env``, ``xargs``, ``timeout``) would reintroduce arbitrary shell
+# execution, so the binary itself is refused.
+_SHELL_BINARIES = frozenset({
+    "sh", "bash", "zsh", "ksh", "dash", "ash", "fish", "csh", "tcsh",
+    "env", "xargs", "eval", "exec", "nohup", "sudo", "su", "doas", "timeout",
+})
+
+
+def _refuse_shell_binary(argv: list) -> Optional[Dict[str, Any]]:
+    if not argv:
+        return {"success": False, "error": "refused: empty command"}
+    binary = os.path.basename(argv[0])
+    if binary in _SHELL_BINARIES:
+        return {
+            "success": False,
+            "error": f"refused: '{binary}' is a shell or wrapper; shell execution is not allowed",
+        }
+    return None
 
 
 def _refuse_forbidden(command: str) -> Optional[Dict[str, Any]]:
@@ -75,6 +99,7 @@ class PythonTool(_DeclaredTool):
     _description = "Run a Python snippet in a bounded sandbox"
     _category = "coding"
     _permission = ToolPermission.RESTRICTED
+    requires_consent = True
 
     def execute(self, code: str, timeout: float = 5.0, **kwargs: Any) -> Dict[str, Any]:
         from genesis_protocol.agentic.sandbox import run_python
@@ -90,19 +115,42 @@ class PythonTool(_DeclaredTool):
 
 
 class SubprocessTool(_DeclaredTool):
+    """Run one command as argv. Default deny, and never through a shell.
+
+    ``shell=True`` was removed: with a shell, ``;``, ``&&``, ``|``, ``$(...)``
+    and backticks all execute, so a substring denylist cannot hold. The command
+    is split with ``shlex`` and executed directly, and a shell binary or a
+    wrapper that re-invokes one is refused. The tool stays disabled unless
+    ``GLUTEN_ALLOW_SHELL_COMMANDS=1`` is set explicitly.
+    """
+
     _name = "subprocess"
-    _description = "Run a shell command (privileged git commands are refused)"
+    _description = "Run one command as argv (no shell; privileged commands refused)"
     _category = "coding"
     _permission = ToolPermission.RESTRICTED
+    requires_consent = True
 
     def execute(self, command: str, timeout: int = 30, cwd: Optional[str] = None, **kwargs: Any) -> Dict[str, Any]:
         refused = _refuse_forbidden(command)
         if refused:
             return refused
+        if os.environ.get("GLUTEN_ALLOW_SHELL_COMMANDS", "") != "1":
+            return {
+                "success": False,
+                "error": ("refused: command execution is disabled by default; "
+                          "set GLUTEN_ALLOW_SHELL_COMMANDS=1 to enable it"),
+            }
+        try:
+            argv = shlex.split(command)
+        except ValueError as exc:
+            return {"success": False, "error": f"refused: cannot parse command: {exc}"}
+        refused = _refuse_shell_binary(argv)
+        if refused:
+            return refused
         try:
             result = subprocess.run(
-                command,
-                shell=True,
+                argv,
+                shell=False,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
@@ -360,8 +408,17 @@ class _CliTool(_DeclaredTool):
         if refused:
             return refused
         try:
+            argv = [self._binary] + shlex.split(args)
+        except ValueError as exc:
+            return {"success": False, "error": f"refused: cannot parse arguments: {exc}"}
+        # The binary is fixed, but the arguments are not: refuse anything that
+        # would hand control to a shell.
+        refused = _refuse_shell_binary(argv)
+        if refused:
+            return refused
+        try:
             result = subprocess.run(
-                command, shell=True, capture_output=True, text=True, timeout=kwargs.get("timeout", 30)
+                argv, shell=False, capture_output=True, text=True, timeout=kwargs.get("timeout", 30)
             )
             return {
                 "success": result.returncode == 0,

@@ -31,6 +31,14 @@ LAST_ERROR_MAX_CHARS = 200
 # does not belong in a status field; only the human message survives.
 JSON_MESSAGE_MAX_CHARS = 120
 _JSON_PAYLOAD = re.compile(r"\{.*\}", re.S)
+# Account-level detail ("you need a subscription", "out of credits") says
+# nothing about the request and describes the owner's billing state, so it is
+# replaced by a neutral category instead of being echoed.
+_BILLING_TERMS = re.compile(
+    r"(?i)\b(subscription|billing|billed|credit|credits|payment|invoice|"
+    r"upgrade|quota|top[- ]?up|plan)\b"
+)
+_BILLING_SUMMARY = "(provider rejected the request: plan or billing restriction)"
 _SECRET_PATTERNS = (
     # The value usually follows the keyword after one more word
     # ("Authorization: Bearer abc"), so take up to two tokens.
@@ -74,9 +82,14 @@ def sanitize_error(error: Optional[str]) -> Optional[str]:
         message = _json_message(match.group(0))
         if not message:
             return "(details withheld)"
+        if _BILLING_TERMS.search(message):
+            return _BILLING_SUMMARY
         return f"({message[:JSON_MESSAGE_MAX_CHARS]})"
 
     text = _JSON_PAYLOAD.sub(_replace, text)
+    if _BILLING_SUMMARY not in text and _BILLING_TERMS.search(text):
+        head = text.split(" - ", 1)[0]
+        text = f"{head} - {_BILLING_SUMMARY}" if head != text else _BILLING_SUMMARY
     for pattern in _SECRET_PATTERNS:
         text = pattern.sub("[redacted]", text)
     text = " ".join(text.split())

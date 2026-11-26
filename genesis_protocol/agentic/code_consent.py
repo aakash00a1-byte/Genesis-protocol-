@@ -18,12 +18,22 @@ State lives in a JSON file (``GLUTEN_CODE_REQUESTS``, default
 ``data/gluten_code_requests.json``) so an approval survives the request that
 created it, is auditable afterwards, and cannot be replayed after a restart.
 The file is written atomically and readable only by the process owner.
+
+Two storage rules keep the parked text from becoming a leak of its own:
+
+* credential-shaped code is refused at ``request()`` (the same scanner the
+  memory store uses), because a pasted block often contains the very key the
+  user is debugging;
+* ``claim()`` deletes the code from disk and keeps only its hash, so a used
+  approval never leaves the source behind. Expired and consumed entries are
+  pruned by ``cleanup()`` and on every write.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import re
 import secrets
 import time
 from dataclasses import asdict, dataclass
@@ -31,6 +41,28 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 DEFAULT_PATH = "data/gluten_code_requests.json"
+
+
+# The memory scanner covers the common vendors; these two also catch the
+# multi-segment forms (``sk-proj-...``) and a key in a query string
+# (``?key=AIza...``), which is how a key usually appears in pasted code.
+_EXTRA_SECRET_PATTERNS = (
+    re.compile(r"\bsk-[A-Za-z0-9_\-]{16,}\b"),
+    re.compile(r"(?i)\b(key|token|secret|password|passwd)\b\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{8,}"),
+)
+
+
+def _contains_credential(text: str) -> bool:
+    from genesis_protocol.agentic.memory_safety import looks_like_secret
+
+    if looks_like_secret(text):
+        return True
+    return any(pattern.search(text or "") for pattern in _EXTRA_SECRET_PATTERNS)
+
+
+class CodeConsentError(RuntimeError):
+    """Raised when a block cannot be parked (the reason never repeats the code)."""
+
 DEFAULT_TTL_SECONDS = 900
 MAX_KEPT_REQUESTS = 50
 
@@ -82,6 +114,9 @@ class CodeConsentStore:
 
     def _save(self, requests: Dict[str, dict]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        # A consumed entry keeps its hash (so a replay is reported as "already
+        # used") but its code was blanked by claim(). Bounded by count here;
+        # ``cleanup()`` drops expired and consumed entries.
         ordered = sorted(requests.items(),
                          key=lambda item: item[1].get("created_at", 0),
                          reverse=True)[:MAX_KEPT_REQUESTS]
@@ -109,7 +144,20 @@ class CodeConsentStore:
 
     # -- public API --------------------------------------------------------
     def request(self, user_id: int, code: str) -> CodeRequest:
-        """Park ``code`` for ``user_id``. Nothing is executed."""
+        """Park ``code`` for ``user_id``. Nothing is executed.
+
+        Raises ``CodeConsentError`` for empty code and for credential-shaped
+        code: the parked text is written to disk, so it must not be a secret.
+        """
+        if not (code or "").strip():
+            raise CodeConsentError("no code to approve")
+        if _contains_credential(code):
+            raise CodeConsentError(
+                "the block looks like it contains a credential; remove the secret "
+                "and paste only the code"
+            )
+
+        self.cleanup()
         now = time.time()
         request = CodeRequest(
             request_id=secrets.token_hex(8),
@@ -119,8 +167,7 @@ class CodeConsentStore:
             created_at=now,
             expires_at=now + self.ttl_seconds,
         )
-        requests = {rid: entry for rid, entry in self._load().items()
-                    if not (entry.get("expires_at") or 0) < now}
+        requests = self._load()
         requests[request.request_id] = asdict(request)
         self._save(requests)
         return request
@@ -151,9 +198,28 @@ class CodeConsentStore:
             return None, "approval does not match this code"
 
         request.consumed_at = time.time()
-        requests[request.request_id] = asdict(request)
+        stored = asdict(request)
+        # The approval is spent; the source is not needed any more. Keep the
+        # hash for audit, drop the text so it does not sit on disk.
+        stored["code"] = ""
+        requests[request.request_id] = stored
         self._save(requests)
         return request, "approved"
+
+    def cleanup(self) -> int:
+        """Drop expired and consumed entries. Returns how many were removed."""
+        now = time.time()
+        requests = self._load()
+        keep = {}
+        for request_id, entry in requests.items():
+            request = self._to_request(entry)
+            if request is None or request.consumed or request.is_expired(now):
+                continue
+            keep[request_id] = entry
+        removed = len(requests) - len(keep)
+        if removed:
+            self._save(keep)
+        return removed
 
     def pending(self, user_id: int) -> List[CodeRequest]:
         """Unconsumed, unexpired requests for one user."""

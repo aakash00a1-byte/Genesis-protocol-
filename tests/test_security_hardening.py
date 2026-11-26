@@ -109,7 +109,8 @@ def test_provider_error_body_is_reduced_to_its_message():
 
     summary = sanitize_error(raw)
 
-    assert "You need a subscription to access this API." in summary
+    assert "provider rejected the request: plan or billing restriction" in summary
+    assert "subscription" not in summary.lower()
     assert "raw_status_code" not in summary
     assert "2314" not in summary
     assert "invalid_request_error" not in summary

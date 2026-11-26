@@ -1361,7 +1361,6 @@ def api_agent_run():
     goal = (data.get('goal') or '').strip()
     steps = data.get('steps') or []
     task_id = data.get('task_id')
-    owner_approved = bool(data.get('owner_approved', False))
     agent_id = data.get('agent_id')
     if not goal:
         return jsonify({'error': 'goal required'}), 400
@@ -1377,6 +1376,12 @@ def api_agent_run():
         verification = get_identity_registry().verify(agent_id)
         if not verification.ok:
             return jsonify({'error': f'identity not verified: {verification.reason}'}), 403
+
+    # A request-body flag is not authority: the owner decision is made here
+    # from the verified session identity. Code and command execution are not
+    # covered by this flag at all - they need a server-side consent record
+    # (see AgentLoop._run_execute_code_step and the requires_consent tools).
+    owner_approved = owner
 
     # Least privilege: refuse code execution for non-owners up front.
     for step in steps:
@@ -1424,7 +1429,7 @@ def api_agent_plan():
     decision = DecisionEngine().decide(
         goal,
         user_id,
-        owner_approved=bool(data.get('owner_approved', False)),
+        owner_approved=_is_owner(user_id),
         risk_tolerance=risk_tolerance,
     )
     # A decision record is evidence, not an action: no step has run.
@@ -1480,18 +1485,18 @@ def api_agent_skill():
     data = request.get_json(silent=True) or {}
     skill_name = (data.get('skill') or '').strip()
     tool_params = data.get('tool_params') or {}
-    owner_approved = bool(data.get('owner_approved', False))
     if not skill_name:
         return jsonify({'error': 'skill required'}), 400
     if not isinstance(tool_params, dict):
         return jsonify({'error': 'tool_params must be an object'}), 400
 
     user_id = session['user_id']
+    # Server-side identity, not a client flag.
     result = SkillRunner().run(
         user_id=user_id,
         skill_name=skill_name,
         tool_params=tool_params,
-        owner_approved=owner_approved,
+        owner_approved=_is_owner(user_id),
     )
     if not result.get('steps') and result.get('error'):
         return jsonify(result), 404
@@ -2144,11 +2149,12 @@ def api_debug():
 
 @app.route('/api/test-417a557', methods=['GET'])
 def api_test():
-    """UNIQUE test endpoint - only exists in app.py"""
+    """Liveness marker. Owner-only, and it reports no deployment detail."""
+    if not _diagnostics_allowed():
+        return jsonify({'error': 'owner or diagnostics secret required'}), 403
     return jsonify({
         'status': 'ok',
         'entrypoint': 'web/app.py',
-        'commit': _running_commit(),
         'unique': True,
         'timestamp': str(datetime.now())
     })

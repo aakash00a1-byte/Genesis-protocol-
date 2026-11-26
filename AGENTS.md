@@ -1841,6 +1841,36 @@ than 404.
 - **Pasted code never runs on selection.** A fenced block is parked by
   `agentic/code_consent.py`; the user must reply `/approve_code <id>`, and that
   approval is single-use, 15-minute, user-scoped and bound to the exact code
-  hash. `tool_system._tool_code_execution` refuses without a valid approval, so
-  no caller (owner included) can bypass it. Sandbox limits are unchanged
-  (5s CPU, 256 MB, secrets stripped from the child environment).
+  hash. `tool_system._tool_code_execution` refuses without a valid approval.
+  Sandbox limits are unchanged (5s CPU, 256 MB, secrets stripped from the child
+  environment).
+- **The consent gate covers the chat path *and* the agent path** (remediation
+  2026-11-26). `AgentLoop._run_execute_code_step` checks ownership itself
+  (`AgentPolicy.is_owner`) and then claims a consent record; a step without a
+  valid `approval_id` is refused with `executed: false`. Tools that execute
+  code or a command (`python`, `subprocess`) carry `requires_consent = True`
+  and are refused the same way. So the guarantee is: **no path executes code or
+  a command without a server-side consent record bound to that user, that exact
+  payload and an expiry.** A request-body flag is never authority -
+  `/api/agent/run`, `/api/agent/skill` and `/api/agent/plan` now derive
+  `owner_approved` from the verified session identity, and the body field is
+  ignored. (`/api/coordination/authorize` still echoes a body flag, but it is a
+  dry-run preview that executes nothing.)
+- **The consent store keeps no secret and no spent source.** `request()`
+  refuses credential-shaped code (the memory scanner plus `sk-...` multi-segment
+  and `key=`/`token=` shapes), `claim()` blanks the code on disk and keeps only
+  its hash, and `cleanup()` (called on every `request()`) drops expired and
+  consumed entries.
+- **Shell execution is default-deny.** `skill_tools` no longer uses
+  `shell=True` anywhere: `SubprocessTool` and `_CliTool` build an argv and run
+  `shell=False`, so `;`, `&&`, `|`, `$(...)` and backticks are inert. Shell
+  binaries and re-invoking wrappers (`sh`, `bash`, `env`, `xargs`, `timeout`,
+  `sudo`, ...) are refused outright, `SubprocessTool` stays disabled unless
+  `GLUTEN_ALLOW_SHELL_COMMANDS=1`, and the privileged-command denylist still
+  applies. Do not reintroduce a shell string.
+- **Billing detail is not echoed.** `sanitize_error` replaces an account-level
+  message ("you need a subscription", "out of credits") with
+  `(provider rejected the request: plan or billing restriction)` instead of
+  quoting it. The request-level message is kept.
+- **`/api/test-417a557` is gated too** and reports no commit: it was the last
+  endpoint serving deployment detail without the owner gate.
