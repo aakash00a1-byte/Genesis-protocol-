@@ -1865,7 +1865,10 @@ than 404.
   `shell=True` anywhere: `SubprocessTool` and `_CliTool` build an argv and run
   `shell=False`, so `;`, `&&`, `|`, `$(...)` and backticks are inert. Shell
   binaries and re-invoking wrappers (`sh`, `bash`, `env`, `xargs`, `timeout`,
-  `sudo`, ...) are refused outright, `SubprocessTool` stays disabled unless
+  `sudo`, ...) and interpreters (`python3`, `perl`, `node`, `awk`, `sed`, ...)
+  are refused outright - the sandboxed `python` tool is the only code path -
+  the child environment is scrubbed with `agentic.sandbox._scrubbed_env()` so
+  no provider key is inherited, `SubprocessTool` stays disabled unless
   `GLUTEN_ALLOW_SHELL_COMMANDS=1`, and the privileged-command denylist still
   applies. Do not reintroduce a shell string.
 - **Billing detail is not echoed.** `sanitize_error` replaces an account-level

@@ -46,7 +46,18 @@ _FORBIDDEN_SUBSTRINGS = (
 _SHELL_BINARIES = frozenset({
     "sh", "bash", "zsh", "ksh", "dash", "ash", "fish", "csh", "tcsh",
     "env", "xargs", "eval", "exec", "nohup", "sudo", "su", "doas", "timeout",
+    # Interpreters are arbitrary code execution in one argument; the sandboxed
+    # ``python`` tool exists for that, so the unsandboxed path refuses them.
+    "python", "python2", "python3", "perl", "ruby", "node", "nodejs", "php",
+    "lua", "Rscript", "osascript", "expect", "awk", "gawk", "sed",
 })
+
+
+def _scrubbed_env() -> Dict[str, str]:
+    """The child gets no inherited credential, matching the code sandbox."""
+    from genesis_protocol.agentic.sandbox import _scrubbed_env as sandbox_env
+
+    return sandbox_env()
 
 
 def _refuse_shell_binary(argv: list) -> Optional[Dict[str, Any]]:
@@ -155,6 +166,7 @@ class SubprocessTool(_DeclaredTool):
                 text=True,
                 timeout=timeout,
                 cwd=cwd,
+                env=_scrubbed_env(),
             )
             return {
                 "success": result.returncode == 0,
@@ -418,7 +430,8 @@ class _CliTool(_DeclaredTool):
             return refused
         try:
             result = subprocess.run(
-                argv, shell=False, capture_output=True, text=True, timeout=kwargs.get("timeout", 30)
+                argv, shell=False, capture_output=True, text=True,
+                timeout=kwargs.get("timeout", 30), env=_scrubbed_env(),
             )
             return {
                 "success": result.returncode == 0,

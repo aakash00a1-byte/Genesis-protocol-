@@ -295,6 +295,9 @@ def test_shell_metacharacters_are_inert_when_enabled(monkeypatch):
     'env bash -c "id"',
     'xargs -I{} sh -c "id"',
     'timeout 5 bash -c "id"',
+    'python3 -c "import os; os.system(\'id\')"',
+    'perl -e "system(\'id\')"',
+    'node -e "require(\'child_process\').execSync(\'id\')"',
 ])
 def test_shell_binaries_and_wrappers_are_refused(monkeypatch, command):
     monkeypatch.setenv("GLUTEN_ALLOW_SHELL_COMMANDS", "1")
@@ -304,6 +307,17 @@ def test_shell_binaries_and_wrappers_are_refused(monkeypatch, command):
     assert result["success"] is False
     assert "shell" in result["error"]
     assert "uid=" not in (result.get("stdout") or "")
+
+
+def test_the_child_process_gets_no_inherited_credentials(monkeypatch):
+    """An unsandboxed command must not see the process environment."""
+    monkeypatch.setenv("GLUTEN_ALLOW_SHELL_COMMANDS", "1")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_" + "a" * 30)
+
+    result = _subprocess_tool().execute("printenv")
+
+    assert result["success"] is True
+    assert "GROQ_API_KEY" not in result["stdout"]
 
 
 def test_privileged_commands_are_still_refused_with_the_flag_on(monkeypatch):
