@@ -21,12 +21,13 @@ The file is written atomically and readable only by the process owner.
 
 Two storage rules keep the parked text from becoming a leak of its own:
 
-* credential-shaped code is refused at ``request()`` (the same scanner the
-  memory store uses), because a pasted block often contains the very key the
-  user is debugging;
+* credential-shaped code is refused at ``request()``, because a pasted block
+  often contains the very key the user is debugging (see
+  ``_CREDENTIAL_PATTERNS`` for the exact, deliberately narrow list);
 * ``claim()`` deletes the code from disk and keeps only its hash, so a used
-  approval never leaves the source behind. Expired and consumed entries are
-  pruned by ``cleanup()`` and on every write.
+  approval never leaves the source behind. ``cleanup()`` - run on every
+  ``request()`` - drops expired and consumed entries, and the file is capped at
+  ``MAX_KEPT_REQUESTS`` entries.
 """
 from __future__ import annotations
 
@@ -69,6 +70,7 @@ def _contains_credential(text: str) -> bool:
 
 class CodeConsentError(RuntimeError):
     """Raised when a block cannot be parked (the reason never repeats the code)."""
+
 
 DEFAULT_TTL_SECONDS = 900
 MAX_KEPT_REQUESTS = 50
