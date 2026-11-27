@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from genesis_protocol.ai.providers.base_provider import AIRequest
+from genesis_protocol.ai.independence import assess, describe
 from genesis_protocol.ai.quality_judge import QualityJudge
 from genesis_protocol.utils.logger import get_logger
 
@@ -66,6 +67,9 @@ class CouncilResult:
     consensus: float = 0.0
     total_latency_ms: int = 0
     error: str | None = None
+    #: How much the agreement is worth. ``is_evidence`` inside is always False:
+    #: consensus is not truth. See ``ai/independence.py``.
+    independence: dict | None = None
 
     @property
     def answered_by(self) -> str:
@@ -252,8 +256,11 @@ class LLMCouncil:
         total = int((time.monotonic() - start) * 1000)
         logger.info(f"Council ({strategy.value}) answered by {winner.provider}/{winner.model} "
                     f"in {total}ms; {len(ok)}/{len(members)} members ok")
+        assessment = assess(members)
+        logger.info(describe(assessment))
         return CouncilResult(True, strategy, answer=answer, winner=winner, members=members,
-                             consensus=consensus, total_latency_ms=total)
+                             consensus=consensus, total_latency_ms=total,
+                             independence=assessment.to_dict())
 
 
 _COUNCIL: LLMCouncil | None = None

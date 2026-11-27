@@ -4314,6 +4314,48 @@ for _path, _template in _FEATURE_PAGES:
         methods=['GET'],
     )
 
+# ============================================================================
+# CONSTITUTION, RESEARCH (Stage 4) AND HONEST ROADMAP SURFACES
+# ============================================================================
+
+@app.route('/api/constitution', methods=['GET'])
+def api_constitution():
+    """The founding constitution as data: articles, principles, non-claims."""
+    from genesis_protocol import constitution
+    return jsonify(constitution.summary())
+
+
+@app.route('/api/research/status', methods=['GET'])
+def api_research_status():
+    """Stage 4 readiness: what the research cycle can and cannot do."""
+    from genesis_protocol.research import STAGES, PROBLEMS, LeanChecker, run_benchmark
+    lean = LeanChecker()
+    return jsonify({
+        "stages": list(STAGES),
+        "benchmark_problems": len(PROBLEMS),
+        "lean_available": lean.available,
+        "capabilities": {
+            "generates_hypotheses": False,
+            "runs_experiments": False,
+            "verifies_results": True,
+            "keeps_negative_results": True,
+        },
+        "non_claims": [
+            "No discovery is claimed by this endpoint.",
+            "No Lean result is claimed when Lean is not installed.",
+            "Consensus among models is not evidence of truth.",
+        ],
+    })
+
+
+@app.route('/api/research/benchmark', methods=['GET'])
+@admin_required
+def api_research_benchmark():
+    """Run the reproducible benchmark (owner only). A score is not a discovery."""
+    from genesis_protocol.research import run_benchmark
+    return jsonify(run_benchmark().to_dict())
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
