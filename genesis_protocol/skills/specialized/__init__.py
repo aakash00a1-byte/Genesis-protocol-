@@ -340,20 +340,13 @@ class SlackIntegration:
 
 
 class GitHubPRManager:
-    """Manage GitHub pull requests through the CLI gate.
-
-    ``run_gh`` built its own argv, so ``run_gh("pr", "merge", "90")`` merged
-    with no owner check. ``gh`` is classified by ``cli_policy``: ``pr view`` and
-    the other read pairs are allowed for the owner, while ``pr merge``, ``api``,
-    ``auth`` and ``secret`` are refused outright.
-    """
-
+    """Manage GitHub pull requests."""
+    
     def __init__(self, repo_path: str = ".", *, user_id: Optional[int] = None,
                  approval_id: Optional[str] = None):
         self.repo_path = repo_path
         self._user_id = user_id
         self._approval_id = approval_id
-
     def run_gh(self, *args, user_id: Optional[int] = None,
                approval_id: Optional[str] = None) -> Dict[str, Any]:
         """Run a gh command, or refuse it."""
@@ -363,6 +356,66 @@ class GitHubPRManager:
             approval_id=self._approval_id if approval_id is None else approval_id,
             timeout=60, cwd=self.repo_path,
         )
+    def list_prs(self, state: str = "open") -> List[Dict[str, Any]]:
+        """List pull requests."""
+        result = self.run_gh("pr", "list", "--state", state, "--json", "number,title,state,url,author")
+        
+        if result.get("success"):
+            try:
+                return json.loads(result["stdout"])
+            except:
+                pass
+        
+        return []
+    
+    def create_pr(
+        self,
+        title: str,
+        body: str,
+        base: str = "main",
+        head: str = None
+    ) -> Dict[str, Any]:
+        """Create a pull request."""
+        args = ["pr", "create", "--title", title, "--body", body, "--base", base]
+        
+        if head:
+            args.extend(["--head", head])
+        
+        result = self.run_gh(*args)
+        
+        if result.get("success"):
+            # Extract PR URL from output
+            for token in result["stdout"].split():
+                parsed = urlparse(token)
+                if parsed.scheme == "https" and (parsed.hostname or "") == "github.com":
+                    return {"success": True, "url": token}
+        
+        return {"success": False, "error": result.get("stderr", "Unknown error")}
+    
+    def get_pr_details(self, pr_number: int) -> Dict[str, Any]:
+        """Get PR details."""
+        result = self.run_gh(
+            "pr", "view", str(pr_number),
+            "--json", "number,title,body,state,url,author,labels,reviews"
+        )
+        
+        if result.get("success"):
+            try:
+                return json.loads(result["stdout"])
+            except:
+                pass
+        
+        return {}
+    
+    def add_review(self, pr_number: int, body: str = "", event: str = "COMMENT") -> Dict[str, Any]:
+        """Add a review to a PR."""
+        return self.run_gh("pr", "review", str(pr_number), "--body", body, "--event", event)
+    
+    def merge_pr(self, pr_number: int, method: str = "merge") -> Dict[str, Any]:
+        """Merge a pull request."""
+        return self.run_gh("pr", "merge", str(pr_number), "--admin", "--auto")
+
+
 class DataAnalyzer:
     """Data analysis capabilities."""
     
@@ -442,9 +495,12 @@ async def execute_slack_send_message(channel: str, text: str) -> Dict[str, Any]:
     return integration.send_message(channel, text)
 
 
-async def execute_github_create_pr(title: str, body: str, **kwargs) -> Dict[str, Any]:
-    """Execute GitHub PR creation."""
-    manager = GitHubPRManager()
+async def execute_github_create_pr(title: str, body: str, *,
+                                  user_id: Optional[int] = None,
+                                  approval_id: Optional[str] = None,
+                                  **kwargs) -> Dict[str, Any]:
+    """Execute GitHub PR creation (owner only)."""
+    manager = GitHubPRManager(user_id=user_id, approval_id=approval_id)
     return manager.create_pr(title, body, **kwargs)
 
 

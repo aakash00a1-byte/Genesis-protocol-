@@ -115,7 +115,7 @@ FILE_ONLY_BINARIES = frozenset({"pdflatex", "pandoc"})
 DANGEROUS_BY_BINARY: Dict[str, frozenset] = {
     "git": frozenset({
         "reset", "clean", "revert", "cherry-pick", "rebase", "checkout",
-        "switch", "commit", "tag", "branch", "stash", "gc", "update-ref",
+        "switch", "commit", "tag", "stash", "gc", "update-ref",
         "filter-branch", "submodule", "worktree", "am", "format-patch",
     }),
 }
@@ -153,6 +153,20 @@ def classify(binary: str, args: Sequence[str]) -> Verdict:
         pair = tuple(t.lower() for t in positional[:2])
         if pair in GH_READ_ONLY:
             return Verdict(ALLOW, " ".join(pair), "read-only")
+    # ``git branch`` with no name lists refs; with a name or a write flag it
+    # creates, moves or deletes them.
+    verbs = positional[1:] if binary == "git" and argv[:1] == ["-C"] else positional
+    if binary == "git" and verbs and verbs[0].lower() == "branch":
+        write_flags = {"-d", "-D", "-m", "-M", "-c", "-C", "-f", "--force", "-u",
+                       "--set-upstream-to", "--unset-upstream", "--delete",
+                       "--move", "--copy", "--edit-description"}
+        flags = [t for t in argv if t.startswith("-")]
+        if argv[:1] == ["-C"] and flags and flags[0] == "-C":
+            flags = flags[1:]  # the global ``-C <repo>``, not ``branch -C``
+        if len(verbs) == 1 and not (set(flags) & write_flags):
+            return Verdict(ALLOW, "branch", "read-only")
+        return Verdict(DENY, "branch", "'branch' with a name or a write flag changes refs")
+
     read_set = READ_ONLY.get(binary, frozenset())
     for token in (t.lower() for t in positional):
         if token in read_set or any(token.startswith(p) for p in READ_ONLY_PREFIXES.get(binary, ())):

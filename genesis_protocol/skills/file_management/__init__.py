@@ -266,20 +266,13 @@ class ProjectExplorer:
 
 
 class GitOperations:
-    """Handle Git operations through the CLI gate.
-
-    ``run_git`` used to build its own argv, so ``run_git("push", "origin",
-    "main")`` pushed with no owner check. Read verbs (status/log/diff/show) are
-    allowed for the owner; destructive git verbs (push/reset/commit/checkout)
-    are refused by ``cli_policy``.
-    """
-
+    """Handle Git operations safely."""
+    
     def __init__(self, repo_path: str = ".", *, user_id: Optional[int] = None,
                  approval_id: Optional[str] = None):
         self.repo_path = repo_path
         self._user_id = user_id
         self._approval_id = approval_id
-
     def run_git(self, *args, check: bool = True, user_id: Optional[int] = None,
                 approval_id: Optional[str] = None) -> Dict[str, Any]:
         """Run a git command, or refuse it."""
@@ -295,3 +288,122 @@ class GitOperations:
         result["stdout"] = (result.get("stdout") or "").strip()
         result["stderr"] = (result.get("stderr") or "").strip()
         return result
+    def get_status(self) -> Dict[str, Any]:
+        """Get git status."""
+        return self.run_git("status", "--porcelain")
+    
+    def get_current_branch(self) -> str:
+        """Get current branch name."""
+        result = self.run_git("branch", "--show-current", check=False)
+        return result.get("stdout", "")
+    
+    def get_branches(self) -> List[str]:
+        """Get all branches."""
+        result = self.run_git("branch", "-a", check=False)
+        return result.get("stdout", "").split("\n")
+    
+    def commit(self, message: str) -> Dict[str, Any]:
+        """Create a commit."""
+        # Stage all changes
+        self.run_git("add", "-A", check=False)
+        return self.run_git("commit", "-m", message)
+    
+    def push(self, remote: str = "origin", branch: Optional[str] = None) -> Dict[str, Any]:
+        """Push to remote."""
+        if branch is None:
+            branch = self.get_current_branch()
+        return self.run_git("push", "-u", remote, branch)
+    
+    def pull(self, remote: str = "origin", branch: Optional[str] = None) -> Dict[str, Any]:
+        """Pull from remote."""
+        if branch is None:
+            branch = self.get_current_branch()
+        return self.run_git("pull", remote, branch)
+    
+    def create_branch(self, branch_name: str, checkout: bool = True) -> Dict[str, Any]:
+        """Create a new branch."""
+        result = self.run_git("checkout", "-b", branch_name, check=False)
+        if not checkout:
+            return self.run_git("branch", branch_name)
+        return result
+    
+    def merge(self, branch: str) -> Dict[str, Any]:
+        """Merge a branch."""
+        return self.run_git("merge", branch)
+    
+    def get_diff(self, target: str = "HEAD") -> Dict[str, Any]:
+        """Get diff of changes."""
+        return self.run_git("diff", target)
+    
+    def get_log(self, limit: int = 10) -> List[Dict[str, str]]:
+        """Get commit history."""
+        result = self.run_git(
+            "log", f"--pretty=format:%H|%an|%ae|%ad|%s", 
+            f"-{limit}", "--date=iso"
+        )
+        
+        commits = []
+        for line in result.get("stdout", "").split("\n"):
+            if "|" in line:
+                parts = line.split("|")
+                if len(parts) >= 5:
+                    commits.append({
+                        "hash": parts[0],
+                        "author": parts[1],
+                        "email": parts[2],
+                        "date": parts[3],
+                        "message": parts[4]
+                    })
+        
+        return commits
+
+
+# Export skill execution functions
+async def execute_file_create(path: str, content: str) -> Dict[str, Any]:
+    """Execute file creation."""
+    manager = FileManager()
+    return manager.create_file(path, content)
+
+
+async def execute_file_edit(path: str, old_str: str, new_str: str) -> Dict[str, Any]:
+    """Execute file edit."""
+    manager = FileManager()
+    return manager.edit_file(path, old_str, new_str)
+
+
+async def execute_project_explore(max_depth: int = 3) -> Dict[str, Any]:
+    """Execute project exploration."""
+    explorer = ProjectExplorer()
+    return explorer.get_structure(max_depth)
+
+
+async def execute_git_operation(operation: str, *, user_id: Optional[int] = None,
+                               approval_id: Optional[str] = None,
+                               **kwargs) -> Dict[str, Any]:
+    """Execute git operation (owner only; writes need an approval)."""
+    git = GitOperations(user_id=user_id, approval_id=approval_id)
+    
+    operations = {
+        "status": git.get_status,
+        "branch": lambda: {"current": git.get_current_branch(), "all": git.get_branches()},
+        "commit": lambda: git.commit(kwargs.get("message", "Auto commit")),
+        "push": lambda: git.push(kwargs.get("remote", "origin")),
+        "pull": lambda: git.pull(kwargs.get("remote", "origin")),
+        "diff": lambda: git.get_diff(kwargs.get("target", "HEAD")),
+        "log": lambda: git.get_log(kwargs.get("limit", 10)),
+    }
+    
+    func = operations.get(operation)
+    if func:
+        return func()
+    
+    return {"success": False, "error": f"Unknown operation: {operation}"}
+
+
+# Export skill executors
+SKILL_EXECUTORS = {
+    "file_create": execute_file_create,
+    "file_edit": execute_file_edit,
+    "project_explore": execute_project_explore,
+    "git_operations": execute_git_operation,
+}

@@ -117,6 +117,23 @@ def test_git_operations_refuse_a_push_for_the_owner(owner):
     assert "push" in result["error"]
 
 
+def test_the_git_helpers_keep_their_read_behaviour(owner):
+    git = GitOperations(".", user_id=OWNER)
+
+    assert git.get_status()["success"] is True
+    assert git.get_current_branch().strip() != ""
+    assert isinstance(git.get_branches(), list)
+    assert isinstance(git.get_log(1), list)
+
+
+def test_the_git_write_helpers_are_refused(owner):
+    git = GitOperations(".", user_id=OWNER)
+
+    for call in (lambda: git.commit("x"), lambda: git.push(),
+                 lambda: git.pull(), lambda: git.merge("main")):
+        assert call()["denied"] is True
+
+
 def test_git_operations_refuse_a_non_owner(owner):
     result = GitOperations(".", user_id=STRANGER).run_git("status")
 
