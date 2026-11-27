@@ -408,6 +408,27 @@ class ToolSystem:
         if not code:
             return ToolResult(False, error="No code provided")
 
+        # Default deny. A block of pasted code is data, so the tool refuses
+        # unless a scoped, single-use approval for this exact code exists.
+        # ``approval_id`` and ``user_id`` are supplied only by the explicit
+        # approval path (``/approve_code <id>``), never by tool selection.
+        approval_id = params.get("approval_id")
+        user_id = int(params.get("user_id") or 0)
+        if not approval_id:
+            return ToolResult(False, error=(
+                "code execution requires explicit approval: the code was not "
+                "run. Reply /approve_code <id> for the block you want executed."
+            ))
+
+        try:
+            from genesis_protocol.agentic.code_consent import get_code_consent
+
+            approved, reason = get_code_consent().claim(user_id, approval_id, code)
+        except Exception as e:
+            return ToolResult(False, error=f"code execution refused: approval check failed: {e}")
+        if approved is None:
+            return ToolResult(False, error=f"code execution refused: {reason}")
+
         try:
             from genesis_protocol.agentic.sandbox import run_python
 

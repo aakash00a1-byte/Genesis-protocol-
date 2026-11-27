@@ -1081,6 +1081,53 @@ def _is_owner(user_id):
     return get_agent_policy().is_owner(user_id)
 
 
+# Provider status and deployment internals are not public: they name which
+# credentials exist and carry provider error text. Owner session or the shared
+# diagnostics secret, and fail closed when neither is available.
+DIAGNOSTICS_SECRET_ENV = 'DIAGNOSTICS_SECRET'
+DIAGNOSTICS_SECRET_HEADER = 'X-Genesis-Secret'
+
+
+def _diagnostics_allowed():
+    """True for an owner session or a caller holding DIAGNOSTICS_SECRET."""
+    user_id = session.get('user_id')
+    if user_id:
+        try:
+            if _is_owner(user_id):
+                return True
+        except Exception:
+            pass
+    expected = os.environ.get(DIAGNOSTICS_SECRET_ENV, '')
+    if not expected:
+        return False
+    supplied = request.headers.get(DIAGNOSTICS_SECRET_HEADER, '')
+    return bool(supplied) and hmac.compare_digest(supplied, expected)
+
+
+def _running_commit():
+    """The commit this process is actually running.
+
+    Read from the deploy environment or the marker the deploy script writes.
+    The previous value was a hardcoded literal, so it reported a commit that
+    had nothing to do with the running code.
+    """
+    for var in ('GENESIS_COMMIT_SHA', 'GIT_COMMIT_SHA', 'SOURCE_COMMIT_SHA'):
+        value = os.environ.get(var, '').strip()
+        if value:
+            return value
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    for rel in ('deploy/sha.txt', '.deploy_sha'):
+        try:
+            value = (root / rel).read_text(encoding='utf-8').strip()
+        except OSError:
+            continue
+        if value:
+            return value
+    return 'unknown'
+
+
 def _self_preservation():
     from genesis_protocol.gluten_os import get_self_preservation
 
@@ -1314,7 +1361,6 @@ def api_agent_run():
     goal = (data.get('goal') or '').strip()
     steps = data.get('steps') or []
     task_id = data.get('task_id')
-    owner_approved = bool(data.get('owner_approved', False))
     agent_id = data.get('agent_id')
     if not goal:
         return jsonify({'error': 'goal required'}), 400
@@ -1330,6 +1376,12 @@ def api_agent_run():
         verification = get_identity_registry().verify(agent_id)
         if not verification.ok:
             return jsonify({'error': f'identity not verified: {verification.reason}'}), 403
+
+    # A request-body flag is not authority: the owner decision is made here
+    # from the verified session identity. Code and command execution are not
+    # covered by this flag at all - they need a server-side consent record
+    # (see AgentLoop._run_execute_code_step and the requires_consent tools).
+    owner_approved = owner
 
     # Least privilege: refuse code execution for non-owners up front.
     for step in steps:
@@ -1377,7 +1429,7 @@ def api_agent_plan():
     decision = DecisionEngine().decide(
         goal,
         user_id,
-        owner_approved=bool(data.get('owner_approved', False)),
+        owner_approved=_is_owner(user_id),
         risk_tolerance=risk_tolerance,
     )
     # A decision record is evidence, not an action: no step has run.
@@ -1433,18 +1485,18 @@ def api_agent_skill():
     data = request.get_json(silent=True) or {}
     skill_name = (data.get('skill') or '').strip()
     tool_params = data.get('tool_params') or {}
-    owner_approved = bool(data.get('owner_approved', False))
     if not skill_name:
         return jsonify({'error': 'skill required'}), 400
     if not isinstance(tool_params, dict):
         return jsonify({'error': 'tool_params must be an object'}), 400
 
     user_id = session['user_id']
+    # Server-side identity, not a client flag.
     result = SkillRunner().run(
         user_id=user_id,
         skill_name=skill_name,
         tool_params=tool_params,
-        owner_approved=owner_approved,
+        owner_approved=_is_owner(user_id),
     )
     if not result.get('steps') and result.get('error'):
         return jsonify(result), 404
@@ -2063,7 +2115,13 @@ init_db()
 
 @app.route('/api/debug', methods=['GET'])
 def api_debug():
-    """Debug endpoint to check AI providers and deployment info."""
+    """Debug endpoint to check AI providers and deployment info.
+
+    Owner-only (or the shared diagnostics secret), same reason as
+    /api/diagnostics.
+    """
+    if not _diagnostics_allowed():
+        return jsonify({'error': 'owner or diagnostics secret required'}), 403
     try:
         from genesis_protocol.ai.provider_chain import get_provider_chain
         
@@ -2074,7 +2132,7 @@ def api_debug():
         return jsonify({
             'status': 'ok',
             'entrypoint': 'web/app.py',
-            'commit': '417a557',
+            'commit': _running_commit(),
             'available_providers': available,
             'provider_status': status,
             'groq_configured': status.get('groq', {}).get('configured', False)
@@ -2091,11 +2149,12 @@ def api_debug():
 
 @app.route('/api/test-417a557', methods=['GET'])
 def api_test():
-    """UNIQUE test endpoint - only exists in app.py"""
+    """Liveness marker. Owner-only, and it reports no deployment detail."""
+    if not _diagnostics_allowed():
+        return jsonify({'error': 'owner or diagnostics secret required'}), 403
     return jsonify({
         'status': 'ok',
         'entrypoint': 'web/app.py',
-        'commit': '417a557',
         'unique': True,
         'timestamp': str(datetime.now())
     })
@@ -2877,7 +2936,13 @@ def api_status():
 
 @app.route('/api/diagnostics', methods=['GET'])
 def api_diagnostics():
-    """Full diagnostics - provider status, memory, uptime, version."""
+    """Full diagnostics - provider status, memory, uptime, version.
+
+    Owner-only (or the shared diagnostics secret): it names which provider
+    credentials exist and carries provider error text.
+    """
+    if not _diagnostics_allowed():
+        return jsonify({'error': 'owner or diagnostics secret required'}), 403
     try:
         from genesis_protocol.ai.provider_chain import get_provider_chain
         chain = get_provider_chain()

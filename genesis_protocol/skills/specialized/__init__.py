@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 from genesis_protocol.skills import Skill, SkillCategory
+from genesis_protocol.tools.cli_guard import run_guarded_command
 
 # Skill definitions
 SKILLS = [
@@ -341,28 +342,20 @@ class SlackIntegration:
 class GitHubPRManager:
     """Manage GitHub pull requests."""
     
-    def __init__(self, repo_path: str = "."):
+    def __init__(self, repo_path: str = ".", *, user_id: Optional[int] = None,
+                 approval_id: Optional[str] = None):
         self.repo_path = repo_path
-    
-    def run_gh(self, *args) -> Dict[str, Any]:
-        """Run a gh command."""
-        try:
-            result = subprocess.run(
-                ["gh"] + list(args),
-                capture_output=True,
-                text=True,
-                cwd=self.repo_path,
-                timeout=60
-            )
-            
-            return {
-                "success": result.returncode == 0,
-                "stdout": result.stdout,
-                "stderr": result.stderr
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
+        self._user_id = user_id
+        self._approval_id = approval_id
+    def run_gh(self, *args, user_id: Optional[int] = None,
+               approval_id: Optional[str] = None) -> Dict[str, Any]:
+        """Run a gh command, or refuse it."""
+        return run_guarded_command(
+            "gh", [str(a) for a in args],
+            user_id=self._user_id if user_id is None else user_id,
+            approval_id=self._approval_id if approval_id is None else approval_id,
+            timeout=60, cwd=self.repo_path,
+        )
     def list_prs(self, state: str = "open") -> List[Dict[str, Any]]:
         """List pull requests."""
         result = self.run_gh("pr", "list", "--state", state, "--json", "number,title,state,url,author")
@@ -502,9 +495,12 @@ async def execute_slack_send_message(channel: str, text: str) -> Dict[str, Any]:
     return integration.send_message(channel, text)
 
 
-async def execute_github_create_pr(title: str, body: str, **kwargs) -> Dict[str, Any]:
-    """Execute GitHub PR creation."""
-    manager = GitHubPRManager()
+async def execute_github_create_pr(title: str, body: str, *,
+                                  user_id: Optional[int] = None,
+                                  approval_id: Optional[str] = None,
+                                  **kwargs) -> Dict[str, Any]:
+    """Execute GitHub PR creation (owner only)."""
+    manager = GitHubPRManager(user_id=user_id, approval_id=approval_id)
     return manager.create_pr(title, body, **kwargs)
 
 

@@ -868,6 +868,24 @@ actually answer a user.
 - **`_telegram_secret_ok` / `_telegram_is_admin` fail open when their env vars
   are unset** (by design, so an existing deployment keeps working). Both are set
   in production, so the live Space is closed; treat them as required config.
+- **`DIAGNOSTICS_SECRET` gates `/api/diagnostics`** (owner session *or* the
+  `X-Genesis-Secret` header). It is set on the Space, but a secret is inert
+  until the code that reads it is deployed: the live Space ran a commit with
+  zero references to it and answered `/api/diagnostics` anonymously with 200.
+  So "the secret is saved" and "the endpoint is closed" are two separate facts -
+  check the second by fetching `/api/diagnostics` with no cookie (expect 401)
+  and with the header (expect 200) *after* a deploy. HF injects secrets only at
+  container start, so a redeploy is required after adding one.
+- **Reading secret *names* is possible read-only; values never are.**
+  `GET https://huggingface.co/api/spaces/<id>/secrets` returns a dict **keyed by
+  name** (`{"KEY": {"key": ..., "updatedAt": ...}}`), not a list - parse
+  `.values()`. Variables are the same shape and do expose `value` (that is how
+  `GLUTEN_OWNER_IDS=1` is visible). GitHub Actions secrets are **not** readable
+  with the injected token: `GET /repos/{o}/{r}/actions/secrets` and
+  `gh secret list` both return 403 `Resource not accessible by integration`.
+  Nothing in `.github/workflows/` references `DIAGNOSTICS_SECRET` and no
+  workflow runs `scripts/release_test.py`, so the repo does not need it - only
+  the Space (`web/app.py`) and a human running that script locally do.
 
 ## Agentic capability layer (upgrade 2026-11-11)
 
@@ -1822,3 +1840,121 @@ than 404.
   commits, `mergeable_state: clean`, 0 new alerts, 2176 tests passing. It is
   **not** merged - the owner approves. The ruleset probe
   (`scripts/probe_pr_only_ruleset.py`) needs owner approval to run.
+
+## Security hardening: gated diagnostics, code-execution consent (2026-11-24)
+
+- **`/api/diagnostics` and `/api/debug` are owner-only.** Allowed by an owner
+  session or the `X-Genesis-Secret` header matching `DIAGNOSTICS_SECRET`, and
+  fail closed when the secret is unset. They name which provider credentials
+  exist and carry provider error text, so they are not public. `/api/health`
+  stays public. `scripts/release_test.py` sends the secret and reports SKIP
+  without it; `web/templates/agent_workspace.html` shows "owner only" on a 403.
+- **`/api/debug` reports the real commit** via `_running_commit()`: env
+  `GENESIS_COMMIT_SHA` / `GIT_COMMIT_SHA` / `SOURCE_COMMIT_SHA`, else
+  `deploy/sha.txt` (written by `scripts/hf_deploy.sh`), else `unknown`. Never
+  hardcode a commit in a response again.
+- **Provider `last_error` is reduced before storage.** `sanitize_error` turns a
+  JSON provider body into its message only, so account, plan and request-id
+  detail never reaches a status field.
+- **Pasted code never runs on selection.** A fenced block is parked by
+  `agentic/code_consent.py`; the user must reply `/approve_code <id>`, and that
+  approval is single-use, 15-minute, user-scoped and bound to the exact code
+  hash. `tool_system._tool_code_execution` refuses without a valid approval.
+  Sandbox limits are unchanged (5s CPU, 256 MB, secrets stripped from the child
+  environment).
+- **The consent gate covers the chat path *and* the agent path** (remediation
+  2026-11-26). `AgentLoop._run_execute_code_step` checks ownership itself
+  (`AgentPolicy.is_owner`) and then claims a consent record; a step without a
+  valid `approval_id` is refused with `executed: false`. Tools that execute
+  code or a command (`python`, `subprocess`) carry `requires_consent = True`
+  and are refused the same way. So the guarantee is: **no path executes code or
+  a command without a server-side consent record bound to that user, that exact
+  payload and an expiry.** A request-body flag is never authority -
+  `/api/agent/run`, `/api/agent/skill` and `/api/agent/plan` now derive
+  `owner_approved` from the verified session identity, and the body field is
+  ignored. (`/api/coordination/authorize` still echoes a body flag, but it is a
+  dry-run preview that executes nothing.)
+- **The consent store keeps no secret and no spent source.** `request()`
+  refuses credential-shaped code (`_CREDENTIAL_PATTERNS`: vendor prefixes plus a
+  20+ character opaque assignment; deliberately narrower than the memory
+  scanner, which would refuse ordinary code such as `token = get_token()`),
+  `claim()` blanks the code on disk and keeps only its hash, and `cleanup()`
+  (called on every `request()`) drops expired and consumed entries.
+- **A claim is atomic across workers.** `claim()` runs its whole
+  load-check-save under an exclusive `flock` on `<state>.lock`, so two workers
+  racing on one id produce exactly one `approved` and the loser re-reads the
+  file and reports "already used". `request()` and `cleanup()` take the same
+  lock, and `get()` reports only *pending* requests. `tests/test_consent_concurrency.py`
+  races 16 threads and 4 processes on one approval and asserts a single winner;
+  do not remove the lock or re-introduce an unlocked read-modify-write.
+- **Shell execution is default-deny.** `skill_tools` no longer uses
+  `shell=True` anywhere: `SubprocessTool` and `_CliTool` build an argv and run
+  `shell=False`, so `;`, `&&`, `|`, `$(...)` and backticks are inert. Shell
+  binaries and re-invoking wrappers (`sh`, `bash`, `env`, `xargs`, `timeout`,
+  `sudo`, ...) and interpreters (`python3`, `perl`, `node`, `awk`, `sed`, ...)
+  are refused outright - the sandboxed `python` tool is the only code path -
+  the child environment is scrubbed with `agentic.sandbox._scrubbed_env()` so
+  no provider key is inherited, `SubprocessTool` stays disabled unless
+  `GLUTEN_ALLOW_SHELL_COMMANDS=1`, and the privileged-command denylist still
+  applies. Do not reintroduce a shell string.
+- **Billing detail is not echoed.** `sanitize_error` replaces an account-level
+  message ("you need a subscription", "out of credits") with
+  `(provider rejected the request: plan or billing restriction)` instead of
+  quoting it. The request-level message is kept.
+- **`/api/test-417a557` is gated too** and reports no commit: it was the last
+  endpoint serving deployment detail without the owner gate.
+- **CLI tools are authorised per operation, not by `shell=False`.**
+  `tools/cli_policy.py` classifies every argv for `kubectl`, `docker`, `aws`,
+  `terraform`, `gh`, `gcloud`, `az`, `crontab`, `pdflatex` and `pandoc`:
+  credential terms (`secret`, `iam`, `sts`, `kms`, `token`, ...) are refused
+  wherever they appear; a read-only verb (`get`, `describe`, `logs`, `list`,
+  `describe-*`, `gh pr view`, ...) runs for the owner; destructive, deployment
+  and privilege verbs (`delete`, `apply`, `run`, `exec`, `prune`, `merge`,
+  `auth`, `rollout`, `crontab -r`, ...) are refused outright and cannot be
+  consented to; everything else needs a single-use approval bound to the exact
+  executable *and* arguments (`canonical_command`). The tool receives the
+  verified caller id as `_user_id` from the loop and refuses when there is
+  none, so a skill or a direct registry call cannot run a state-changing
+  command. Do not add a CLI tool without a policy entry; the audit test asserts
+  the exact registered set (`tests/test_cli_authorization.py`).
+- **The devops skill managers go through the same gate.** `skills/devops`
+  called `subprocess.run(["kubectl"] + args)` itself, so
+  `KubernetesManager().run_command("delete", "ns", "prod")` ran a destructive
+  cluster command with no owner check, no consent and no policy - a single
+  argv, so the `shell=False` fix never touched it (R6-d). Every command now
+  goes through `run_guarded_command()`, which classifies with `cli_policy`,
+  requires the verified owner (`user_id`, refused when absent), and claims a
+  single-use approval bound to `canonical_command(binary, argv)` for anything
+  that is not read-only. `_probe()` is the only thing that may run on its own,
+  and only for the fixed `--version` / `version --client` arguments. The
+  managers take `user_id`/`approval_id` at construction and per call; a manager
+  built without them refuses every command. `tests/test_devops_cli_gate.py`
+  holds the contract for that module.
+- **One gate for every CLI call in the product.** The same self-built-argv
+  pattern sat in four more skill modules, so the guard moved to
+  `tools/cli_guard.py` (`run_guarded_command`, `probe`) and they all use it:
+  `automation.CronManager` (installing a crontab is persistence - `cli_policy`
+  denies every `crontab` call except `-l`, and no approval can change that),
+  `file_management.GitOperations` (read verbs allowed for the owner; `push`,
+  `reset`, `commit`, `checkout`, `branch -D`, `clean`, `rebase` refused),
+  `specialized.GitHubPRManager` (`gh pr merge`/`api`/`auth` refused),
+  `coding.Debugger` (runs a program, so owner + approval), and the document
+  compilers (`pdflatex`/`pandoc` are owner-only). `cli_policy` gained a `git`
+  read-only set plus `DANGEROUS_BY_BINARY`, kept per-binary so a label value
+  such as `kubectl get pods -l branch=main` is not read as a git verb.
+  `tests/test_cli_gate_skills.py` holds the contract **and** an AST audit: no
+  module under `genesis_protocol/` may call `subprocess.run`/`Popen`/`os.system`
+  except `tools/cli_guard.py`, `tools/skill_tools.py` and `agentic/sandbox.py`.
+  Add a CLI tool by adding a policy entry and calling the guard - never a
+  `subprocess` call of your own.
+- **The Space must be given a strong `SECRET_KEY`.** `web/app.py` resolves it at
+  import: a missing, known-default or short (<16) value raises
+  `RuntimeError("... refusing to start in production")` when a hosting marker
+  (`SPACE_ID`, `RENDER`, `RAILWAY_ENVIRONMENT`) or `GENESIS_ENV=production` is
+  set. Local runs without a key get a random per-process key and a warning, so
+  sessions never sign with a public value. The value is never logged. Session
+  integrity is covered by `tests/test_session_integrity.py` (a cookie signed
+  with the documented default or any other key is rejected, logout clears the
+  session, a session naming a missing user is rejected, a bad Bearer token does
+  not fall back to the cookie) and startup refusal by
+  `tests/test_web_secret_key_startup.py`.

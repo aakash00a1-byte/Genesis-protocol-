@@ -10,6 +10,7 @@ import ast
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 from genesis_protocol.skills import Skill, SkillCategory
+from genesis_protocol.tools.cli_guard import run_guarded_command
 
 # Supported languages
 SUPPORTED_LANGUAGES = [
@@ -224,52 +225,52 @@ class CodeAnalyzer:
 
 
 class Debugger:
-    """Debug code and fix issues."""
-    
+    """Debug code and fix issues.
+
+    ``run_tests`` and ``lint_code`` execute a program, so they go through the
+    CLI gate: the caller must be the owner and a single-use approval bound to
+    the exact command is required. Nothing here can run without both.
+    """
+
+    def __init__(self, *, user_id: Optional[int] = None,
+                 approval_id: Optional[str] = None):
+        self._user_id = user_id
+        self._approval_id = approval_id
+
+    def _run(self, binary: str, args: List[str], timeout: int) -> Dict[str, Any]:
+        return run_guarded_command(
+            binary, args,
+            user_id=self._user_id,
+            approval_id=self._approval_id,
+            timeout=timeout,
+        )
+
     def run_tests(self, test_path: str = "tests/", verbose: bool = True) -> Dict[str, Any]:
-        """Run test suite and return results."""
-        try:
-            cmd = ["python", "-m", "pytest", test_path]
-            if verbose:
-                cmd.append("-v")
-            
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300
-            )
-            
-            return {
-                "success": result.returncode == 0,
-                "output": result.stdout,
-                "errors": result.stderr,
-                "returncode": result.returncode
-            }
-        except subprocess.TimeoutExpired:
-            return {"success": False, "error": "Test timeout"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
+        """Run the test suite (owner + approval required)."""
+        args = ["-m", "pytest", test_path]
+        if verbose:
+            args.append("-v")
+        result = self._run("python", args, timeout=300)
+        if result.get("denied"):
+            return result
+        return {
+            "success": bool(result.get("success")),
+            "output": result.get("stdout", ""),
+            "errors": result.get("stderr", ""),
+            "returncode": result.get("returncode"),
+        }
+
     def lint_code(self, file_path: str, linter: str = "ruff") -> Dict[str, Any]:
-        """Run linter on code."""
-        try:
-            result = subprocess.run(
-                [linter, "check", file_path],
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            
-            return {
-                "success": result.returncode == 0,
-                "output": result.stdout,
-                "errors": result.stderr
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-
+        """Run a linter on one file (owner + approval required)."""
+        result = self._run(linter, ["check", file_path], timeout=60)
+        if result.get("denied"):
+            return result
+        return {
+            "success": bool(result.get("success")),
+            "output": result.get("stdout", ""),
+            "errors": result.get("stderr", ""),
+            "returncode": result.get("returncode"),
+        }
 class Refactorer:
     """Refactor and improve code quality."""
     

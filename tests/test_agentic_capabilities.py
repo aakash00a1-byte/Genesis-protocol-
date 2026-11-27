@@ -515,6 +515,9 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("GLUTEN_OWNER_IDS", "1")
     import importlib
 
+    import genesis_protocol.agentic.policy as policy_module
+
+    monkeypatch.setattr(policy_module, "_default", None)
     import web.app as appmod
 
     importlib.reload(appmod)
@@ -578,15 +581,35 @@ def test_memory_endpoint_refuses_secret(client):
     assert resp.status_code == 400
 
 
-def test_agent_run_gates_code_execution_to_owner(client):
-    # admin (id 1) is the configured owner here
+def test_agent_run_gates_code_execution_to_owner(client, tmp_path, monkeypatch):
+    """Owner identity is necessary but not sufficient: a consent record is too."""
     headers = _auth(client)
+    code = "print(3*14)"
+
+    # No approval record -> the step is refused and nothing runs.
     resp = client.post(
         "/api/agent/run",
-        json={"goal": "compute", "steps": [{"type": "execute_code", "code": "print(3*14)"}]},
+        json={"goal": "compute", "steps": [{"type": "execute_code", "code": code}]},
         headers=headers,
     )
     assert resp.status_code == 200
+    step = resp.get_json()["steps"][0]
+    assert step["executed"] is False
+    assert "approval record is required" in step["error"]
+
+    # With a real server-side consent record the same step runs.
+    import genesis_protocol.agentic.code_consent as consent
+
+    monkeypatch.setattr(consent, "_default",
+                        consent.CodeConsentStore(path=str(tmp_path / "consent.json")))
+    request = consent.get_code_consent().request(1, code)
+    resp = client.post(
+        "/api/agent/run",
+        json={"goal": "compute", "steps": [
+            {"type": "execute_code", "code": code, "approval_id": request.request_id}
+        ]},
+        headers=headers,
+    )
     assert resp.get_json()["steps"][0]["stdout"].strip() == "42"
 
 

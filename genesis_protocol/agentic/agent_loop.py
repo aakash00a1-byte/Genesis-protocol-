@@ -293,7 +293,63 @@ class AgentLoop:
                 "denied": True,
             }
 
-        decision = self.policy.authorize_tool(user_id, name, permission=perm, owner_approved=owner_approved)
+        # A tool that executes code or a command is never authorised by a flag.
+        # It needs a server-side consent record for this user and this payload,
+        # exactly like an execute_code step. A successful claim is the approval.
+        # CLI tools decide per operation (read / consent / deny) inside
+        # ``tools.cli_policy``; they need the verified caller id to do it, and
+        # the approval id travels with the parameters.
+        cli_owner = False
+        if getattr(tool, "cli_consent", False):
+            params["_user_id"] = user_id
+            # The tool authorises the operation itself (read / consent / deny),
+            # so verified ownership is the loop's approval for this call.
+            cli_owner = self.policy.is_owner(user_id)
+
+        consent_granted = False
+        if getattr(tool, "requires_consent", False):
+            payload = params.get("code") or params.get("command") or ""
+            approval_id = params.pop("approval_id", None) or step.get("approval_id")
+            if not self.policy.is_owner(user_id):
+                reason = f"tool '{name}' executes code; user {user_id} is not the owner"
+                self.audit.record("tool_request", user_id, name, False, reason, agent_id=agent_id)
+                return {
+                    "type": "tool",
+                    "tool": name,
+                    "success": False,
+                    "error": reason,
+                    "denied": True,
+                }
+            if not approval_id:
+                reason = (f"tool '{name}' executes code; an approval record is "
+                          "required (approval_id) and the tool was not run")
+                self.audit.record("tool_request", user_id, name, False, reason, agent_id=agent_id)
+                return {
+                    "type": "tool",
+                    "tool": name,
+                    "success": False,
+                    "error": reason,
+                    "denied": True,
+                }
+            from genesis_protocol.agentic.code_consent import get_code_consent
+
+            approved, consent_reason = get_code_consent().claim(user_id, approval_id, payload)
+            if approved is None:
+                reason = f"tool '{name}' refused: {consent_reason}"
+                self.audit.record("tool_request", user_id, name, False, reason, agent_id=agent_id)
+                return {
+                    "type": "tool",
+                    "tool": name,
+                    "success": False,
+                    "error": reason,
+                    "denied": True,
+                }
+            consent_granted = True
+
+        decision = self.policy.authorize_tool(
+            user_id, name, permission=perm,
+            owner_approved=owner_approved or consent_granted or cli_owner,
+        )
         self.audit.record(
             "tool_request", user_id, name, decision.allowed, decision.reason,
             detail=params, agent_id=agent_id,
@@ -325,6 +381,16 @@ class AgentLoop:
             "result": result,
             "policy": decision.to_dict(),
             "error": None if verified else result.get("error", "verification failed"),
+        }
+
+    @staticmethod
+    def _denied_code_step(reason: str) -> Dict[str, Any]:
+        return {
+            "type": "execute_code",
+            "success": False,
+            "executed": False,
+            "denied": True,
+            "error": reason,
         }
 
     def _within_grant(self, agent_id: str, tool_name: str) -> bool:
@@ -383,9 +449,45 @@ class AgentLoop:
     def _run_execute_code_step(
         self, user_id: int, step: Dict[str, Any], agent_id: Optional[str] = None
     ) -> Dict[str, Any]:
+        """Run one step's code, only with server-side authorization + consent.
+
+        The owner check lives here, not in the web route, so any caller of this
+        loop is covered. Authorisation is a server-side consent record bound to
+        this user, this exact code and an expiry - a caller-supplied flag is
+        never enough.
+        """
         code = step["code"]
+
+        if not self.policy.owner_ids:
+            reason = "code execution refused: no owner is configured"
+            self.audit.record("code_execution", user_id, tool="sandbox", allowed=False,
+                              reason=reason, agent_id=agent_id)
+            return self._denied_code_step(reason)
+        if not self.policy.is_owner(user_id):
+            reason = f"code execution refused: user {user_id} is not the owner"
+            self.audit.record("code_execution", user_id, tool="sandbox", allowed=False,
+                              reason=reason, agent_id=agent_id)
+            return self._denied_code_step(reason)
+
+        approval_id = step.get("approval_id")
+        if not approval_id:
+            reason = ("code execution refused: an approval record is required "
+                      "(step.approval_id); the code was not run")
+            self.audit.record("code_execution", user_id, tool="sandbox", allowed=False,
+                              reason=reason, agent_id=agent_id)
+            return self._denied_code_step(reason)
+
+        from genesis_protocol.agentic.code_consent import get_code_consent
+
+        approved, consent_reason = get_code_consent().claim(user_id, approval_id, code)
+        if approved is None:
+            reason = f"code execution refused: {consent_reason}"
+            self.audit.record("code_execution", user_id, tool="sandbox", allowed=False,
+                              reason=reason, agent_id=agent_id)
+            return self._denied_code_step(reason)
+
         self.audit.record("code_execution", user_id, tool="sandbox", allowed=True,
-                          reason="sandboxed", agent_id=agent_id)
+                          reason="owner-approved consent record", agent_id=agent_id)
         result = run_python(
             code,
             timeout=step.get("timeout", 5.0),

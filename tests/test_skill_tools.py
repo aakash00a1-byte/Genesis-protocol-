@@ -75,10 +75,10 @@ def test_unavailable_cli_tool_fails_honestly():
 def test_installed_cli_tool_reports_a_nonzero_exit():
     from genesis_protocol.tools.skill_tools import _cli
 
-    tool = _cli("sh_cli", "sh")()
-    result = tool.execute(args='-c "exit 3"')
+    tool = _cli("false_cli", "false")()
+    result = tool.execute(args="")
     assert result["success"] is False
-    assert result["returncode"] == 3
+    assert result["returncode"] == 1
 
 
 def test_runner_executes_a_safe_tool_and_skips_unused_ones():

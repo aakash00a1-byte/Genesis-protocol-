@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import json as _json
 import shutil
+import os
+import shlex
 import subprocess
 from typing import Any, Dict, List, Optional
 
@@ -35,6 +37,39 @@ _FORBIDDEN_SUBSTRINGS = (
     "rm -rf /",
     ":(){",  # fork bomb
 )
+
+
+# With shell=False these are inert as shell syntax, but running a shell
+# binary directly (``bash -c ...``) or a wrapper that re-invokes one
+# (``env``, ``xargs``, ``timeout``) would reintroduce arbitrary shell
+# execution, so the binary itself is refused.
+_SHELL_BINARIES = frozenset({
+    "sh", "bash", "zsh", "ksh", "dash", "ash", "fish", "csh", "tcsh",
+    "env", "xargs", "eval", "exec", "nohup", "sudo", "su", "doas", "timeout",
+    # Interpreters are arbitrary code execution in one argument; the sandboxed
+    # ``python`` tool exists for that, so the unsandboxed path refuses them.
+    "python", "python2", "python3", "perl", "ruby", "node", "nodejs", "php",
+    "lua", "Rscript", "osascript", "expect", "awk", "gawk", "sed",
+})
+
+
+def _scrubbed_env() -> Dict[str, str]:
+    """The child gets no inherited credential, matching the code sandbox."""
+    from genesis_protocol.agentic.sandbox import _scrubbed_env as sandbox_env
+
+    return sandbox_env()
+
+
+def _refuse_shell_binary(argv: list) -> Optional[Dict[str, Any]]:
+    if not argv:
+        return {"success": False, "error": "refused: empty command"}
+    binary = os.path.basename(argv[0])
+    if binary in _SHELL_BINARIES:
+        return {
+            "success": False,
+            "error": f"refused: '{binary}' is a shell or wrapper; shell execution is not allowed",
+        }
+    return None
 
 
 def _refuse_forbidden(command: str) -> Optional[Dict[str, Any]]:
@@ -75,6 +110,7 @@ class PythonTool(_DeclaredTool):
     _description = "Run a Python snippet in a bounded sandbox"
     _category = "coding"
     _permission = ToolPermission.RESTRICTED
+    requires_consent = True
 
     def execute(self, code: str, timeout: float = 5.0, **kwargs: Any) -> Dict[str, Any]:
         from genesis_protocol.agentic.sandbox import run_python
@@ -90,23 +126,47 @@ class PythonTool(_DeclaredTool):
 
 
 class SubprocessTool(_DeclaredTool):
+    """Run one command as argv. Default deny, and never through a shell.
+
+    ``shell=True`` was removed: with a shell, ``;``, ``&&``, ``|``, ``$(...)``
+    and backticks all execute, so a substring denylist cannot hold. The command
+    is split with ``shlex`` and executed directly, and a shell binary or a
+    wrapper that re-invokes one is refused. The tool stays disabled unless
+    ``GLUTEN_ALLOW_SHELL_COMMANDS=1`` is set explicitly.
+    """
+
     _name = "subprocess"
-    _description = "Run a shell command (privileged git commands are refused)"
+    _description = "Run one command as argv (no shell; privileged commands refused)"
     _category = "coding"
     _permission = ToolPermission.RESTRICTED
+    requires_consent = True
 
     def execute(self, command: str, timeout: int = 30, cwd: Optional[str] = None, **kwargs: Any) -> Dict[str, Any]:
         refused = _refuse_forbidden(command)
         if refused:
             return refused
+        if os.environ.get("GLUTEN_ALLOW_SHELL_COMMANDS", "") != "1":
+            return {
+                "success": False,
+                "error": ("refused: command execution is disabled by default; "
+                          "set GLUTEN_ALLOW_SHELL_COMMANDS=1 to enable it"),
+            }
+        try:
+            argv = shlex.split(command)
+        except ValueError as exc:
+            return {"success": False, "error": f"refused: cannot parse command: {exc}"}
+        refused = _refuse_shell_binary(argv)
+        if refused:
+            return refused
         try:
             result = subprocess.run(
-                command,
-                shell=True,
+                argv,
+                shell=False,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
                 cwd=cwd,
+                env=_scrubbed_env(),
             )
             return {
                 "success": result.returncode == 0,
@@ -345,12 +405,44 @@ class PandasTool(_DeclaredTool):
 
 
 class _CliTool(_DeclaredTool):
-    """A tool backed by an external CLI. Missing binaries fail closed."""
+    """A tool backed by an external CLI. Missing binaries fail closed.
+
+    ``shell=False`` stops shell injection but authorises nothing, so the
+    operation itself is classified by ``tools.cli_policy``: read-only verbs run
+    for the owner, destructive/deployment/credential/privilege verbs are
+    refused outright, and everything else needs a single-use approval bound to
+    this exact executable and these exact arguments.
+    """
 
     _binary = ""
+    cli_consent = True
 
     def is_available(self) -> bool:
         return bool(shutil.which(self._binary))
+
+    @staticmethod
+    def _authorize(user_id: Any, approval_id: Any, payload: str,
+                   operation: str) -> Optional[Dict[str, Any]]:
+        """Owner identity plus a scoped, single-use approval. Fail closed."""
+        def refuse(reason: str) -> Dict[str, Any]:
+            return {"success": False, "denied": True, "operation": operation, "error": reason}
+
+        if user_id is None:
+            return refuse("refused: this operation needs an owner approval record and "
+                          "no caller identity was supplied")
+        from genesis_protocol.agentic.policy import get_agent_policy
+
+        if not get_agent_policy().is_owner(int(user_id)):
+            return refuse(f"refused: user {user_id} is not the owner")
+        if not approval_id:
+            return refuse("refused: an approval record is required for this operation "
+                          "(approval_id) and nothing was run")
+        from genesis_protocol.agentic.code_consent import get_code_consent
+
+        approved, reason = get_code_consent().claim(int(user_id), str(approval_id), payload)
+        if approved is None:
+            return refuse(f"refused: {reason}")
+        return None
 
     def execute(self, args: str = "", **kwargs: Any) -> Dict[str, Any]:
         if not shutil.which(self._binary):
@@ -360,8 +452,38 @@ class _CliTool(_DeclaredTool):
         if refused:
             return refused
         try:
+            argv = [self._binary] + shlex.split(args)
+        except ValueError as exc:
+            return {"success": False, "error": f"refused: cannot parse arguments: {exc}"}
+        # The binary is fixed, but the arguments are not: refuse anything that
+        # would hand control to a shell.
+        refused = _refuse_shell_binary(argv)
+        if refused:
+            return refused
+
+        from genesis_protocol.tools.cli_policy import canonical_command, classify
+
+        verdict = classify(self._binary, argv[1:])
+        if verdict.denied:
+            return {
+                "success": False,
+                "denied": True,
+                "operation": verdict.operation,
+                "command": command,
+                "error": f"refused: {verdict.reason}",
+            }
+        if verdict.needs_consent:
+            denied = self._authorize(user_id=kwargs.get("_user_id"),
+                                     approval_id=kwargs.get("approval_id"),
+                                     payload=canonical_command(self._binary, argv[1:]),
+                                     operation=verdict.operation)
+            if denied is not None:
+                denied["command"] = command
+                return denied
+        try:
             result = subprocess.run(
-                command, shell=True, capture_output=True, text=True, timeout=kwargs.get("timeout", 30)
+                argv, shell=False, capture_output=True, text=True,
+                timeout=kwargs.get("timeout", 30), env=_scrubbed_env(),
             )
             return {
                 "success": result.returncode == 0,

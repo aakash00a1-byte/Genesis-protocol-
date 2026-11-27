@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from genesis_protocol.skills import Skill, SkillCategory
+from genesis_protocol.tools.cli_guard import run_guarded_command
 
 # Skill definitions
 SKILLS = [
@@ -267,30 +268,26 @@ class ProjectExplorer:
 class GitOperations:
     """Handle Git operations safely."""
     
-    def __init__(self, repo_path: str = "."):
+    def __init__(self, repo_path: str = ".", *, user_id: Optional[int] = None,
+                 approval_id: Optional[str] = None):
         self.repo_path = repo_path
-    
-    def run_git(self, *args, check: bool = True) -> Dict[str, Any]:
-        """Run a git command."""
-        try:
-            result = subprocess.run(
-                ["git", "-C", self.repo_path] + list(args),
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            
-            return {
-                "success": check == False or result.returncode == 0,
-                "stdout": result.stdout.strip(),
-                "stderr": result.stderr.strip(),
-                "returncode": result.returncode
-            }
-        except subprocess.TimeoutExpired:
-            return {"success": False, "error": "Git command timeout"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
+        self._user_id = user_id
+        self._approval_id = approval_id
+    def run_git(self, *args, check: bool = True, user_id: Optional[int] = None,
+                approval_id: Optional[str] = None) -> Dict[str, Any]:
+        """Run a git command, or refuse it."""
+        result = run_guarded_command(
+            "git", ["-C", self.repo_path, *[str(a) for a in args]],
+            user_id=self._user_id if user_id is None else user_id,
+            approval_id=self._approval_id if approval_id is None else approval_id,
+            timeout=60,
+        )
+        if result.get("denied"):
+            return result
+        result["success"] = check is False or bool(result.get("success"))
+        result["stdout"] = (result.get("stdout") or "").strip()
+        result["stderr"] = (result.get("stderr") or "").strip()
+        return result
     def get_status(self) -> Dict[str, Any]:
         """Get git status."""
         return self.run_git("status", "--porcelain")
@@ -380,9 +377,11 @@ async def execute_project_explore(max_depth: int = 3) -> Dict[str, Any]:
     return explorer.get_structure(max_depth)
 
 
-async def execute_git_operation(operation: str, **kwargs) -> Dict[str, Any]:
-    """Execute git operation."""
-    git = GitOperations()
+async def execute_git_operation(operation: str, *, user_id: Optional[int] = None,
+                               approval_id: Optional[str] = None,
+                               **kwargs) -> Dict[str, Any]:
+    """Execute git operation (owner only; writes need an approval)."""
+    git = GitOperations(user_id=user_id, approval_id=approval_id)
     
     operations = {
         "status": git.get_status,

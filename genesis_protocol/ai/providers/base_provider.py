@@ -3,6 +3,7 @@
 Abstract base class for all AI providers.
 """
 
+import json
 import re
 import sys
 from abc import ABC, abstractmethod
@@ -26,19 +27,69 @@ _clients_by_loop: "Dict[tuple[str, int], httpx.AsyncClient]" = {}
 # get_status() is served by /api/diagnostics, so error text is trimmed and any
 # credential-shaped fragment is removed before it is stored.
 LAST_ERROR_MAX_CHARS = 200
+# Provider error bodies carry account, plan and request-identifier detail that
+# does not belong in a status field; only the human message survives.
+JSON_MESSAGE_MAX_CHARS = 120
+_JSON_PAYLOAD = re.compile(r"\{.*\}", re.S)
+# Account-level detail ("you need a subscription", "out of credits") says
+# nothing about the request and describes the owner's billing state, so it is
+# replaced by a neutral category instead of being echoed.
+_BILLING_TERMS = re.compile(
+    r"(?i)\b(subscription|billing|billed|credit|credits|payment|invoice|"
+    r"upgrade|quota|top[- ]?up|plan)\b"
+)
+_BILLING_SUMMARY = "(provider rejected the request: plan or billing restriction)"
 _SECRET_PATTERNS = (
-    re.compile(r"(?i)\b(bearer|authorization|api[-_]?key|x-api-key|secret[-_]?token)\b\s*[:=]?\s*\S+"),
+    # The value usually follows the keyword after one more word
+    # ("Authorization: Bearer abc"), so take up to two tokens.
+    re.compile(r"(?i)\b(bearer|authorization|api[-_]?key|x-api-key|secret[-_]?token)\b\s*[:=]?\s*\S+(?:\s+\S+)?"),
     re.compile(r"\bsk-[A-Za-z0-9_\-]{6,}"),
     re.compile(r"\b(key|token|secret)=[^&\s]+"),
     re.compile(r"\b[A-Za-z0-9_\-]{32,}\b"),
 )
 
 
+def _json_message(blob: str) -> Optional[str]:
+    """The one human-readable message inside a provider JSON body, if any."""
+    try:
+        data = json.loads(blob)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    error = data.get("error")
+    if isinstance(error, dict):
+        for key in ("message", "detail"):
+            if isinstance(error.get(key), str) and error[key].strip():
+                return error[key].strip()
+    for key in ("message", "detail", "title"):
+        if isinstance(data.get(key), str) and data[key].strip():
+            return data[key].strip()
+    return None
+
+
 def sanitize_error(error: Optional[str]) -> Optional[str]:
-    """Short, credential-free error text for provider status."""
+    """Short, credential-free error text for provider status.
+
+    A raw provider body ("402 - {...account, plan, request id...}") is reduced
+    to its message so the status field cannot leak billing or account detail.
+    """
     if not error:
         return None
     text = str(error)
+
+    def _replace(match: "re.Match[str]") -> str:
+        message = _json_message(match.group(0))
+        if not message:
+            return "(details withheld)"
+        if _BILLING_TERMS.search(message):
+            return _BILLING_SUMMARY
+        return f"({message[:JSON_MESSAGE_MAX_CHARS]})"
+
+    text = _JSON_PAYLOAD.sub(_replace, text)
+    if _BILLING_SUMMARY not in text and _BILLING_TERMS.search(text):
+        head = text.split(" - ", 1)[0]
+        text = f"{head} - {_BILLING_SUMMARY}" if head != text else _BILLING_SUMMARY
     for pattern in _SECRET_PATTERNS:
         text = pattern.sub("[redacted]", text)
     text = " ".join(text.split())
