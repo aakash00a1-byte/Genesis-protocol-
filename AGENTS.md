@@ -1899,6 +1899,20 @@ than 404.
   none, so a skill or a direct registry call cannot run a state-changing
   command. Do not add a CLI tool without a policy entry; the audit test asserts
   the exact registered set (`tests/test_cli_authorization.py`).
+- **The devops skill managers go through the same gate.** `skills/devops`
+  called `subprocess.run(["kubectl"] + args)` itself, so
+  `KubernetesManager().run_command("delete", "ns", "prod")` ran a destructive
+  cluster command with no owner check, no consent and no policy - a single
+  argv, so the `shell=False` fix never touched it (R6-d). Every command now
+  goes through `run_guarded_command()`, which classifies with `cli_policy`,
+  requires the verified owner (`user_id`, refused when absent), and claims a
+  single-use approval bound to `canonical_command(binary, argv)` for anything
+  that is not read-only. `_probe()` is the only thing that may run on its own,
+  and only for the fixed `--version` / `version --client` arguments. The
+  managers take `user_id`/`approval_id` at construction and per call; a manager
+  built without them refuses every command. `tests/test_devops_cli_gate.py`
+  holds the contract, including a static check that the module has exactly two
+  `subprocess.run(` call sites (the probe and the guard) and no `shell=True`.
 - **The Space must be given a strong `SECRET_KEY`.** `web/app.py` resolves it at
   import: a missing, known-default or short (<16) value raises
   `RuntimeError("... refusing to start in production")` when a hosting marker
