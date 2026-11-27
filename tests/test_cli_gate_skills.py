@@ -121,7 +121,10 @@ def test_the_git_helpers_keep_their_read_behaviour(owner):
     git = GitOperations(".", user_id=OWNER)
 
     assert git.get_status()["success"] is True
-    assert git.get_current_branch().strip() != ""
+    # CI checks out a detached HEAD, so the branch name is legitimately empty;
+    # what matters is that the read ran instead of being refused.
+    assert git.run_git("branch", "--show-current").get("denied") is not True
+    assert isinstance(git.get_current_branch(), str)
     assert isinstance(git.get_branches(), list)
     assert isinstance(git.get_log(1), list)
 
