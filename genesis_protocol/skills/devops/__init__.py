@@ -4,98 +4,13 @@ DevOps Skills
 Docker, Kubernetes, and cloud services management.
 """
 
-import subprocess
 import json
 import yaml
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 from genesis_protocol.skills import Skill, SkillCategory
-
-
-def _scrubbed_env() -> Dict[str, str]:
-    """The child gets no inherited credential, matching the code sandbox."""
-    from genesis_protocol.agentic.sandbox import _scrubbed_env as sandbox_env
-
-    return sandbox_env()
-
-
-# Availability checks are the only commands this module may run on its own:
-# fixed arguments, no user input.
-_PROBE_ARGS = {("--version",), ("version", "--client")}
-
-
-def _probe(binary: str, args: List[str]) -> bool:
-    if tuple(args) not in _PROBE_ARGS:
-        return False
-    try:
-        subprocess.run([binary, *args], capture_output=True, timeout=5,
-                       shell=False, env=_scrubbed_env())
-        return True
-    except Exception:
-        return False
-
-
-def run_guarded_command(
-    binary: str,
-    args: List[str],
-    *,
-    user_id: Optional[int] = None,
-    approval_id: Optional[str] = None,
-    timeout: int = 60,
-) -> Dict[str, Any]:
-    """Run one CLI command after the canonical policy allows it.
-
-    These managers used to call ``subprocess.run`` directly, which bypassed the
-    tool registry and the consent gate: ``KubernetesManager().run_command(
-    "delete", "ns", "prod")`` was a single argv with no metacharacter anywhere.
-    The decision now comes from ``tools.cli_policy`` (default-deny), the caller
-    must be the verified owner, and a state-changing command additionally needs
-    a single-use approval bound to this exact executable and arguments.
-    """
-    from genesis_protocol.tools.cli_policy import canonical_command, classify
-
-    argv = [str(a) for a in args]
-    command = " ".join([binary, *argv])
-    verdict = classify(binary, argv)
-
-    def refuse(reason: str) -> Dict[str, Any]:
-        return {"success": False, "denied": True, "operation": verdict.operation,
-                "command": command, "error": reason}
-
-    if verdict.denied:
-        return refuse(f"refused: {verdict.reason}")
-
-    from genesis_protocol.agentic.policy import get_agent_policy
-
-    if user_id is None:
-        return refuse("refused: devops commands require the owner and no caller identity was supplied")
-    if not get_agent_policy().is_owner(int(user_id)):
-        return refuse(f"refused: user {user_id} is not the owner")
-
-    if verdict.needs_consent:
-        if not approval_id:
-            return refuse("refused: an approval record is required for this operation "
-                          "(approval_id) and nothing was run")
-        from genesis_protocol.agentic.code_consent import get_code_consent
-
-        approved, reason = get_code_consent().claim(
-            int(user_id), str(approval_id), canonical_command(binary, argv))
-        if approved is None:
-            return refuse(f"refused: {reason}")
-
-    try:
-        result = subprocess.run(
-            [binary, *argv], capture_output=True, text=True, timeout=timeout,
-            shell=False, env=_scrubbed_env(),
-        )
-        return {
-            "success": result.returncode == 0,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "returncode": result.returncode,
-        }
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
+from genesis_protocol.tools.cli_guard import probe as _probe
+from genesis_protocol.tools.cli_guard import run_guarded_command
 
 # Skill definitions
 SKILLS = [

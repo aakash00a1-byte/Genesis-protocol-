@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Any
 from pathlib import Path
 from datetime import datetime
 from genesis_protocol.skills import Skill, SkillCategory
+from genesis_protocol.tools.cli_guard import probe, run_guarded_command
 
 # Skill definitions
 SKILLS = [
@@ -40,17 +41,16 @@ SKILLS = [
 class LaTeXDocument:
     """Create and compile LaTeX documents."""
     
-    def __init__(self, output_dir: str = "."):
+    def __init__(self, output_dir: str = ".", *, user_id: Optional[int] = None,
+                 approval_id: Optional[str] = None):
         self.output_dir = Path(output_dir)
+        self._user_id = user_id
+        self._approval_id = approval_id
         self.latex_available = self._check_latex()
     
     def _check_latex(self) -> bool:
-        """Check if LaTeX is available."""
-        try:
-            subprocess.run(["pdflatex", "--version"], capture_output=True, timeout=10)
-            return True
-        except:
-            return False
+        """Check if LaTeX is available (fixed probe, no user input)."""
+        return probe("pdflatex", ["--version"])
     
     def create_document(
         self,
@@ -131,13 +131,16 @@ Add your conclusion here.
             
             # Run pdflatex twice for proper compilation
             for _ in range(2):
-                result = subprocess.run(
-                    ["pdflatex", "-interaction=nonstopmode", "-halt-on-error", str(input_file)],
-                    capture_output=True,
-                    text=True,
-                    cwd=self.output_dir,
-                    timeout=120
+                result = run_guarded_command(
+                    "pdflatex",
+                    ["-interaction=nonstopmode", "-halt-on-error", str(input_file)],
+                    user_id=self._user_id,
+                    approval_id=self._approval_id,
+                    timeout=120,
+                    cwd=str(self.output_dir),
                 )
+                if result.get("denied"):
+                    return result
                 
                 if result.returncode != 0:
                     return {
@@ -303,16 +306,15 @@ class SkillFileManager:
 class MarkdownToPDF:
     """Convert markdown to PDF using pandoc."""
     
-    def __init__(self):
+    def __init__(self, *, user_id: Optional[int] = None,
+                 approval_id: Optional[str] = None):
+        self._user_id = user_id
+        self._approval_id = approval_id
         self.pandoc_available = self._check_pandoc()
     
     def _check_pandoc(self) -> bool:
-        """Check if pandoc is available."""
-        try:
-            subprocess.run(["pandoc", "--version"], capture_output=True, timeout=10)
-            return True
-        except:
-            return False
+        """Check if pandoc is available (fixed probe, no user input)."""
+        return probe("pandoc", ["--version"])
     
     def convert(
         self,
@@ -350,12 +352,14 @@ class MarkdownToPDF:
             if options.get("standalone", True):
                 args.append("--standalone")
             
-            result = subprocess.run(
-                ["pandoc"] + args,
-                capture_output=True,
-                text=True,
-                timeout=120
+            result = run_guarded_command(
+                "pandoc", args,
+                user_id=self._user_id,
+                approval_id=self._approval_id,
+                timeout=120,
             )
+            if result.get("denied"):
+                return result
             
             if result.returncode == 0 and Path(output_file).exists():
                 return {

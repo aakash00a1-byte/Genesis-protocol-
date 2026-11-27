@@ -6,11 +6,11 @@ Cron jobs, scheduled tasks, GitHub Actions, and API integrations.
 
 import os
 import re
-import subprocess
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from pathlib import Path
 from genesis_protocol.skills import Skill, SkillCategory
+from genesis_protocol.tools.cli_guard import run_guarded_command
 
 # Skill definitions
 SKILLS = [
@@ -46,118 +46,95 @@ SKILLS = [
 
 
 class CronManager:
-    """Manage cron jobs."""
-    
-    def __init__(self):
+    """Manage cron jobs.
+
+    Installing or replacing a crontab is persistence, which the CLI policy
+    refuses outright (``cli_policy`` denies every ``crontab`` call except
+    ``-l``). Reading it is owner-only. Nothing here can be approved into
+    existence, which is the point.
+    """
+
+    def __init__(self, *, user_id: Optional[int] = None,
+                 approval_id: Optional[str] = None):
+        self._user_id = user_id
+        self._approval_id = approval_id
         self.crontab_file = Path.home() / ".genesis_crontab"
-    
+
+    def _crontab(self, args: List[str]) -> Dict[str, Any]:
+        return run_guarded_command("crontab", args, user_id=self._user_id,
+                                   approval_id=self._approval_id, timeout=10)
+
     def list_jobs(self) -> List[Dict[str, str]]:
         """List all current cron jobs."""
-        try:
-            result = subprocess.run(
-                ["crontab", "-l"],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            
-            jobs = []
-            for line in result.stdout.split("\n"):
-                if line and not line.startswith("#") and "*" in line:
-                    parts = line.split(None, 5)
-                    if len(parts) >= 6:
-                        jobs.append({
-                            "schedule": " ".join(parts[:5]),
-                            "command": parts[5]
-                        })
-            
-            return jobs
-        except Exception:
+        result = self._crontab(["-l"])
+        if not result.get("success"):
             return []
-    
-    def create_job(self, schedule: str, command: str, description: str = "") -> Dict[str, Any]:
-        """Create a new cron job."""
-        try:
-            # Validate schedule
-            if not self._validate_schedule(schedule):
-                return {"success": False, "error": "Invalid cron schedule"}
-            
-            # Add to crontab
-            job_entry = f"# {description}\n{schedule} {command}\n"
-            
-            # Read existing crontab
-            result = subprocess.run(
-                ["crontab", "-l"],
-                capture_output=True,
-                text=True
-            )
-            
-            existing = result.stdout if result.returncode == 0 else ""
-            
-            # Append new job
-            new_crontab = existing + "\n" + job_entry
-            
-            # Write new crontab
-            with open(self.crontab_file, "w") as f:
-                f.write(new_crontab)
-            
-            subprocess.run(["crontab", str(self.crontab_file)], check=True)
-            
-            return {
-                "success": True,
-                "schedule": schedule,
-                "command": command,
-                "message": "Cron job created successfully"
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    def delete_job(self, schedule: str, command: str) -> Dict[str, Any]:
-        """Delete a cron job."""
-        try:
-            result = subprocess.run(
-                ["crontab", "-l"],
-                capture_output=True,
-                text=True
-            )
-            
-            if result.returncode != 0:
-                return {"success": False, "error": "No crontab found"}
-            
-            lines = result.stdout.split("\n")
-            new_lines = []
-            skip = False
-            
-            for line in lines:
-                if skip:
-                    skip = False
-                    continue
-                
-                # Check if this line matches the job to delete
+
+        jobs = []
+        for line in result.get("stdout", "").split("\n"):
+            if line and not line.startswith("#") and "*" in line:
                 parts = line.split(None, 5)
                 if len(parts) >= 6:
-                    job_schedule = " ".join(parts[:5])
-                    job_command = parts[5]
-                    
-                    if job_schedule == schedule and job_command == command:
-                        # Skip this job (and its comment)
-                        if new_lines and new_lines[-1].startswith("# "):
-                            new_lines.pop()
-                        continue
-                
-                new_lines.append(line)
-            
-            # Write new crontab
-            new_crontab = "\n".join(new_lines) + "\n"
-            with open(self.crontab_file, "w") as f:
-                f.write(new_crontab)
-            
-            subprocess.run(["crontab", str(self.crontab_file)], check=True)
-            
-            return {"success": True, "message": "Cron job deleted"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
+                    jobs.append({
+                        "schedule": " ".join(parts[:5]),
+                        "command": parts[5]
+                    })
+        return jobs
+
+    def create_job(self, schedule: str, command: str,
+                   description: str = "") -> Dict[str, Any]:
+        """Create a new cron job (refused: installing a crontab is persistence)."""
+        if not self._validate_schedule(schedule):
+            return {"success": False, "error": "Invalid cron schedule"}
+
+        existing = self._crontab(["-l"])
+        if not existing.get("success"):
+            return existing
+
+        job_entry = f"# {description}\n{schedule} {command}\n"
+        self.crontab_file.write_text(existing.get("stdout", "") + "\n" + job_entry)
+
+        install = self._crontab([str(self.crontab_file)])
+        if not install.get("success"):
+            self.crontab_file.unlink(missing_ok=True)  # leave no staged artifact
+            return install
+
+        return {
+            "success": True,
+            "schedule": schedule,
+            "command": command,
+            "message": "Cron job created successfully"
+        }
+
+    def delete_job(self, schedule: str, command: str) -> Dict[str, Any]:
+        """Delete a cron job (refused: installing a crontab is persistence)."""
+        existing = self._crontab(["-l"])
+        if not existing.get("success"):
+            return {"success": False, "error": "No crontab found"}
+
+        new_lines: List[str] = []
+        skip = False
+        for line in existing.get("stdout", "").split("\n"):
+            if skip:
+                skip = False
+                continue
+            parts = line.split(None, 5)
+            if len(parts) >= 6:
+                if " ".join(parts[:5]) == schedule and parts[5] == command:
+                    if new_lines and new_lines[-1].startswith("# "):
+                        new_lines.pop()
+                    continue
+            new_lines.append(line)
+
+        self.crontab_file.write_text("\n".join(new_lines) + "\n")
+
+        install = self._crontab([str(self.crontab_file)])
+        if not install.get("success"):
+            self.crontab_file.unlink(missing_ok=True)  # leave no staged artifact
+            return install
+
+        return {"success": True, "message": "Cron job deleted"}
+
     def _validate_schedule(self, schedule: str) -> bool:
         """Validate cron schedule format."""
         pattern = r'^(\*|[0-9,\-]+)\s+(\*|[0-9,\-]+)\s+(\*|[0-9,\-]+)\s+(\*|[0-9,\-]+)\s+(\*|[0-9,\-]+)$'

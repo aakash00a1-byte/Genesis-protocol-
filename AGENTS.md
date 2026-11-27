@@ -1911,8 +1911,24 @@ than 404.
   and only for the fixed `--version` / `version --client` arguments. The
   managers take `user_id`/`approval_id` at construction and per call; a manager
   built without them refuses every command. `tests/test_devops_cli_gate.py`
-  holds the contract, including a static check that the module has exactly two
-  `subprocess.run(` call sites (the probe and the guard) and no `shell=True`.
+  holds the contract for that module.
+- **One gate for every CLI call in the product.** The same self-built-argv
+  pattern sat in four more skill modules, so the guard moved to
+  `tools/cli_guard.py` (`run_guarded_command`, `probe`) and they all use it:
+  `automation.CronManager` (installing a crontab is persistence - `cli_policy`
+  denies every `crontab` call except `-l`, and no approval can change that),
+  `file_management.GitOperations` (read verbs allowed for the owner; `push`,
+  `reset`, `commit`, `checkout`, `branch -D`, `clean`, `rebase` refused),
+  `specialized.GitHubPRManager` (`gh pr merge`/`api`/`auth` refused),
+  `coding.Debugger` (runs a program, so owner + approval), and the document
+  compilers (`pdflatex`/`pandoc` are owner-only). `cli_policy` gained a `git`
+  read-only set plus `DANGEROUS_BY_BINARY`, kept per-binary so a label value
+  such as `kubectl get pods -l branch=main` is not read as a git verb.
+  `tests/test_cli_gate_skills.py` holds the contract **and** an AST audit: no
+  module under `genesis_protocol/` may call `subprocess.run`/`Popen`/`os.system`
+  except `tools/cli_guard.py`, `tools/skill_tools.py` and `agentic/sandbox.py`.
+  Add a CLI tool by adding a policy entry and calling the guard - never a
+  `subprocess` call of your own.
 - **The Space must be given a strong `SECRET_KEY`.** `web/app.py` resolves it at
   import: a missing, known-default or short (<16) value raises
   `RuntimeError("... refusing to start in production")` when a hosting marker

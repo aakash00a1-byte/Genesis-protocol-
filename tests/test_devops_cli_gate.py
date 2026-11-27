@@ -191,6 +191,7 @@ def test_availability_probes_only_run_fixed_version_arguments():
 def test_the_module_runs_no_command_outside_the_guard():
     source = Path(devops.__file__).read_text()
 
-    assert source.count("subprocess.run(") == 2, "only _probe and run_guarded_command may call subprocess"
+    assert "import subprocess" not in source, "every command goes through tools.cli_guard"
+    assert "subprocess.run(" not in source
+    assert "from genesis_protocol.tools.cli_guard import" in source
     assert "shell=True" not in source
-    assert "env=_scrubbed_env()" in source

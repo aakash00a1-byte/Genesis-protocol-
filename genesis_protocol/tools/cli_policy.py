@@ -78,6 +78,9 @@ READ_ONLY: Dict[str, frozenset] = {
     "az": frozenset({"list", "show", "version"}),
     "terraform": frozenset({"version", "show", "output", "plan", "validate"}),
     "gh": frozenset({"status"}),
+    "git": frozenset({"status", "log", "diff", "show", "rev-parse", "ls-files",
+                      "blame", "shortlog", "describe", "cat-file", "show-ref",
+                      "reflog", "grep", "whatchanged"}),
 }
 
 # Prefixes that mean "read" on binaries whose verbs are hyphenated nouns
@@ -106,6 +109,16 @@ HARMLESS_BINARIES = frozenset({
 # Tools that only read an input file and write an output file in the working
 # directory (a document compiler is not a privileged operation).
 FILE_ONLY_BINARIES = frozenset({"pdflatex", "pandoc"})
+
+# Verbs that are destructive for one binary only. Kept per-binary so a label
+# value such as ``kubectl get pods -l branch=main`` is not read as a git verb.
+DANGEROUS_BY_BINARY: Dict[str, frozenset] = {
+    "git": frozenset({
+        "reset", "clean", "revert", "cherry-pick", "rebase", "checkout",
+        "switch", "commit", "tag", "branch", "stash", "gc", "update-ref",
+        "filter-branch", "submodule", "worktree", "am", "format-patch",
+    }),
+}
 
 # ``crontab`` is persistence: only listing is read-only.
 CRONTAB_READ_ONLY = frozenset({"-l", "--list"})
@@ -146,8 +159,9 @@ def classify(binary: str, args: Sequence[str]) -> Verdict:
             return Verdict(ALLOW, token, "read-only")
 
     # A dangerous verb anywhere in the arguments is refused, not consented to.
+    binary_dangerous = DANGEROUS_BY_BINARY.get(binary, frozenset())
     for token in argv:
-        if _matches_dangerous(token):
+        if _matches_dangerous(token) or _verb(token) in binary_dangerous:
             return Verdict(DENY, _verb(token),
                            f"'{_verb(token)}' is a destructive, deployment, "
                            "credential or privilege operation")
