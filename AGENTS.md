@@ -868,6 +868,24 @@ actually answer a user.
 - **`_telegram_secret_ok` / `_telegram_is_admin` fail open when their env vars
   are unset** (by design, so an existing deployment keeps working). Both are set
   in production, so the live Space is closed; treat them as required config.
+- **`DIAGNOSTICS_SECRET` gates `/api/diagnostics`** (owner session *or* the
+  `X-Genesis-Secret` header). It is set on the Space, but a secret is inert
+  until the code that reads it is deployed: the live Space ran a commit with
+  zero references to it and answered `/api/diagnostics` anonymously with 200.
+  So "the secret is saved" and "the endpoint is closed" are two separate facts -
+  check the second by fetching `/api/diagnostics` with no cookie (expect 401)
+  and with the header (expect 200) *after* a deploy. HF injects secrets only at
+  container start, so a redeploy is required after adding one.
+- **Reading secret *names* is possible read-only; values never are.**
+  `GET https://huggingface.co/api/spaces/<id>/secrets` returns a dict **keyed by
+  name** (`{"KEY": {"key": ..., "updatedAt": ...}}`), not a list - parse
+  `.values()`. Variables are the same shape and do expose `value` (that is how
+  `GLUTEN_OWNER_IDS=1` is visible). GitHub Actions secrets are **not** readable
+  with the injected token: `GET /repos/{o}/{r}/actions/secrets` and
+  `gh secret list` both return 403 `Resource not accessible by integration`.
+  Nothing in `.github/workflows/` references `DIAGNOSTICS_SECRET` and no
+  workflow runs `scripts/release_test.py`, so the repo does not need it - only
+  the Space (`web/app.py`) and a human running that script locally do.
 
 ## Agentic capability layer (upgrade 2026-11-11)
 
