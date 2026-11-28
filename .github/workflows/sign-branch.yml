@@ -1,0 +1,145 @@
+name: Sign Branch
+
+# Makes an agent branch mergeable under `required_signatures` without touching
+# the ruleset: the branch is flattened onto main and re-committed with the SSH
+# signing key held in the `signing` environment, then pushed back.
+#
+# Why an environment: a repository secret is readable by *any* workflow in the
+# repository, including one pushed on a feature branch. An environment secret is
+# readable only by a job that declares the environment, and with a required
+# reviewer that job waits for the owner. The approval prompt is the control.
+#
+# Manual only. It never runs on push, and it refuses the default branch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to sign (never main)'
+        required: true
+        type: string
+      mode:
+        description: 'squash-sign flattens onto main; resign amends the head'
+        required: true
+        default: squash-sign
+        type: choice
+        options:
+          - squash-sign
+          - resign
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: sign-branch
+  cancel-in-progress: false
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    environment: signing
+    env:
+      REPO: ${{ github.repository }}
+      BRANCH: ${{ inputs.branch }}
+      MODE: ${{ inputs.mode }}
+      BASE: main
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SIGNING_KEY_SECRET: ${{ secrets.SSH_SIGNING_KEY }}
+
+    steps:
+      - name: Refuse a workflow definition that is not the default-branch copy
+        env:
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |
+          set -eu
+          expected="${REPO}/.github/workflows/sign-branch.yml@refs/heads/main"
+          if [ "${WORKFLOW_REF}" != "${expected}" ]; then
+            echo "::error::refusing to run: workflow definition is ${WORKFLOW_REF}, expected ${expected}"
+            exit 1
+          fi
+          echo "workflow definition is the default-branch copy"
+
+      - name: Refuse the default branch before anything is checked out
+        run: |
+          set -eu
+          case "${BRANCH}" in
+            main|master|refs/heads/main|refs/heads/master|"")
+              echo "::error::refusing to sign the default branch"
+              exit 1 ;;
+          esac
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+
+      - name: Check the signing preconditions
+        run: |
+          set -eu
+          python3 scripts/verify_signed_commits.py plan \
+            --branch "${BRANCH}" --mode "${MODE}" --base "${BASE}" > /dev/null
+          if [ -z "${SIGNING_KEY_SECRET}" ]; then
+            echo "::error::SSH_SIGNING_KEY is not set in the 'signing' environment"
+            exit 1
+          fi
+
+      - name: Materialise the key on the runner only
+        run: |
+          set -eu
+          umask 077
+          key="${RUNNER_TEMP}/genesis_signing"
+          printf '%s\n' "${SIGNING_KEY_SECRET}" > "${key}"
+          chmod 600 "${key}"
+          # The public half is safe to print and is what the owner compares.
+          ssh-keygen -y -f "${key}" > "${key}.pub"
+          echo "signing key fingerprint:"
+          ssh-keygen -lf "${key}.pub"
+          echo "SIGNING_KEY_PATH=${key}" >> "${GITHUB_ENV}"
+
+      - name: Sign the branch
+        run: |
+          set -eu
+          git config user.name "genesis-signer"
+          git config user.email "genesis-signer@users.noreply.github.com"
+          git config gpg.format ssh
+          git config user.signingkey "${SIGNING_KEY_PATH}"
+          git config commit.gpgsign true
+
+          # Captured before the reset: reset --soft moves the branch pointer, so
+          # reading the message afterwards would read main's commit instead.
+          git log -1 --format='%B' > "${RUNNER_TEMP}/message"
+          original_author="$(git log -1 --format='%an <%ae>')"
+
+          if [ "${MODE}" = "squash-sign" ]; then
+            git fetch origin "${BASE}"
+            git reset --soft "origin/${BASE}"
+            git commit -S -F "${RUNNER_TEMP}/message" --author="${original_author}"
+          else
+            git commit --amend --no-edit -S
+          fi
+
+          git log -1 --format='%H %G? %s'
+          git push --force-with-lease origin "HEAD:${BRANCH}"
+
+      - name: Verify the new head is signed
+        run: python3 scripts/verify_signed_commits.py verify --repo "${REPO}" --branch "${BRANCH}"
+
+      - name: Ask for CI, because a GITHUB_TOKEN push suppresses its own events
+        run: |
+          set -eu
+          code=$(curl -sS -o /tmp/dispatch.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPO}/actions/workflows/ci.yml/dispatches" \
+            -d "{\"ref\":\"${BRANCH}\"}")
+          cat /tmp/dispatch.json || true
+          if [ "${code}" != "204" ]; then
+            echo "::error::could not dispatch ci.yml for ${BRANCH} (HTTP ${code}); run it by hand"
+            exit 1
+          fi
+
+      - name: Remove the key
+        if: always()
+        run: |
+          rm -f "${RUNNER_TEMP}/genesis_signing" "${RUNNER_TEMP}/genesis_signing.pub" || true

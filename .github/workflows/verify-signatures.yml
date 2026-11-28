@@ -1,0 +1,53 @@
+name: Verify Signatures
+
+# Reports whether commits carry a verified signature. Read-only: it never signs,
+# merges or pushes. The ruleset already enforces `required_signatures` on the
+# default branch; this job exists so the answer is visible for a branch *before*
+# the owner tries to merge it, and so drift is caught on a schedule.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch to check (default: main)'
+        required: false
+        default: main
+        type: string
+      base:
+        description: 'Base to diff against (default: main)'
+        required: false
+        default: main
+        type: string
+  schedule:
+    - cron: '30 4 * * 1'   # Mondays 04:30 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      REF: ${{ inputs.ref || 'main' }}
+      BASE: ${{ inputs.base || 'main' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref_name }}
+
+      - name: Report what this runner can do
+        run: python3 scripts/verify_signed_commits.py readiness
+
+      - name: Verify every commit on the ref
+        run: |
+          set -eu
+          if [ "${REF}" = "${BASE}" ]; then
+            # main against itself: check the tip, which is what a merge lands on
+            sha=$(git rev-parse HEAD)
+            python3 scripts/verify_signed_commits.py verify --repo "${REPO}" --sha "${sha}"
+          else
+            python3 scripts/verify_signed_commits.py verify \
+              --repo "${REPO}" --branch "${REF}" --base "${BASE}"
+          fi

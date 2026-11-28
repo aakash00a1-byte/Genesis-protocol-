@@ -1958,3 +1958,117 @@ than 404.
   session, a session naming a missing user is rejected, a bad Bearer token does
   not fall back to the cookie) and startup refusal by
   `tests/test_web_secret_key_startup.py`.
+
+## The founding constitution is a document *and* a module (2026-11-24)
+
+`docs/CONSTITUTION.md` is the original blueprint, preserved as the permanent
+mission. `genesis_protocol/constitution.py` is the same thing the code can read:
+twelve principles, six articles, an owner-only operation set and five explicit
+non-claims. Surface: `GET /api/constitution` (public, read-only).
+
+Rules:
+- The module **refuses and never grants**. `Verdict.permitted_without_owner`
+  means "the constitution does not reserve this"; `agentic.policy` still decides
+  and can deny it. Do not add a grant path here.
+- `OWNER_ONLY_OPERATIONS` must stay a superset of
+  `agentic.policy.PRIVILEGED_OPERATIONS`; `tests/test_constitution.py` enforces
+  it, so a new privileged op without an article fails CI.
+- `publish_discovery` was added to `PRIVILEGED_OPERATIONS` in this change: a
+  scientific claim about the world is not something the agent publishes for
+  itself.
+- `NON_CLAIMS` is the list a template or endpoint must not contradict (no
+  consciousness/self-awareness, no "consensus is truth", no discovery without
+  reproducible evidence).
+
+`docs/MASTER_EXECUTION_DIRECTIVE.md` holds the owner's operating directive. It is
+intent, not evidence: item status lives in `docs/AUDIT_STAGE1_3.md`.
+
+## Council consensus is measured, not trusted (2026-11-24)
+
+`genesis_protocol/ai/independence.py` scores an agreement before anyone leans on
+it: answer clustering, provider *family* (groq/cerebras/nvidia/huggingface are
+all `open-weights`), an aggregator discount (openrouter/orcarouter may front the
+same upstream model twice), and citation overlap. `CouncilResult.independence`
+carries the assessment; `is_evidence` is **always False**.
+
+Why it exists: models share training data and failure modes, so five models can
+agree and be wrong together. `VOTE` and `SYNTHESIS` amplify that, not fix it.
+`correlated_risk == "high"` means "one opinion repeated" and requires an
+independent check. Regression: `tests/test_council_independence.py`.
+
+## Stage 4 research engine: it gates, it does not discover (2026-11-24)
+
+`genesis_protocol/research/` is a foundation, and it is deliberately small:
+
+- `cycle.py` — `question -> literature -> hypothesis -> model -> experiment ->
+  measurement -> verification -> report`. Skipping a stage raises
+  `StageOrderError`; missing evidence raises `MissingEvidenceError`; verification
+  needs `passed` **and** `independent`, and a producer cannot verify itself;
+  `can_claim_discovery()` is False without a written report *and* a verified
+  result.
+- `hypothesis.py` — a hypothesis needs a falsifiable test; `support()` needs an
+  independent passing check; **refuted is terminal** and `remove()` raises.
+- `ledger.py` — append-only JSONL, hash-chained; `verify()` finds the first
+  tampered index; `remove()` raises.
+- `benchmark.py` — 13 propositional problems including 3 negative controls,
+  exhaustive truth tables, plus two internal probes (accept a tautology, reject
+  `a & !a` as one). A checker that passes both probes is reported
+  `checker_discriminating: False` — a yes-man scores 100% and proves nothing.
+  `LeanChecker` is wired and **reports `available: False`** where Lean is not
+  installed; it runs only through `tools/cli_guard`, so it needs the owner and an
+  approval. No Lean result is claimed today.
+
+What it does not do: generate hypotheses, run experiments, call models, or claim
+a discovery. Do not describe it as a lab. Surfaces: `GET /api/research/status`
+(public, states the non-claims), `GET /api/research/benchmark` (owner-only).
+`docs/RESEARCH_MISSION.md` turns the mission's directions into falsifiable
+questions and parks the ones that need an instrument.
+
+## The roadmap cannot invent progress (fixed 2026-11-24)
+
+`/api/infinity/status` published `average_progress: 87.7` with
+`completed_milestones: 0` and `total_interactions: 0`, and listed a
+`consciousness` / "Self-Awareness" milestone. Two causes: hardcoded
+60/40/20/0/0/0 milestone literals, and `GenesisAutoUpdater._update_roadmap_progress()`
+recomputing "progress" from elapsed calendar time since 2024-01-01 and persisting
+it.
+
+Now: progress is `0 / 50 / 100` derived from recorded evidence only,
+`update_milestone_progress()` is refused, loaded state is recomputed (a stale
+number on disk cannot resurrect itself), `target_date` is always `None`, the
+evolution path comes from `gluten.identity.EVOLUTION_CHAIN` (the real lineage),
+and the self-awareness milestone is gone. Regression:
+`tests/test_infinity_honesty.py` (12 tests), including an AST-level check that
+`auto_updater.py` no longer mentions time-derived progress.
+
+## Signed commits: the key lives in an environment secret, not a sandbox (2026-11-24)
+
+`required_signatures` on ruleset "Gen" blocks the default branch, `bypass_actors`
+is empty and `current_user_can_bypass` is `never`. The rule is right; the supply
+of signatures broke when the ephemeral `~/.ssh/genesis_signing` in an agent
+sandbox was recycled, and PR #91 could not merge.
+
+- `docs/security/SIGNED_COMMITS.md` is the design, the owner steps, the
+  feasibility audit, the threat model and the bootstrap constraint.
+- `.github/workflows/sign-branch.yml` — manual only, `environment: signing`,
+  refuses the default branch and a non-default-branch workflow definition,
+  writes the key to `$RUNNER_TEMP` only, signs, `--force-with-lease`, verifies,
+  dispatches `ci.yml` (a `GITHUB_TOKEN` push suppresses its own events), removes
+  the key in `always()`.
+- `.github/workflows/verify-signatures.yml` — read-only, dispatch + weekly.
+- `genesis_protocol/security/commit_signing.py` — fingerprints (public key
+  only), branch/ref guards, `readiness` (never reads the secret), `sign_plan`
+  (commands as data). Verification reuses `evolution.signed_commit`.
+- `scripts/verify_signed_commits.py readiness|fingerprint|plan|verify` — `verify`
+  exits 1 unsigned, 2 unreadable.
+
+Rules: never ask for, print, log or store a private key; never sign `main`;
+never bypass the rule. `readiness()` must not read the secret — CodeQL flags any
+expression derived from a secret-named constant (`py/clear-text-logging-sensitive-data`),
+and it was right both times it fired here. `genesis_protocol/security/__init__.py`
+is now lazy (PEP 562) so a stdlib-only leaf imports without `dotenv`.
+
+**Bootstrap:** `workflow_dispatch` resolves against the default branch, so a
+signing workflow that exists only on a branch is not dispatchable. The first
+signed commit must come from GitHub's squash-merge signature (verified: `main`'s
+tip `09dfa791` is `verified: true, committer: GitHub`) or the owner's key once.

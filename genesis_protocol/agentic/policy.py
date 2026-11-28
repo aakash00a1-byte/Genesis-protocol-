@@ -33,6 +33,9 @@ PRIVILEGED_OPERATIONS = frozenset(
         "grant_permission",
         "change_settings",
         "delete_repo",
+        # Publishing a discovery claim is a scientific assertion about the world.
+        # It requires owner action outside the agent, like the rest of this set.
+        "publish_discovery",
     }
 )
 
