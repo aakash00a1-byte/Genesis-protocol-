@@ -2040,3 +2040,35 @@ evolution path comes from `gluten.identity.EVOLUTION_CHAIN` (the real lineage),
 and the self-awareness milestone is gone. Regression:
 `tests/test_infinity_honesty.py` (12 tests), including an AST-level check that
 `auto_updater.py` no longer mentions time-derived progress.
+
+## Signed commits: the key lives in an environment secret, not a sandbox (2026-11-24)
+
+`required_signatures` on ruleset "Gen" blocks the default branch, `bypass_actors`
+is empty and `current_user_can_bypass` is `never`. The rule is right; the supply
+of signatures broke when the ephemeral `~/.ssh/genesis_signing` in an agent
+sandbox was recycled, and PR #91 could not merge.
+
+- `docs/security/SIGNED_COMMITS.md` is the design, the owner steps, the
+  feasibility audit, the threat model and the bootstrap constraint.
+- `.github/workflows/sign-branch.yml` — manual only, `environment: signing`,
+  refuses the default branch and a non-default-branch workflow definition,
+  writes the key to `$RUNNER_TEMP` only, signs, `--force-with-lease`, verifies,
+  dispatches `ci.yml` (a `GITHUB_TOKEN` push suppresses its own events), removes
+  the key in `always()`.
+- `.github/workflows/verify-signatures.yml` — read-only, dispatch + weekly.
+- `genesis_protocol/security/commit_signing.py` — fingerprints (public key
+  only), branch/ref guards, `readiness` (never reads the secret), `sign_plan`
+  (commands as data). Verification reuses `evolution.signed_commit`.
+- `scripts/verify_signed_commits.py readiness|fingerprint|plan|verify` — `verify`
+  exits 1 unsigned, 2 unreadable.
+
+Rules: never ask for, print, log or store a private key; never sign `main`;
+never bypass the rule. `readiness()` must not read the secret — CodeQL flags any
+expression derived from a secret-named constant (`py/clear-text-logging-sensitive-data`),
+and it was right both times it fired here. `genesis_protocol/security/__init__.py`
+is now lazy (PEP 562) so a stdlib-only leaf imports without `dotenv`.
+
+**Bootstrap:** `workflow_dispatch` resolves against the default branch, so a
+signing workflow that exists only on a branch is not dispatchable. The first
+signed commit must come from GitHub's squash-merge signature (verified: `main`'s
+tip `09dfa791` is `verified: true, committer: GitHub`) or the owner's key once.
