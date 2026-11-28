@@ -142,21 +142,50 @@ lines) → Add.
 
 Never paste this into a chat, an issue, a PR body or a file in the repository.
 
-**6. Run the signing workflow**
+**6. Bootstrap: the first signed commit cannot come from the workflow**
+
+GitHub resolves `workflow_dispatch` against the **default branch**: a workflow
+file that exists only on a feature branch does not appear in the Actions UI and
+the dispatch API refuses it. So `Sign Branch` cannot sign its own way onto
+`main`. The first signed commit has to come from one of these:
+
+- **A. Let GitHub sign it.** In the web UI, **Squash and merge** the pull
+  request. GitHub creates the commit and signs it — `main`'s tip `09dfa791` was
+  created exactly this way and reads `verified: true, committer: GitHub`. The one
+  unknown is whether the `required_signatures` rule lets the button be pressed
+  for an unsigned head; it costs one click to find out, and it needs no key.
+- **B. Sign it yourself, once**, after steps 1–3 (generate + register the key):
+
+  ```bash
+  git fetch origin
+  git checkout -B feat/signed-bootstrap origin/feat/signed-commit-architecture
+  git log -1 --format='%B' > /tmp/msg          # read before the reset
+  git reset --soft origin/main
+  git commit -S -F /tmp/msg
+  git push --force-with-lease origin feat/signed-bootstrap
+  ```
+
+  Open the PR from `feat/signed-bootstrap` and merge it. The branch is rewritten
+  on the branch, never on `main`.
+
+Once either lands, the workflows exist on `main` and every later branch is
+handled by step 7.
+
+**7. Run the signing workflow (every branch after bootstrap)**
 
 Actions → **Sign Branch** → *Run workflow*:
 
-- branch: `feat/signed-commit-architecture`
+- branch: the agent branch to sign
 - mode: `squash-sign`
 
 Approve the environment prompt when it appears.
 
-**7. Verify, from anywhere**
+**8. Verify, from anywhere**
 
 ```bash
 python3 scripts/verify_signed_commits.py verify \
   --repo aakash00a1-byte/Genesis-protocol- \
-  --branch feat/signed-commit-architecture
+  --branch <branch>
 ```
 
 Expect `RESULT: OK - 1 commit(s) verified`. The workflow prints the same result
@@ -256,9 +285,9 @@ out are:
    here.
 
 This branch (`feat/signed-commit-architecture`) is based on `39364982`, so it
-contains every change from #91 plus this work. After `Sign Branch` runs on it,
-the branch is a single signed commit on top of `main` and can be merged. PR #91
-should then be closed as superseded — its content is not lost, and its branch is
-left exactly as it is.
+contains every change from #91 plus this work. Once it is signed — by GitHub's
+squash merge or by your key, see step 6 — it is a single signed commit on top of
+`main` and can be merged. PR #91 should then be closed as superseded: its
+content is not lost and its branch is left exactly as it is.
 
 Nothing in this document was bypassed, disabled or force-pushed by the agent.
