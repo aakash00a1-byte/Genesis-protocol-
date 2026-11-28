@@ -25,7 +25,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from genesis_protocol.security.commit_signing import (  # noqa: E402
-    SIGNING_KEY_SECRET,
     InvalidPublicKeyError,
     SigningError,
     branch_is_signable,
@@ -61,7 +60,9 @@ def cmd_readiness(_args) -> int:
     # The secret is never read here: this command describes the machine. The
     # workflow checks the secret itself, in shell, where it cannot be logged.
     print(json.dumps(readiness(), indent=2))
-    print(f"\nsecret name (never its value): {SIGNING_KEY_SECRET}")
+    # A literal: the secret's *name* is public, and printing a secret-named
+    # constant is what CodeQL flags (py/clear-text-logging-sensitive-data).
+    print("\nsecret name (never its value): SSH_SIGNING_KEY")
     print("the secret value is not inspected by this command")
     return 0
 

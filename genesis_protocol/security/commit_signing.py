@@ -172,9 +172,13 @@ def readiness(env: dict | None = None, which: Callable[[str], str | None] = shut
         "private_key_present": has_key,
         "can_sign_locally": has_keygen and has_key,
         "can_sign_in_ci": True,  # the workflow materialises the secret on the runner
+        # Literal, not interpolated: CodeQL (rightly) treats any expression
+        # derived from a secret-named constant as secret material, and a log
+        # line is no place to argue about it. The name is public; the value is
+        # never read here at all.
         "detail": ("local signing available" if has_keygen and has_key else
                    "no private key on this machine; sign in CI from the "
-                   f"{SIGNING_KEY_SECRET} secret (or on the owner's machine)"),
+                   "SSH_SIGNING_KEY secret (or on the owner's machine)"),
     }
 
 
