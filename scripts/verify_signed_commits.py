@@ -58,10 +58,12 @@ def _branch_shas(repo: str, branch: str, base: str, http) -> list[str]:
 
 
 def cmd_readiness(_args) -> int:
-    report = readiness()
-    print(json.dumps(report, indent=2))
+    # The secret is never read here: this command describes the machine. The
+    # workflow checks the secret itself, in shell, where it cannot be logged.
+    print(json.dumps(readiness(), indent=2))
     print(f"\nsecret name (never its value): {SIGNING_KEY_SECRET}")
-    return 0 if report["can_sign_locally"] or report["secret_in_environment"] else 0
+    print("the secret value is not inspected by this command")
+    return 0
 
 
 def cmd_fingerprint(args) -> int:

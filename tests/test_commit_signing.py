@@ -24,6 +24,7 @@ from genesis_protocol.security.commit_signing import (
     fingerprint_public_key,
     public_keys_match,
     readiness,
+    secret_configured,
     sign_plan,
     verify_branch,
     workflow_ref_is_trusted,
@@ -178,13 +179,19 @@ def test_readiness_reports_a_usable_key():
     assert report["can_sign_locally"] is True
 
 
-def test_readiness_never_echoes_the_secret_value():
+def test_readiness_never_reads_the_secret_at_all():
+    """Not "does not print it" - does not look at it, so it cannot leak it."""
     secret = "-----BEGIN OPENSSH PRIVATE KEY-----do-not-print"
     report = readiness(env={SIGNING_KEY_SECRET: secret}, which=lambda _: None,
                        exists=lambda _: False)
-    assert report["secret_in_environment"] is True
+    assert "secret_in_environment" not in report
     assert secret not in json.dumps(report)
     assert "PRIVATE KEY" not in json.dumps(report)
+
+
+def test_secret_configured_answers_with_a_boolean_only():
+    assert secret_configured(env={}) is False
+    assert secret_configured(env={SIGNING_KEY_SECRET: "anything"}) is True
 
 
 # --- verification is fail-closed -----------------------------------------

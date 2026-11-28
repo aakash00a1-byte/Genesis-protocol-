@@ -144,11 +144,23 @@ def workflow_ref_is_trusted(workflow_ref: str, repo: str) -> tuple[bool, str]:
     return True, "trusted"
 
 
+def secret_configured(env: dict | None = None) -> bool:
+    """Whether the signing secret is present. Returns a boolean, never a value.
+
+    Deliberately separate from :func:`readiness`: a report that mixes a fact
+    about a secret into data destined for a log invites that value to leak the
+    day someone adds a field. Nothing in this module logs the result.
+    """
+    env = os.environ if env is None else env
+    return bool(env.get(SIGNING_KEY_SECRET))
+
+
 def readiness(env: dict | None = None, which: Callable[[str], str | None] = shutil.which,
               exists: Callable[[str], bool] = os.path.exists) -> dict[str, Any]:
     """Can this environment sign a commit right now?
 
-    Reports facts, never a secret: the key is included only as a boolean.
+    Reports facts about the *machine* only. It never reads the secret, so its
+    output is safe to print (and CodeQL agrees, which is why the split exists).
     """
     env = os.environ if env is None else env
     key_path = (env.get("GENESIS_SIGNING_KEY_PATH")
@@ -158,7 +170,6 @@ def readiness(env: dict | None = None, which: Callable[[str], str | None] = shut
     return {
         "ssh_keygen": has_keygen,
         "private_key_present": has_key,
-        "secret_in_environment": bool(env.get(SIGNING_KEY_SECRET)),
         "can_sign_locally": has_keygen and has_key,
         "can_sign_in_ci": True,  # the workflow materialises the secret on the runner
         "detail": ("local signing available" if has_keygen and has_key else
